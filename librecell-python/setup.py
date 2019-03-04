@@ -8,10 +8,10 @@ def readme():
 
 setup(name='librecell',
       version='0.0.1',
-      description='Layout generator for CMOS standard cells.',
+      description='CMOS standard cell generator.',
       long_description=readme(),
       long_description_content_type="text/markdown",
-      keywords='cmos cell generator layout klayout',
+      keywords='cmos cell generator layout klayout vlsi asic',
       classifiers=[
           # 'License :: OSI Approved :: GNU Affero General Public License v3',
           'Development Status :: 3 - Alpha',
@@ -19,14 +19,14 @@ setup(name='librecell',
           'Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)',
           'Programming Language :: Python :: 3'
       ],
-      url='',
+      url='https://codeberg.org/tok/librecell',
       author='T. Kramer',
       author_email='dont@spam.me',
       license='AGPL',  # ???
       entry_points={
           'console_scripts': [
               'librecell = librecell.standalone:main',
-              'drc_cleaner = librecell.drc_cleaner.standalone:main',
+              #'drc_cleaner = librecell.drc_cleaner.standalone:main',
               'libertyviz = librecell.liberty.vizualize:main_plot_timing',
               'libertymerge = librecell.liberty.merge:main',
               'librecell_size = librecell.transistor_sizing.width_opt:main',
