@@ -180,6 +180,8 @@ def main():
             of MOSFETs in the original subcircuit.
         :return: Cost of the transistor sizing.
         """
+
+        # TODO: let user define load capacitance and input slew.
         input_transition_time = 0.06
         output_cap = 1.0
 
@@ -212,7 +214,7 @@ def main():
 
             diff = ((r['cell_fall'] - r['cell_rise']) * 1e9) ** 2
             # _objective = diff + r['cell_rise'] * 1e6 + r['cell_fall'] * 1e6
-            sum2 = (r['cell_fall'] * 1e9) ** 2 + (r['cell_rise'] * 1e9) ** 2
+            #sum2 = (r['cell_fall'] * 1e9) ** 2 + (r['cell_rise'] * 1e9) ** 2
 
             _objective = diff  # + sum2
             # objective = diff[0] + r['rise_delay'] * 1e9
