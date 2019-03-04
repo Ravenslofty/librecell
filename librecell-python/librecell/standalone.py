@@ -6,7 +6,7 @@ from . import net_util
 from .place.place import TransistorPlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer
-from .net_util import load_transistor_netlist
+from .net_util import load_transistor_netlist, is_ground_net, is_supply_net
 
 from .graphrouter.hv_router import HVGraphRouter
 from .graphrouter.pathfinder import PathFinderGraphRouter
@@ -247,9 +247,21 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     shapes[tech.power_layer].insert(vdd_rail)
     shapes[tech.power_layer].insert(vss_rail)
 
+    ground_nets = {p for p in cell_pins if is_ground_net(p)}
+    supply_nets = {p for p in cell_pins if is_supply_net(p)}
+
+    assert len(ground_nets) > 0, "Could not find net name of ground."
+    assert len(supply_nets) > 0, "Could not find net name of supply voltage."
+    assert len(ground_nets) == 1, "Multiple ground net names: {}".format(ground_nets)
+    assert len(supply_nets) == 1, "Multiple supply net names: {}".format(supply_nets)
+
+    SUPPLY_VOLTAGE_NET = supply_nets.pop()
+    GND_NET = ground_nets.pop()
+
+    logger.info("Supply net: {}".format(SUPPLY_VOLTAGE_NET))
+    logger.info("Ground net: {}".format(GND_NET))
+
     # Register power rails as net regions.
-    SUPPLY_VOLTAGE_NET = 'VDD'
-    GND_NET = 'GND'
     for net, shape in [(SUPPLY_VOLTAGE_NET, vdd_rail), (GND_NET, vss_rail)]:
         net_regions.setdefault(net, {}).setdefault(tech.power_layer, pya.Region()).insert(shape)
 

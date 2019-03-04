@@ -66,6 +66,9 @@ def parse_spice(inp):
     # Strip away comments but don't change number of lines.
     inp = re.sub(r"^\*.*$", "", inp, flags=re.MULTILINE)
 
+    # Concatenate lines
+    inp = re.sub("\n\+", " ", inp, flags=re.MULTILINE)
+
     # Don't ignore newline.
     ParserElement.setDefaultWhitespaceChars(' \t')
 
@@ -109,7 +112,7 @@ def parse_spice(inp):
     end = (beginl + '.end' + Optional('s') + Optional(name)).suppress()
 
     # Parameter list
-    param = (name + Suppress('=') + number).setParseAction(lambda t: (t[0], t[1]))
+    param = (name + Suppress('=') + number).setParseAction(lambda t: (t[0].upper(), t[1]))
     parameter_list = (param * (1, None)).setParseAction(lambda t: dict(list(t)))
 
     # Components
