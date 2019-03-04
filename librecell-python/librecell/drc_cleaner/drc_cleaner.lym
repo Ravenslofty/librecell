@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+ <description/>
+ <version/>
+ <category>pymacros</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>false</autorun>
+ <autorun-early>false</autorun-early>
+ <shortcut/>
+ <show-in-menu>false</show-in-menu>
+ <group-name/>
+ <menu-path/>
+ <interpreter>python</interpreter>
+ <dsl-interpreter-name/>
+ <text>import pya
+from pya import Point, Shape, Polygon, Shapes, Region
+
+import sys
+from importlib import reload
+
+librecell_path = "/home/user/"
+sys.path.append(librecell_path)
+sys.path.append(librecell_path+'librecell')
+
+import tech
+from tech import *
+
+import drc_cleaner
+import drc_cleaner as cleaner
+from drc_cleaner import OPolygon, SOPolygon
+
+from itertools import count, product
+
+reload(tech)
+reload(drc_cleaner)
+
+main_window = pya.Application.instance().main_window()
+
+# Get layout loaded in active tab.
+current_view = main_window.current_view()
+assert current_view.cellviews() == 1
+cell_view = current_view.cellview(0)
+layout = cell_view.layout()
+print(layout)
+
+top = layout.top_cell()
+  
+# Fetch layers.
+shapes = {}
+for name, (num, purpose) in tech.layermap.items():
+  layer = layout.find_layer(num, purpose)
+  #assert layer is not None, Exception('Layer not found: %s (%d, %d)' % (name, num, purpose))
+  if layer is not None:
+    shapes[name] = top.shapes(layer)
+
+print(shapes)
+
+
+if True:
+
+  def polygon_to_points(poly):
+    if poly is None:
+      return []
+    else:
+      return [(p.x, p.y) for p in reversed(list(poly.each_point()))]
+  
+  def shape_to_points(shape):
+    """ Convert a pya.Shape to a list of (x,y) tuples.
+    """
+    poly = shape.simple_polygon
+    return polygon_to_points(poly)
+  
+  _sympoly_map = dict()
+  _counter = count()
+
+  def get_sympoly(shape, layer):
+    """ Given a pya.Shape get the symbolic polygon.
+    """
+    
+    assert isinstance(shape, pya.Shape) or isinstance(shape, pya.Polygon)
+    
+    poly = None
+    if isinstance(shape, pya.SimplePolygon):
+      poly = shape
+    if isinstance(shape, pya.Polygon):
+      poly = shape.to_simple_polygon()
+    else:
+      poly = shape.simple_polygon
+      
+    key =  (layer, poly)
+    
+    if key not in _sympoly_map:
+      points = shape_to_points(shape)
+      opoly = OPolygon(points=points)
+      sympoly = SOPolygon('%s_%s'%(layer, next(_counter)), opoly)
+      _sympoly_map[key] = sympoly
+      
+    return _sympoly_map[key]
+    
+  def points_to_shape(points):
+    return pya.Polygon.new([pya.Point(x,y) for x,y in points])
+    
+  # Convert all polygons into symbolic polygons.
+  sym_polys = {
+      layer: [get_sympoly(shape, layer) for shape in s.each()]
+      for layer,s in shapes.items()
+     }
+
+  from pysmt.shortcuts import *
+  #solver = UnsatCoreSolver()
+  solver = Solver()
+  # Fix some layers
+  fixed_layers = ['rx', 'm2', 'outline', 'pc']
+  for l in fixed_layers:
+    for poly in sym_polys[l]:
+      solver.add_assertion(poly.assert_fixed())
+  
+  # Fix some shapes but allow them to be moved.
+  fixed_shape_layers = ['ca', 'v1']
+  for l in fixed_shape_layers:
+    for poly in sym_polys[l]:
+      solver.add_assertion(cleaner.preserve_shape(poly))
+  
+  # Allow m1 to be changed in shape but the underlying structure must be preserved.
+  fixed_shape_layers = ['m1']
+  for l in fixed_shape_layers:
+    for poly in sym_polys[l]:
+      solver.add_assertion(poly.assert_preserved_edge_orientation())
+  
+  containtement_constraints = [
+    (['outline'], ['rx', 'ca', 'v1', 'pc', 'm1', 'm2']),
+    (['rx'], ['pc', 'ca']),
+    (['pc'], ['ca', 'rx']),
+    (['m1'], ['ca', 'v1']),
+    (['m2'], ['v1']),
+  ]
+  
+  # "Inside" constraint for vias
+  for l1s, l2s in containtement_constraints:
+    for l1, l2 in product(l1s, l2s):
+    
+      for outer_shape in shapes[l1].each():
+        print(outer_shape)
+        _outer = Shapes()
+        _outer.insert(outer_shape)
+        _outer = Region(_outer)
+        inner = Region(shapes[l2])
+        
+        inside = inner.inside(_outer)
+        for inner_shape in inner.each():
+          s1 = get_sympoly(outer_shape, l1)
+          s2 = get_sympoly(inner_shape, l2)
+          
+          v1 = s1.verticals()
+          v2 = s2.verticals()
+          
+          h1 = s1.horizontals()
+          h2 = s2.horizontals()
+        
+          min_inside = 2
+        
+          for v in v1:
+            for u in v2:
+              if v.attrs['orig_offset'] &lt; u.attrs['orig_offset']:
+                solver.add_assertion(u.offset - v.offset &gt;= min_inside)
+              elif v.attrs['orig_offset'] &gt; u.attrs['orig_offset']:
+                solver.add_assertion(v.offset - u.offset &gt;= min_inside)
+                
+          for h in h1:
+            for i in h2:
+              if h.attrs['orig_offset'] &lt; i.attrs['orig_offset']:
+                solver.add_assertion(i.offset - h.offset &gt;= min_inside)
+              elif h.attrs['orig_offset'] &gt; i.attrs['orig_offset']:
+                solver.add_assertion(h.offset - i.offset &gt;= min_inside)
+         
+  
+  # Min width
+  for p in sym_polys['m1']:
+    solver.add_assertion(
+      cleaner.preserve_absolute_edge_order_of_polygons([p], min_distance=tech.minimum_width['m1'])
+    )
+  
+  # Min area
+  for p in sym_polys['m1']:
+    if len(p.points()) == 4:
+      print(p)
+      #solver.add_assertion(
+      #  p.area() &gt; 0
+      #)
+
+  #for p in sym_polys['m1']:
+  #  solver.add_assertion(cleaner.preserve_relative_edge_distance(p.verticals()))
+      
+  sat = solver.check_sat()
+  print('sat = ', sat)
+  if sat:
+    model = solver.get_model()
+    # Convert back to constant polygons.
+    solutions = {
+            l: [p.to_opolygon(model) for p in polys]
+            for l,polys in sym_polys.items()
+          }
+    
+    new_shapes = {
+            l: [points_to_shape(poly.points()) for poly in polys]
+            for l,polys in solutions.items()
+          }
+    
+    # Update shapes with solutions
+    for l,new_s in new_shapes.items():
+      s = shapes[l]
+      s.clear()
+      s.insert(pya.Region(new_s))
+  else:
+    print('UNSAT')
+    print('unsat core:', solver.get_unsat_core())
+
+#layout_view.select_cell(top.cell_index(), 0)
+#layout_view.add_missing_layers()
+#layout_view.zoom_fit()</text>
+</klayout-macro>

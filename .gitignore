@@ -1,0 +1,6 @@
+*.pyc
+*_nda.py
+*/.idea
+*.scad
+*.gds
+*.so
