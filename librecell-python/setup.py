@@ -43,6 +43,7 @@ setup(name='librecell',
           'pyspice',  # GPLv3
           'scipy',  # BSD
           'liberty-parser',  # LGPL
-          'pysmt'  # Apache-2.0
+          'pysmt',  # Apache-2.0
+          'pulp' # MIT
       ],
       zip_safe=False)
