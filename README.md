@@ -18,7 +18,7 @@ python3 setup.py develop --user
 Generate a layout from a SPICE netlist which includes the transistor sizes.
 ```sh
 mkdir mylibrary
-librecell --output-dir mylibrary --tech tech/dummy_tech.py --netlist examples/cells.sp --cell AND2X1
+librecell --output-dir mylibrary --tech example/dummy_tech.py --netlist examples/cells.sp --cell AND2X1
 ```
 
 
