@@ -14,9 +14,11 @@ cd librecell/librecell-python
 python3 setup.py develop --user
 ```
 
-#### Generate a layout.
+#### Generate a layout
+Generate a layout from a SPICE netlist which includes the transistor sizes.
 ```sh
-TBD
+mkdir mylibrary
+librecell --output-dir mylibrary --tech tech/dummy_tech.py --netlist examples/cells.sp --cell AND2X1
 ```
 
 
