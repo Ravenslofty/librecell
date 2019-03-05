@@ -27,7 +27,7 @@ setup(name='librecell',
           'console_scripts': [
               'librecell = librecell.standalone:main',
               #'drc_cleaner = librecell.drc_cleaner.standalone:main',
-              'libertyviz = librecell.liberty.vizualize:main_plot_timing',
+              'libertyviz = librecell.liberty.visualize:main_plot_timing',
               'libertymerge = librecell.liberty.merge:main',
               'librecell_size = librecell.transistor_sizing.width_opt:main',
               'librecell_characterize = librecell.characterization.standalone:main'
