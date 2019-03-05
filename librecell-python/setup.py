@@ -44,6 +44,7 @@ setup(name='librecell',
           'scipy',  # BSD
           'liberty-parser',  # LGPL
           'pysmt',  # Apache-2.0
+          'z3-solver', #
           'pulp' # MIT
       ],
       zip_safe=False)
