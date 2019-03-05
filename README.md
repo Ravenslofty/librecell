@@ -18,7 +18,7 @@ Install from git:
 git clone https://codeberg.org/tok/librecell.git
 cd librecell/librecell-python
 
-python3 setup.py develop --user
+python3 setup.py develop
 ```
 
 Now, check if the command-line scripts are in the current search path:
