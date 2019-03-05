@@ -6,6 +6,13 @@ The project is in a very early stage and not yet ready to be used for production
 
 ### Getting started
 
+It is recommended to use a Python 'virtual environment' for installing all Python dependencies:
+```sh
+python3 -m venv my-librecell-env
+# Activate the virtual environment
+source ./my-librecell-env/bin/activate
+```
+
 Install from git:
 ```sh
 git clone https://codeberg.org/tok/librecell.git
