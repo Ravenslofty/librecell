@@ -49,7 +49,7 @@ def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transisto
 
     Returns
     -------
-    Returns a list of `Transistor`s and a list of the pin names.
+    Returns a list of `Transistor`s and a list of the pin names including power pins.
     (List[Transistors], pin_names)
     """
 
@@ -71,7 +71,6 @@ def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transisto
             raise Exception("No valid subcircuit found in file with name '%s'." % subckt_name)
 
         circuit = match[0]
-        io_pins = get_io_pins(circuit.ports)
 
         # Get transistors
         transistors = [
@@ -79,7 +78,7 @@ def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transisto
             for t in circuit.content if type(t) is spice_parser.MOSFET
         ]
 
-        return transistors, io_pins
+        return transistors, circuit.ports
 
 
 def is_ground_net(net: str) -> bool:
