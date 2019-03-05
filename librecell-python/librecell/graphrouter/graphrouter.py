@@ -2,10 +2,6 @@ import networkx as nx
 
 from typing import Any, Dict, List, AbstractSet, Optional
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 
 class GraphRouter:
 
