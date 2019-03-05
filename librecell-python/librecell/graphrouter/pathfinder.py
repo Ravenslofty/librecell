@@ -3,10 +3,10 @@ from .graphrouter import GraphRouter
 from .signal_router import SignalRouter
 from .multi_via_router import MultiViaRouter
 
-from itertools import chain, count, combinations, product
+from itertools import chain, count, combinations, product, takewhile
 from collections import Counter
-
-from typing import Any, Dict, List, AbstractSet, Optional
+import numpy as np
+from typing import Any, Dict, List, AbstractSet, Optional, Iterable, Tuple
 
 import logging
 
@@ -84,7 +84,6 @@ def _route(detail_router: SignalRouter,
             edge_base_cost[(a, b)] = data['weight']
             edge_base_cost[(b, a)] = data['weight']
 
-    routing_trees = {name: nx.Graph() for name in signals.keys()}
     slack_ratios = {name: 1 for name in signals.keys()}
 
     # For each net create its own routing graph.
@@ -107,21 +106,35 @@ def _route(detail_router: SignalRouter,
     # TODO: just use detail_router and let caller decide whether to use MultiViaRouter or not.
     multi_via_router = MultiViaRouter(detail_router, node_conflict)
 
-    max_iterations = 1000
-    for j in count():
+    #
+    # max_iterations = 1000
+    # for j in count():
+    #
+    #     if j >= max_iterations:
+    #         raise Exception("Failed to route")
+    #
+    #     logger.info('Routing iteration %d' % j)
 
-        if j >= max_iterations:
-            raise Exception("Failed to route")
+    # routing_order = sorted(signals.keys(), key=lambda i: slack_ratios[i], reverse=True)
+    # node_present_sharing_cost.clear()
 
-        logger.info('Routing iteration %d' % j)
+    past_lower_bounds = [1]
 
-        routing_order = sorted(signals.keys(), key=lambda i: slack_ratios[i], reverse=True)
-        node_present_sharing_cost.clear()
+    def trial_route(node_history_cost: Dict[Any, float], node_collisions: Iterable[Any] = None,
+                    history_cost_increment: float = 0):
 
-        for signal_name in routing_order:
+        if node_collisions is not None and len(node_collisions) > 0:
+            node_history_cost = node_history_cost.copy()
+            for n in node_collisions:
+                node_history_cost[n] = node_history_cost.get(n, 0) + history_cost_increment
+
+        # for signal_name in routing_order:
+        routing_trees = dict()
+        for signal_name in signals.keys():
             terminals = signals[signal_name]
 
-            slack_ratio = slack_ratios[signal_name]
+            # slack_ratio = slack_ratios[signal_name]
+            slack_ratio = 0.5
 
             def node_cost_fn(n):
                 b = node_base_cost.get(n, 0)
@@ -134,19 +147,24 @@ def _route(detail_router: SignalRouter,
                 (m, n) = e
                 return edge_base_cost[(m, n)] * slack_ratio
 
-            st = multi_via_router.route(Gs.get(signal_name, graph), terminals, node_cost_fn, edge_cost_fn)
+            # Compute spanning tree for current signal.
+            st = multi_via_router.route(Gs.get(signal_name, graph),
+                                        terminals,
+                                        node_cost_fn,
+                                        edge_cost_fn)
 
             routing_trees[signal_name] = st
 
-            # Include colliding nodes.
-            nodes = set(chain(*(node_conflict.get(n, {}) for n in st.nodes)))
-            nodes.update(st.nodes)
-
-            for n in st.nodes:
-                for o in node_conflict.get(n, {n}):
-                    if o not in node_present_sharing_cost:
-                        node_present_sharing_cost[o] = 0
-                    node_present_sharing_cost[o] += 100
+            # # Increment present sharing cost of all nodes that are currently used by `st`,
+            # # including colliding nodes.
+            # nodes = set(chain(*(node_conflict.get(n, {}) for n in st.nodes)))
+            # nodes.update(st.nodes)
+            #
+            # for n in st.nodes:
+            #     for o in node_conflict.get(n, {n}):
+            #         if o not in node_present_sharing_cost:
+            #             node_present_sharing_cost[o] = 0
+            #         node_present_sharing_cost[o] += 100
 
         # Detect node collisions
 
@@ -164,24 +182,85 @@ def _route(detail_router: SignalRouter,
         # Find collisions
         node_collisions = [k for k, v in node_sharing.items() if v > 1 and k in all_routing_tree_nodes]
 
-        has_collision = len(node_collisions) > 0
+        return routing_trees, node_collisions
 
+    routing_trees, node_collisions = trial_route(node_history_cost)
+
+    for j in count():
+        logger.info("Iteration {}".format(j))
+        has_collision = len(node_collisions) > 0
         if not has_collision:
             logger.info("Global routing done in %d iterations", j)
+            print("Iteration", j)
             break
+        else:
+            def f(i: float) -> Tuple[bool, nx.Graph, List]:
+                _routing_trees, _collisions = trial_route(node_history_cost,
+                                                          node_collisions,
+                                                          history_cost_increment=i)
+                # Check if at least one routing tree has changed.
+                is_different = any((
+                    routing_trees[n].edges != _routing_trees[n].edges
+                    for n in signals.keys()
+                ))
 
-        # node_history_cost = {n: c*0.9 for n,c in node_history_cost.items()}
+                return is_different, _routing_trees, _collisions
 
-        # Increment history cost
-        for n in node_collisions:
-            node_history_cost[n] = node_history_cost.get(n, 1) + 100
+            past_lower_bounds = list(sorted(past_lower_bounds))
+            initial_increment = np.median(past_lower_bounds[len(past_lower_bounds)//2])
+            initial_increment = 1
+            print("initial increment", initial_increment)
+            increments = (initial_increment * (2 ** i) for i in count())
+            upper_bound = 0
+            for i in increments:
+                d, rt, col = f(i)
+                if d:
+                    upper_bound = i
+                    break
+            lower_bound = i / 2
+            past_lower_bounds.append(lower_bound)
 
-        # Update slack_ratios
-        tree_weights = {signal_name: sum(edge_base_cost[e] for e in rt.edges())
-                        for signal_name, rt in routing_trees.items()}
-        max_weight = max(tree_weights.values())
-        slack_ratios = {n: t / max_weight for n, t in tree_weights.items()}
-        slack_ratios = {n: (s - 0.5) * 0.6 + 0.5 for n, s in slack_ratios.items()}
+            def bisect(lower, upper, tolerance=1) -> Tuple[bool, nx.Graph, List]:
+                """
+                Find smallest history cost increment such that a signal route is changed.
+                Find smallest `i` such that `f` evaluates to `True`.
+                :param lower:
+                :param upper:
+                :param tolerance:
+                :return:
+                """
+                assert lower < upper
+
+                middle = (lower + upper) / 2
+                d, rt, col = f(middle)
+
+                if (upper - lower) <= tolerance and d:
+                    return middle, (d, rt, col)
+
+                if d:
+                    # Search in lower half
+                    return bisect(lower, middle, tolerance=tolerance)
+                else:
+                    # Search in upper half
+                    return bisect(middle, upper, tolerance=tolerance)
+
+            increment, (d, rt, col) = bisect(lower_bound, upper_bound, tolerance=0.5)
+
+            assert d
+
+            routing_trees = rt
+            node_collisions = col
+
+            # Increment history cost
+            for n in node_collisions:
+                node_history_cost[n] = node_history_cost.get(n, 0) + increment
+
+    # # Update slack_ratios
+    # tree_weights = {signal_name: sum(edge_base_cost[e] for e in rt.edges())
+    #                 for signal_name, rt in routing_trees.items()}
+    # max_weight = max(tree_weights.values())
+    # slack_ratios = {n: t / max_weight for n, t in tree_weights.items()}
+    # slack_ratios = {n: (s - 0.5) * 0.6 + 0.5 for n, s in slack_ratios.items()}
 
     return routing_trees
 
@@ -207,10 +286,10 @@ def test():
         pos[(x, y)] = (x, y)
 
         if x < num_x - 1 and not (1 <= y < 5 and x == 4):
-            G.add_edge((x, y), (x + 1, y), weight=1, orientation='h')
+            G.add_edge((x, y), (x + 1, y), weight=10, orientation='h')
 
         if y < num_y - 1:
-            G.add_edge((x, y), (x, y + 1), weight=1, orientation='v')
+            G.add_edge((x, y), (x, y + 1), weight=10, orientation='v')
 
     G.add_edge((8, 0), (9, 0), multi_via=2)
 
@@ -225,7 +304,7 @@ def test():
         # [(0,1), (9,2)],
         # [(1,1), (8,9), (7,4)],
         # [(1,1), (2,0)],
-        # [(4,1), (5,1), (7,3)],
+        'c': [(4, 1), (5, 1), (7, 3)],
         # [(1,3), (4,8)],
         # [(3,3), (6,5)],
         # [(1,2), (0,0), (0,4), (2,0), (2,4), (9,9), (5,5)],
@@ -244,7 +323,7 @@ def test():
         nx.draw_networkx_edges(G, pos, edgelist=edges, width=4, edge_color=color)
 
     nx.draw_networkx_nodes(G, pos, nodelist=list(chain(*signals.values())), node_size=32, node_color='black')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+    # nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
 
     plt.draw()
     plt.show()
