@@ -2,7 +2,7 @@
 LibreCell aims to be a toolbox for automated synthesis of CMOS logic cells.
 
 The project is in a very early stage and not yet ready to be used for production.
-
+Project structure and API might change heavily in near future.
 
 ### Getting started
 
