@@ -110,7 +110,19 @@ def main():
         logger.error(msg)
         assert False, msg
 
-    timing_corner = TimingCorner.WORST
+    # Get timing corner from liberty file.
+    # TODO: let user overwrite it.
+    default_operating_conditions = library['default_operating_conditions']
+    timing_corners = {
+        'typical': TimingCorner.TYPICAL,
+        'worst': TimingCorner.WORST,
+        'best': TimingCorner.BEST,
+    }
+
+    assert default_operating_conditions in timing_corners, "Unknown operating condition corner: {}".format(
+        default_operating_conditions)
+
+    timing_corner = timing_corners[default_operating_conditions]
     logger.info("Timing corner: {}".format(timing_corner.name))
 
     # Read trip points from liberty file.
