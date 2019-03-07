@@ -6,7 +6,7 @@ import PySpice.Logging.Logging as Logging
 
 from itertools import count
 from .util import *
-from ..net_util import get_subcircuit_ports
+from lcutil.net_util import get_subcircuit_ports
 from .ngspice_simulation import simulate_circuit
 from .piece_wise_linear import *
 

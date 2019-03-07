@@ -1,6 +1,7 @@
 from typing import List, Dict, Callable
 from PySpice.Spice.Netlist import Circuit
 from PySpice.Unit.SiUnits import Farad, Second
+from PySpice.Unit import *
 
 from PySpice.Logging import Logging
 
@@ -9,7 +10,7 @@ from itertools import product, count
 from .util import *
 from .piece_wise_linear import *
 from .ngspice_simulation import piece_wise_linear_voltage_source, simulate_circuit
-from ..net_util import get_subcircuit_ports
+from lcutil.net_util import get_subcircuit_ports
 
 import logging
 

@@ -25,10 +25,10 @@ setup(name='lctime',
       license='AGPL',  # ???
       entry_points={
           'console_scripts': [
-              'libertyviz = lclayout.liberty.visualize:main_plot_timing',
-              'libertymerge = lclayout.liberty.merge:main',
-              'lcsize = lclayout.transistor_sizing.width_opt:main',
-              'lctime = lclayout.characterization.standalone:main'
+              'libertyviz = lctime.liberty.visualize:main_plot_timing',
+              'libertymerge = lctime.liberty.merge:main',
+              'lcsize = lctime.transistor_sizing.width_opt:main',
+              'lctime = lctime.characterization.standalone:main'
           ]
       },
       install_requires=[
