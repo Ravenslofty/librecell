@@ -1,11 +1,10 @@
 from . import spice_parser
 from PySpice.Spice.Parser import SpiceParser
 
-from PySpice.Spice.Netlist import SubCircuit
 from PySpice.Spice.Parser import SubCircuitStatement
 
 from copy import copy
-from .data_types import *
+from lclayout.data_types import *
 import networkx as nx
 from typing import Tuple, List, Set, Iterable
 

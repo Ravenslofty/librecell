@@ -6,12 +6,12 @@ def readme():
         return f.read()
 
 
-setup(name='librecell',
+setup(name='lctime',
       version='0.0.1',
-      description='CMOS standard cell generator.',
+      description='CMOS standard cell characterization kit.',
       long_description=readme(),
       long_description_content_type="text/markdown",
-      keywords='cmos cell generator layout klayout vlsi asic',
+      keywords='cmos cell characterization vlsi asic',
       classifiers=[
           # 'License :: OSI Approved :: GNU Affero General Public License v3',
           'Development Status :: 3 - Alpha',
@@ -25,16 +25,14 @@ setup(name='librecell',
       license='AGPL',  # ???
       entry_points={
           'console_scripts': [
-              'librecell = librecell.standalone:main',
-              #'drc_cleaner = librecell.drc_cleaner.standalone:main',
-              'libertyviz = librecell.liberty.visualize:main_plot_timing',
-              'libertymerge = librecell.liberty.merge:main',
-              'librecell_size = librecell.transistor_sizing.width_opt:main',
-              'librecell_characterize = librecell.characterization.standalone:main'
+              'libertyviz = lclayout.liberty.visualize:main_plot_timing',
+              'libertymerge = lclayout.liberty.merge:main',
+              'lcsize = lclayout.transistor_sizing.width_opt:main',
+              'lctime = lclayout.characterization.standalone:main'
           ]
       },
       install_requires=[
-          'klayout',  # GPLv3
+          #'lclayout-util',
           'numpy',  # BSD
           'sympy',  # BSD
           'networkx',  # BSD
@@ -43,7 +41,5 @@ setup(name='librecell',
           'pyspice',  # GPLv3
           'scipy',  # BSD
           'liberty-parser',  # LGPL
-          'pysmt',  # Apache-2.0
-          'pulp' # MIT
       ],
       zip_safe=False)

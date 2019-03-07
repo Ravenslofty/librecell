@@ -9,7 +9,7 @@ import networkx as nx
 
 from typing import Any, Tuple, List
 
-from ..data_types import Transistor, ChannelType
+from lclayout.data_types import Transistor, ChannelType
 
 import logging
 

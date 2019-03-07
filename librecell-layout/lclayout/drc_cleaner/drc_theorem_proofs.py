@@ -5,7 +5,7 @@ from pysmt.environment import get_env
 
 """
 Collection of theorem proofs.
-Just a scratch pad. This code is not directly used in librecell. 
+Just a scratch pad. This code is not directly used in lclayout. 
 """
 
 

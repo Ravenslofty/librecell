@@ -29,7 +29,7 @@ def transistors2pyo3(transistors):
 	
 	
 if __name__ == '__main__':
-	from librecell import net_util
+	from lcutil import net_util
 	
 	cell_name = "OR2X1"
 	path = "/home/user/FreePDK45/osu_soc/lib/source/netlists/" + cell_name + ".pex.netlist"

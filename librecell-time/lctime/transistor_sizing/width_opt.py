@@ -1,10 +1,6 @@
 from scipy import optimize
 
 from PySpice.Spice.Netlist import Circuit, SubCircuit
-from PySpice.Spice.NgSpice.Shared import NgSpiceShared
-from PySpice.Spice.Parser import SpiceParser
-from PySpice.Unit import *
-from PySpice.Unit.SiUnits import Farad, Second
 
 from PySpice.Spice.BasicElement import Mosfet
 
@@ -12,8 +8,7 @@ import PySpice.Logging.Logging as Logging
 
 from ..liberty.util import get_pin_information
 from ..characterization.util import read_trip_points_from_liberty
-from ..net_util import load_transistor_netlist, get_io_pins, load_subcircuit
-from ..data_types import ChannelType
+from ..net_util import load_subcircuit
 from ..characterization.timing_combinatorial import measure_comb_cell
 from liberty.parser import parse_liberty
 from liberty.types import select_cell

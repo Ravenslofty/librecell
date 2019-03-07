@@ -1,14 +1,9 @@
-import matplotlib.pyplot as plt
-
 from PySpice.Spice.Netlist import Circuit
-from PySpice.Spice.NgSpice.Shared import NgSpiceShared
-from PySpice.Spice.Parser import SpiceParser
 from PySpice.Unit import *
 from PySpice.Unit.SiUnits import Farad, Second
 
 import PySpice.Logging.Logging as Logging
 
-from copy import copy
 from itertools import count
 from .util import *
 from ..net_util import get_subcircuit_ports

@@ -3,7 +3,7 @@ import logging
 
 from itertools import count
 
-from .. import net_util
+from lcutil import net_util
 
 logger = logging.getLogger(__name__)
 

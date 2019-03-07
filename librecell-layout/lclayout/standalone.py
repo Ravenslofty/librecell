@@ -2,16 +2,15 @@ from itertools import chain
 from collections import Counter
 import numpy
 
-from . import net_util
+from lcutil import net_util
+from lcutil.net_util import load_transistor_netlist, is_ground_net, is_supply_net
 from .place.place import TransistorPlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer
-from .net_util import load_transistor_netlist, is_ground_net, is_supply_net
 
 from .graphrouter.hv_router import HVGraphRouter
 from .graphrouter.pathfinder import PathFinderGraphRouter
-from .graphrouter.signal_router import AStarRouter, DijkstraRouter, ApproxSteinerTreeRouter
-from .graphrouter.lp_router import LPGraphRouter, LPSignalRouter
+from .graphrouter.signal_router import DijkstraRouter
 
 from .layout.transistor import *
 from .layout.notch_removal import fill_notches

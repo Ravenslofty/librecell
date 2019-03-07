@@ -1,4 +1,4 @@
-from librecell.layout.layers import *
+from lclayout.layout.layers import *
 
 # Physical size of one data base unit in meters.
 db_unit = 1e-9
