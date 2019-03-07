@@ -26,11 +26,11 @@ setup(name='lclayout',
       entry_points={
           'console_scripts': [
               'lclayout = lclayout.standalone:main',
-              #'drc_cleaner = lclayout.drc_cleaner.standalone:main',
+              # 'drc_cleaner = lclayout.drc_cleaner.standalone:main',
           ]
       },
       install_requires=[
-          #'lclayout-util',
+          # 'lclayout-util',
           'klayout',  # GPLv3
           'numpy',  # BSD
           'networkx',  # BSD
@@ -38,7 +38,7 @@ setup(name='lclayout',
           'scipy',  # BSD
           'liberty-parser',  # LGPL
           'pysmt',  # Apache-2.0
-          'z3-solver', #
-          'pulp' # MIT
+          'z3-solver',  #
+          'pulp'  # MIT
       ],
       zip_safe=False)

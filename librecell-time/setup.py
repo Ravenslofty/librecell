@@ -32,7 +32,7 @@ setup(name='lctime',
           ]
       },
       install_requires=[
-          #'lclayout-util',
+          # 'lclayout-util',
           'numpy',  # BSD
           'sympy',  # BSD
           'matplotlib',

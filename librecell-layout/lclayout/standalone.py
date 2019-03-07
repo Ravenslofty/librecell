@@ -2,8 +2,8 @@ from itertools import chain
 from collections import Counter
 import numpy
 
-from lcutil import net_util
-from lcutil.net_util import load_transistor_netlist, is_ground_net, is_supply_net
+from lccommon import net_util
+from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
 from .place.place import TransistorPlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer

@@ -1,6 +1,6 @@
 from .place import TransistorPlacer
 from ..extrema import all_min, all_max
-from lcutil import net_util
+from lccommon import net_util
 
 from ..data_types import *
 

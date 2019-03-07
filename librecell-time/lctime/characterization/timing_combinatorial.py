@@ -10,7 +10,7 @@ from itertools import product, count
 from .util import *
 from .piece_wise_linear import *
 from .ngspice_simulation import piece_wise_linear_voltage_source, simulate_circuit
-from lcutil.net_util import get_subcircuit_ports
+from lccommon.net_util import get_subcircuit_ports
 
 import logging
 

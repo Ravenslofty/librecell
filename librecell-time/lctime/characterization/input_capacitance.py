@@ -9,7 +9,7 @@ from itertools import product
 from .util import *
 from .piece_wise_linear import *
 from .ngspice_simulation import simulate_circuit
-from lcutil.net_util import get_subcircuit_ports
+from lccommon.net_util import get_subcircuit_ports
 
 import logging
 
