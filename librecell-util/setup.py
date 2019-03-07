@@ -24,13 +24,8 @@ setup(name='lclayout-util',
       author_email='dont@spam.me',
       license='AGPL',  # ???
       install_requires=[
-          'numpy',  # BSD
-          'sympy',  # BSD
           'networkx',  # BSD
           'pyparsing',  # MIT
-          'lark-parser',  # MIT
           'pyspice',  # GPLv3
-          'scipy',  # BSD
-          'liberty-parser',  # LGPL
       ],
       zip_safe=False)
