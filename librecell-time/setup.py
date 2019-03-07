@@ -35,9 +35,8 @@ setup(name='lctime',
           #'lclayout-util',
           'numpy',  # BSD
           'sympy',  # BSD
+          'matplotlib',
           'networkx',  # BSD
-          'pyparsing',  # MIT
-          'lark-parser',  # MIT
           'pyspice',  # GPLv3
           'scipy',  # BSD
           'liberty-parser',  # LGPL
