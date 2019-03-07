@@ -6,7 +6,7 @@ def readme():
         return f.read()
 
 
-setup(name='lclayout',
+setup(name='librecell-layout',
       version='0.0.1',
       description='CMOS standard cell generator.',
       long_description=readme(),

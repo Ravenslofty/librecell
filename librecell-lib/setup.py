@@ -6,7 +6,7 @@ def readme():
         return f.read()
 
 
-setup(name='lctime',
+setup(name='librecell-lib',
       version='0.0.1',
       description='CMOS standard cell characterization kit.',
       long_description=readme(),
@@ -25,10 +25,10 @@ setup(name='lctime',
       license='AGPL',  # ???
       entry_points={
           'console_scripts': [
-              'libertyviz = lctime.liberty.visualize:main_plot_timing',
-              'libertymerge = lctime.liberty.merge:main',
-              'lcsize = lctime.transistor_sizing.width_opt:main',
-              'lctime = lctime.characterization.standalone:main'
+              'libertyviz = lclib.liberty.visualize:main_plot_timing',
+              'libertymerge = lclib.liberty.merge:main',
+              'lcsize = lclib.transistor_sizing.width_opt:main',
+              'lctime = lclib.characterization.standalone:main'
           ]
       },
       install_requires=[
