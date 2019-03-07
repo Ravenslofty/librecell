@@ -33,10 +33,7 @@ setup(name='lclayout',
           #'lclayout-util',
           'klayout',  # GPLv3
           'numpy',  # BSD
-          'sympy',  # BSD
           'networkx',  # BSD
-          'pyparsing',  # MIT
-          'lark-parser',  # MIT
           'pyspice',  # GPLv3
           'scipy',  # BSD
           'liberty-parser',  # LGPL
