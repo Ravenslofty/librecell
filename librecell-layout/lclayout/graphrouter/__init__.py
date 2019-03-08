@@ -17,4 +17,4 @@
 ## You should have received a copy of the CERN Open Hardware License
 ## along with this program. If not, see <http://ohwr.org/licenses/>.
 ##
-__all__ = ['globalrouter', 'signal_router.py']
+name = "lclayout"
