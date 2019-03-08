@@ -53,7 +53,9 @@ export PATH=$PATH:$HOME/.local/bin
 #### Generate a layout
 Generate a layout from a SPICE netlist which includes the transistor sizes.
 ```sh
-mkdir mylibrary
-lclayout --output-dir mylibrary --tech examples/dummy_tech.py --netlist examples/cells.sp --cell AND2X1
+cd librecell-layout
+mkdir /tmp/mylibrary
+lclayout --output-dir /tmp/mylibrary --tech examples/dummy_tech.py --netlist examples/cells.sp --cell AND2X1
+# Use a GDS viewer such as KLayout to inspect the generated layout file `/tmp/mylibrary/*.gds`
 ```
 
