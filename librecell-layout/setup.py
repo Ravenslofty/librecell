@@ -22,7 +22,7 @@ setup(name='librecell-layout',
       url='https://codeberg.org/tok/librecell',
       author='T. Kramer',
       author_email='dont@spam.me',
-      license='AGPL',  # ???
+      license='OHL-S',
       entry_points={
           'console_scripts': [
               'lclayout = lclayout.standalone:main',
