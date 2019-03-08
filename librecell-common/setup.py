@@ -13,7 +13,7 @@ setup(name='librecell-common',
       long_description_content_type="text/markdown",
       keywords='cmos cell vlsi asic',
       classifiers=[
-          # 'License :: OSI Approved :: GNU Affero General Public License v3',
+          'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
           'Development Status :: 3 - Alpha',
           'Topic :: Scientific/Engineering',
           'Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)',
@@ -22,7 +22,7 @@ setup(name='librecell-common',
       url='https://codeberg.org/tok/librecell',
       author='T. Kramer',
       author_email='dont@spam.me',
-      license='AGPL',  # ???
+      license='GPLv3',
       install_requires=[
           'networkx',  # BSD
           'pyparsing',  # MIT
