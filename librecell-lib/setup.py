@@ -13,7 +13,7 @@ setup(name='librecell-lib',
       long_description_content_type="text/markdown",
       keywords='cmos cell characterization vlsi asic',
       classifiers=[
-          # 'License :: OSI Approved :: GNU Affero General Public License v3',
+          'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
           'Development Status :: 3 - Alpha',
           'Topic :: Scientific/Engineering',
           'Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)',
@@ -22,7 +22,7 @@ setup(name='librecell-lib',
       url='https://codeberg.org/tok/librecell',
       author='T. Kramer',
       author_email='dont@spam.me',
-      license='AGPL',  # ???
+      license='AGPL',
       entry_points={
           'console_scripts': [
               'libertyviz = lclib.liberty.visualize:main_plot_timing',
