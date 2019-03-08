@@ -56,8 +56,8 @@ min_spacing = {
     (l_poly, l_nwell): 50,
     (l_poly, l_active): 50,
     (l_poly, l_poly): 50,
-    (l_metal1, l_metal1): 100,
-    (l_metal2, l_metal2): 220,
+    (l_metal1, l_metal1): 50,
+    (l_metal2, l_metal2): 100,
 }
 
 via_layers = {
@@ -67,7 +67,7 @@ via_layers = {
 }
 
 # Layer for the pins.
-pin_layer = l_metal1
+pin_layer = l_metal2
 
 # Power stripe layer
 power_layer = l_metal2

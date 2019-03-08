@@ -146,7 +146,7 @@ def _route(detail_router: SignalRouter,
                 for o in node_conflict.get(n, {n}):
                     if o not in node_present_sharing_cost:
                         node_present_sharing_cost[o] = 0
-                    node_present_sharing_cost[o] += 100
+                    node_present_sharing_cost[o] += 1
 
         # Detect node collisions
 
