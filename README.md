@@ -88,3 +88,7 @@ lclayout --output-dir /tmp/mylibrary --tech examples/dummy_tech.py --netlist exa
 # Use a GDS viewer such as KLayout to inspect the generated layout file `/tmp/mylibrary/*.gds`
 ```
 
+## Contact
+```python
+"codextkramerych".replace("x", "@").replace("y", ".")
+```
