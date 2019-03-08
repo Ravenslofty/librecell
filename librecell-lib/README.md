@@ -3,7 +3,7 @@ Characterization kit for CMOS cells.
 
 ## Getting started
 
-TBD
+See install instructions in top-project.
 
 ### Characterize a cell
 The following example determines the input capacitances and timing delays of a combinational cell.
