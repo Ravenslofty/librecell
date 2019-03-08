@@ -49,11 +49,15 @@ def simulate_circuit(circuit: Circuit,
     """
     circuit = circuit.clone()
 
-    ngspice_shared = NgSpiceShared.new_instance(send_data=False)
+    # ngspice_shared = NgSpiceShared.new_instance(send_data=False)
+    # simulator = circuit.simulator(temperature=temperature,
+    #                               nominal_temperature=temperature,
+    #                               simulator='ngspice-shared',
+    #                               ngspice_shared=ngspice_shared
+    #                               )
+
     simulator = circuit.simulator(temperature=temperature,
-                                  nominal_temperature=temperature,
-                                  simulator='ngspice-shared',
-                                  ngspice_shared=ngspice_shared
+                                  nominal_temperature=temperature
                                   )
 
     # Create input drivers.
