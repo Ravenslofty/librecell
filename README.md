@@ -12,6 +12,19 @@ LibreCell consists of different sub-projects:
 ### Getting started
 LibreCell can be installed using the Python package manager `pip` or directly from the git repository.
 
+#### Dependencies
+The following dependencies must be installed manually:
+* python3
+* [http://ngspice.sourceforge.net/](ngspice): SPICE simulator used for cell characterization.
+* [https://github.com/Z3Prover/z3][z3]: SMT solver.
+
+Depending on your linux distribution this packages can be installed using the package manager.
+
+Example for Arch Linux:
+```sh
+sudo pacman -S python ngspice z3
+```
+
 #### Installing with pip
 
 It is recommended to use a Python 'virtual environment' for installing all Python dependencies:
