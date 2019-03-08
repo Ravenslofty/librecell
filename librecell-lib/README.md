@@ -18,7 +18,7 @@ Required inputs are:
 * --output: Output liberty file which will contain the characterization data.
 
 ```sh
-lclayout --liberty ~/FreePDK45/osu_soc/lib/files/gscl45nm.lib \
+lctime --liberty ~/FreePDK45/osu_soc/lib/files/gscl45nm.lib \
 	--include ~/FreePDK45/osu_soc/lib/files/gpdk45nm.m \
 	--spice ~/FreePDK45/osu_soc/lib/source/netlists/AND2X1.pex.netlist \
 	--cell AND2X1 \
