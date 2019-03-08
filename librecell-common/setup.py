@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 def readme():
@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='librecell-common',
-      version='0.0.1',
+      version='0.0.2',
       description='Common utility functions for LibreCell suite.',
       long_description=readme(),
       long_description_content_type="text/markdown",
@@ -23,6 +23,7 @@ setup(name='librecell-common',
       author='T. Kramer',
       author_email='dont@spam.me',
       license='GPLv3',
+      packages=find_packages(),
       install_requires=[
           'networkx',  # BSD
           'pyparsing',  # MIT

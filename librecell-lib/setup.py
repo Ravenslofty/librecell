@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 def readme():
@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='librecell-lib',
-      version='0.0.1',
+      version='0.0.2',
       description='CMOS standard cell characterization kit.',
       long_description=readme(),
       long_description_content_type="text/markdown",
@@ -23,6 +23,8 @@ setup(name='librecell-lib',
       author='T. Kramer',
       author_email='dont@spam.me',
       license='AGPL',
+      packages=find_packages(),
+      package_data={'': ['examples/*', 'test_data/*']},
       entry_points={
           'console_scripts': [
               'libertyviz = lclib.liberty.visualize:main_plot_timing',
