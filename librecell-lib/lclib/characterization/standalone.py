@@ -46,7 +46,7 @@ def main():
         description='Characterize the timing of a combinatorial cell based on a SPICE netlist. '
                     'The resulting liberty file will contain the data of the input liberty file '
                     'plus the updated characteristics of the selected cell.',
-        epilog='Example: librecell_characterize --liberty specification.lib --cell INVX1 --spice INVX1.sp -I transistor_model.m --output mylib.lib')
+        epilog='Example: lctime --liberty specification.lib --cell INVX1 --spice INVX1.sp -I transistor_model.m --output mylib.lib')
 
     parser.add_argument('-l', '--liberty', required=True, metavar='LIBERTY', type=str,
                         help='Liberty file. This must contain all necessary specifications needed to characterize the cell.')
