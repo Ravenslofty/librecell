@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='librecell-lib',
-      version='0.0.3',
+      version='0.0.3.post0',
       description='CMOS standard cell characterization kit.',
       long_description=readme(),
       long_description_content_type="text/markdown",

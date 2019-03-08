@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='librecell-layout',
-      version='0.0.4',
+      version='0.0.4.post0',
       description='CMOS standard cell generator.',
       long_description=readme(),
       long_description_content_type="text/markdown",
