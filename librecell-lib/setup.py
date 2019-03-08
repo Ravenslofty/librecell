@@ -34,13 +34,13 @@ setup(name='librecell-lib',
           ]
       },
       install_requires=[
-          # 'lclayout-util',
+          # 'lclayout-common',
           'numpy',  # BSD
           'sympy',  # BSD
           'matplotlib',
           'networkx',  # BSD
           'pyspice',  # GPLv3
           'scipy',  # BSD
-          'liberty-parser',  # LGPL
+          'liberty-parser',  # GPLv3
       ],
       zip_safe=False)

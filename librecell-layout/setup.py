@@ -32,13 +32,13 @@ setup(name='librecell-layout',
           ]
       },
       install_requires=[
-          # 'lclayout-util',
+          # 'lclayout-common',
           'klayout',  # GPLv3
           'numpy',  # BSD
           'networkx',  # BSD
           'pyspice',  # GPLv3
           'scipy',  # BSD
-          'liberty-parser',  # LGPL
+          'liberty-parser',  # GPLv3
           'pysmt',  # Apache-2.0
           'z3-solver',  #
           'pulp'  # MIT
