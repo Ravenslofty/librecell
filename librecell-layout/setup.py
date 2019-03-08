@@ -32,7 +32,7 @@ setup(name='librecell-layout',
           ]
       },
       install_requires=[
-          # 'lclayout-common',
+          'librecell-common',
           'klayout',  # GPLv3
           'numpy',  # BSD
           'networkx',  # BSD

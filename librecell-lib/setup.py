@@ -34,7 +34,7 @@ setup(name='librecell-lib',
           ]
       },
       install_requires=[
-          # 'lclayout-common',
+          'librecell-common',
           'numpy',  # BSD
           'sympy',  # BSD
           'matplotlib',
