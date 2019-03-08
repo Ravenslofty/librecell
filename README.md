@@ -10,9 +10,24 @@ LibreCell consists of different sub-projects:
 * librecell-common: Code that is used across different LibreCell projects such as a netlist parser.
 
 ### Getting started
+LibreCell can be installed using the Python package manager `pip` or directly from the git repository.
+
+#### Installing with pip
 
 It is recommended to use a Python 'virtual environment' for installing all Python dependencies:
 ```sh
+# Create a new virtual environment
+python3 -m venv my-librecell-env
+# Activate the virtual environment
+source ./my-librecell-env/bin/activate
+
+pip3 install librecell
+```
+
+#### Installing from git
+It is recommended to use a Python 'virtual environment' for installing all Python dependencies:
+```sh
+# Create a new virtual environment
 python3 -m venv my-librecell-env
 # Activate the virtual environment
 source ./my-librecell-env/bin/activate
