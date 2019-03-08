@@ -8,12 +8,11 @@ def readme():
 
 setup(name='librecell',
       version='0.0.1',
-      description='Meta-package for the librecell suite.',
+      description='Meta-package for the LibreCell suite.',
       long_description=readme(),
       long_description_content_type="text/markdown",
-      keywords='cmos cell generator layout klayout vlsi asic',
+      keywords='cmos cell generator layout characterization vlsi asic',
       classifiers=[
-          # 'License :: OSI Approved :: GNU Affero General Public License v3',
           'Development Status :: 3 - Alpha',
           'Topic :: Scientific/Engineering',
           'Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)',
@@ -22,9 +21,10 @@ setup(name='librecell',
       url='https://codeberg.org/tok/librecell',
       author='T. Kramer',
       author_email='dont@spam.me',
-      license='AGPL',  # ???
+      license='',  # ???
       install_requires=[
+          'librecell-common',
           'librecell-layout',
-          'librecell-time',
+          'librecell-lib',
       ],
       zip_safe=False)
