@@ -24,3 +24,16 @@ lctime --liberty ~/FreePDK45/osu_soc/lib/files/gscl45nm.lib \
 	--cell AND2X1 \
 	--output /tmp/and2x1.lib
 ```
+
+### Merging liberty files
+`lctime` will output a liberty file containing only one cell. The `libertymerge` command allows to merge this kind of
+output file back into the liberty template.
+
+The following example will take `base_liberty.lib` as a template and update its `cell` entries with the data found in
+the liberty files in the `characterization` directory.
+```sh
+libertymerge -b base_liberty.lib \
+    -o output_liberty.lib \
+    -u characterization/*.lib
+```
+This approach allows to run characterization runs of multiple cells independently and in parallel (e.g using `make`).
