@@ -5,9 +5,10 @@ The project is in a very early stage and not yet ready to be used for production
 Project structure and API might change heavily in near future.
 
 LibreCell consists of different sub-projects:
-* librecell-layout: Automated layout generator for CMOS standard cells.
-* librecell-lib: Characterization kit for CMOS cells and tool for handling liberty files.
-* librecell-common: Code that is used across different LibreCell projects such as a netlist parser.
+* [librecell-layout](librecell-layout): Automated layout generator for CMOS standard cells.
+* [librecell-lib](librecell-lib): Characterization kit for CMOS cells and tool for handling liberty files.
+* [librecell-common](librecell-common): Code that is used across different LibreCell projects such as a netlist parser.
+* [librecell-meta](librecell-meta): Convinience Python package for easier installation.
 
 ### Getting started
 LibreCell can be installed using the Python package manager `pip` or directly from the git repository.
