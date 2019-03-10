@@ -6,9 +6,7 @@ db_unit = 1e-9
 # Scale transistor width.
 transistor_channel_width_sizing = 0.7
 
-# GDS2 layer numbers.
-
-
+# GDS2 layer numbers for final output.
 my_active = (1, 0)
 my_nwell = (2, 0)
 my_nwell2 = (2, 1)
@@ -24,9 +22,12 @@ my_metal2_label = (8, 1)
 my_metal2_pin = (8, 2)
 my_abutment_box = (200, 0)
 
+# lclayout internally uses its own layer numbering scheme.
+# For the final output the layers can be remapped with a mapping
+# defined in this dictioinary.
 output_map = {
     l_active: my_active,
-    l_nwell: [my_nwell, my_nwell2],
+    l_nwell: [my_nwell, my_nwell2], # Map l_nwell to two output layers.
     l_poly: my_poly,
     l_poly_contact: my_poly_contact,
     l_diff_contact: my_diff_contact,
@@ -50,6 +51,7 @@ routing_layers = {
     l_metal2: 'hv',
 }
 
+# Minimum spacing rules for layer pairs.
 min_spacing = {
     (l_active, l_active): 50,
     (l_nwell, l_nwell): 50,
