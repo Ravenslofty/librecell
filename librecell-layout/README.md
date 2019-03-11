@@ -11,6 +11,7 @@ Generate a layout from a SPICE netlist which includes the transistor sizes:
 * --tech: Python script file containing design rules and technology related data
 * --netlist: A SPICE netlist containing the netlist of the cell as a sub circuit (`.subckt`).
 * --cell: Name of the cell. Must match the name of the sub circuit in the SPICE netlist.
+
 ```sh
 mkdir mylibrary
 lclayout --output-dir mylibrary --tech examples/dummy_tech.py --netlist examples/cells.sp --cell AND2X1
