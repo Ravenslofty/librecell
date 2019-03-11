@@ -25,6 +25,11 @@ lctime --liberty ~/FreePDK45/osu_soc/lib/files/gscl45nm.lib \
 	--output /tmp/and2x1.lib
 ```
 
+Vizualize the result:
+```sh
+libertyviz -l /tmp/and2x1.lib --cell AND2X1 --pin Y --related-pin A --table cell_rise
+```
+
 ### Merging liberty files
 `lctime` will output a liberty file containing only one cell. The `libertymerge` command allows to merge this kind of
 output file back into the liberty template.
