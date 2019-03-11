@@ -19,6 +19,9 @@ The following dependencies must be installed manually:
 * ngspice http://ngspice.sourceforge.net/ : SPICE simulator used for cell characterization.
 * z3 https://github.com/Z3Prover/z3 : SMT solver.
 
+Optional dependencies (not required for default configuration):
+* GLPK https://www.gnu.org/software/glpk : ILP/MIP solver
+
 Depending on your linux distribution this packages can be installed using the package manager.
 
 Example for Arch Linux:
