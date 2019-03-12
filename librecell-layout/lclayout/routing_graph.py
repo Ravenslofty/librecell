@@ -184,7 +184,6 @@ def extract_terminal_nodes(routing_nodes: List[Tuple[str, str, Tuple[int, int]]]
                 else:
                     # A routing node must be properly enclosed to be used.
                     d = enc + max_via_size // 2
-
                 routing_terminals = inside(routing_nodes[layer], pya.Region(net_shape), d)
                 terminals_by_net.append((net, layer, routing_terminals))
                 # Don't use terminals for normal routing
@@ -196,7 +195,7 @@ def extract_terminal_nodes(routing_nodes: List[Tuple[str, str, Tuple[int, int]]]
     error = False
     for net_name, layer, terminals in terminals_by_net:
         if len(terminals) == 0:
-            logger.error("Shape of net {} does not contain any routing grid point.".format(net_name))
+            logger.error("Shape of net {} on layer '{}' does not contain any routing grid point.".format(net_name, layer))
             error = True
 
     return terminals_by_net
