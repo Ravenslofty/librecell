@@ -44,7 +44,7 @@ class TransistorLayout:
           Layout of PC gate.
         
         :param active: pya.Box
-          Layout of RX.
+          Layout of l_active.
         
         :param source_box: pya.Box
           Marks possible locations for contacts to source.
@@ -94,11 +94,11 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
     :return: 
     """
 
-    # Bottom left of RX.
+    # Bottom left of l_active.
     x, y = loc
 
-    # Choose RX width such that at least one contact can be placed on each side of the transistor.
-    w = tech.unit_cell_width + tech.via_size[l_diff_contact] + 2 * tech.minimum_via_enclosure[l_active]
+    # Choose l_active width such that at least one contact can be placed on each side of the transistor.
+    w = tech.unit_cell_width + tech.via_size[l_diff_contact] + 2 * tech.minimum_enclosure[(l_active, l_diff_contact)]
 
     h = int(t.channel_width / tech.db_unit)
 
@@ -108,33 +108,37 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
         # Top aligned.
         y_eff = y * tech.unit_cell_height - 2 * tech.routing_grid_pitch_y
         y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) + tech.via_size[l_diff_contact] // 2 + \
-                tech.minimum_via_enclosure[
-                    l_active]
+                tech.minimum_enclosure[(l_active, l_diff_contact)]
         y_eff = y_eff - h
     else:
         # Bottom aligned
         y_eff = y * tech.unit_cell_height + 1 * tech.routing_grid_pitch_y
         y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) - tech.via_size[l_diff_contact] // 2 - \
-                tech.minimum_via_enclosure[
-                    l_active]
+                tech.minimum_enclosure[(l_active, l_diff_contact)]
 
-    rx_box = pya.Box(
+    active_box = pya.Box(
         x_eff,
         y_eff,
         x_eff + w,
         y_eff + h
     )
 
-    nw_box = None
+    nwell_box = None
+    # Enclose active regions of PMOS transistors with l_nwell.
     if t.channel_type == ChannelType.PMOS:
-        nw_box = pya.Box(
-            x_eff - tech.nwell2active_overlap_x,
-            y_eff - tech.nwell2active_overlap_y,
-            x_eff + w + tech.nwell2active_overlap_x,
-            y_eff + h + tech.nwell2active_overlap_y
+        nwell2active_overlap = tech.minimum_enclosure[(l_nwell, l_active)]
+        if not isinstance(nwell2active_overlap, tuple):
+            nwell2active_overlap = (nwell2active_overlap, nwell2active_overlap)
+        nwell2active_overlap_x, nwell2active_overlap_y = nwell2active_overlap
+
+        nwell_box = pya.Box(
+            x_eff - nwell2active_overlap_x,
+            y_eff - nwell2active_overlap_y,
+            x_eff + w + nwell2active_overlap_x,
+            y_eff + h + nwell2active_overlap_y
         )
 
-    center_x = rx_box.center().x
+    center_x = active_box.center().x
     assert (center_x - tech.grid_offset_x) % tech.routing_grid_pitch_x == 0, Exception("Gate not x-aligned on grid.")
 
     source_box = pya.Box(
@@ -151,8 +155,8 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
         y_eff + h
     )
 
-    top = rx_box.top
-    bottom = rx_box.bottom
+    top = active_box.top
+    bottom = active_box.bottom
 
     gate_top = top + tech.gate_extension
     gate_bottom = bottom - tech.gate_extension
@@ -173,4 +177,4 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
         0,
         0)
 
-    return TransistorLayout(gate_path, rx_box, source_box, drain_box, terminals, nwell=nw_box)
+    return TransistorLayout(gate_path, active_box, source_box, drain_box, terminals, nwell=nwell_box)

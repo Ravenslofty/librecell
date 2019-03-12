@@ -125,9 +125,9 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                 assert x1 == x2
                 assert y1 == y2
                 # Draw via
-                l = via_layers[l1][l2]['layer']
+                via_layer = via_layers[l1][l2]['layer']
 
-                via_width = tech.via_size[l]
+                via_width = tech.via_size[via_layer]
 
                 if debug_routing_graph:
                     via_width = min(tech.routing_grid_pitch_x, tech.routing_grid_pitch_y) // 16
@@ -135,7 +135,7 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                 w = via_width // 2
                 via = pya.Box(pya.Point(x1 - w, y1 - w),
                               pya.Point(x1 + w, y1 + w))
-                shapes[l].insert(via)
+                shapes[via_layer].insert(via)
 
                 # Ensure minimum via enclosure.
                 for l in (l1, l2):
@@ -144,7 +144,7 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                     neighbors = rt.neighbors((l, (x1, y1)))
                     neighbors = [n for n in neighbors if n[0] == l]
 
-                    w_ext = via_width // 2 + tech.minimum_via_enclosure[l]
+                    w_ext = via_width // 2 + tech.minimum_enclosure[(l, via_layer)]
                     w_noext = via_width // 2
 
                     # Check on which sides the enclosure must be extended.

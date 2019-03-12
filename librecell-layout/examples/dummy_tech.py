@@ -110,10 +110,6 @@ minimum_gate_width_pfet = 200
 # Minimum width for pins.
 minimum_pin_width = 50
 
-# lnwell must be larger than lactive.
-nwell2active_overlap_y = 100
-nwell2active_overlap_x = 100
-
 # Width of routing wires.
 wire_width = {
     l_poly: 100,
@@ -142,12 +138,19 @@ minimum_width = {
     l_metal2: 100
 }
 
-# Minimum via enclosure rules.
-minimum_via_enclosure = {
-    l_active: 10,
-    l_poly: 10,
-    l_metal1: 20,
-    l_metal2: 20,
+# Minimum enclosure rules.
+# Syntax: {(outer layer, inner layer): minimum enclosure, ...}
+minimum_enclosure = {
+    # Via enclosure
+    (l_active, l_diff_contact): 10,
+    (l_poly, l_poly_contact): 10,
+    (l_metal1, l_diff_contact): 10,
+    (l_metal1, l_poly_contact): 10,
+    (l_metal1, l_via1): 20,
+    (l_metal2, l_via1): 20,
+
+    # l_nwell must overlap l_active
+    (l_nwell, l_active): 100
 }
 
 # Minimum notch rules.

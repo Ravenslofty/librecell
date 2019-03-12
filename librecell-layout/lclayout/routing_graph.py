@@ -174,8 +174,8 @@ def extract_terminal_nodes(routing_nodes: List[Tuple[str, str, Tuple[int, int]]]
         for layer, region in regions.items():
             for net_shape in region.each_merged():
 
-                enc = tech.minimum_via_enclosure.get(layer, 0)
                 possible_via_layers = [v for l, v in tech.via_layers.items() if layer in l]
+                enc = max((tech.minimum_enclosure.get((layer, via_layer), 0) for via_layer in possible_via_layers))
                 max_via_size = max((tech.via_size[l] for l in possible_via_layers))
 
                 if layer in tech.routing_layers:
@@ -262,9 +262,9 @@ def create_virtual_terminal_nodes(G: nx.Graph,
     for net, layer, terminals in terminals_by_net:
         weight = 1000
         if len(terminals) > 0:
-            if layer == 'rx' and False:  # TODO: make tech independet
+            if layer == 'l_active' and False:  # TODO: make tech independet
                 for p in terminals:
-                    # Force router to connect to all contacts to a RX shape.
+                    # Force router to connect to all contacts to a l_active shape.
                     virtual_net_terminal = ('virtual', net, layer, next(cnt))
                     virtual_terminal_nodes.setdefault(net, []).append(virtual_net_terminal)
                     n = layer, p

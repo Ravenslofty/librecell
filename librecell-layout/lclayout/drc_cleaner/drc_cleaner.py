@@ -338,7 +338,7 @@ def clean(tech,
     # Add minimum enclosure rules (of vias).
     for (l1, l2), via_layer in tech.via_layers.items():
         for outer in (l1, l2):
-            min_enclosure[(outer, via_layer)] = tech.minimum_via_enclosure[outer]
+            min_enclosure[(outer, via_layer)] = tech.minimum_enclosure[(outer, via_layer)]
 
     for outer_layers, inner_layers in containtement_constraints:
         for outer_layer, inner_layer in product(outer_layers, inner_layers):
