@@ -27,7 +27,7 @@ my_abutment_box = (200, 0)
 # defined in this dictioinary.
 output_map = {
     l_active: my_active,
-    l_nwell: [my_nwell, my_nwell2], # Map l_nwell to two output layers.
+    l_nwell: [my_nwell, my_nwell2],  # Map l_nwell to two output layers.
     l_poly: my_poly,
     l_poly_contact: my_poly_contact,
     l_diff_contact: my_diff_contact,
@@ -62,6 +62,8 @@ min_spacing = {
     (l_metal2, l_metal2): 100,
 }
 
+# Define layer is used for vias between two other layers.
+# Syntax: {(layer1, layer2): via_layer, ...}
 via_layers = {
     (l_metal1, l_active): l_diff_contact,
     (l_metal1, l_poly): l_poly_contact,
@@ -79,58 +81,68 @@ power_layer = l_metal2
 connectable_layers = {l_nwell}
 
 # Standard cell dimensions.
+# A 'unit cell' corresponds to the dimensions of the smallest possible cell. Usually an inverter.
+# `unit_cell_width` also corresponds to the pitch of the gates because gates are spaced on a regular grid.
 unit_cell_width = 400
-unit_cell_height = 2400  # = row height
+unit_cell_height = 2400
 
-gate_length = 50  # Width of the gate polysilicon stripe.
+# Width of the gate polysilicon stripe.
+gate_length = 50
 
-gate_extension = 100  # Minimum length a polysilicon gate must overlap the silicon.
+# Minimum length a polysilicon gate must overlap the silicon.
+gate_extension = 100
 
 # Routing pitch
 routing_grid_pitch_x = unit_cell_width // 2
-
 routing_grid_pitch_y = unit_cell_height // 8
 
+# Translate routing grid such that the bottom left grid point is at (grid_offset_x, grid_offset_y)
 grid_offset_x = routing_grid_pitch_x
 grid_offset_y = routing_grid_pitch_y // 2
 
 # Width of power rail.
 power_rail_width = 360
 
+# Minimum width of polysilicon gate stripes.
 minimum_gate_width_nfet = 200
 minimum_gate_width_pfet = 200
 
+# Minimum width for pins.
 minimum_pin_width = 50
 
-# NW must be larger than RX.
-nw2rx_overlap_y = 100
-nw2rx_overlap_x = 100
+# lnwell must be larger than lactive.
+nwell2active_overlap_y = 100
+nwell2active_overlap_x = 100
 
+# Width of routing wires.
 wire_width = {
     l_poly: 100,
     l_metal1: 100,
     l_metal2: 100
 }
 
+# Width of horizontal routing wires (overwrites `wire_width`).
 wire_width_horizontal = {
     l_poly: 100,
     l_metal1: 100,
     l_metal2: 100
 }
 
+# Side lengths of vias (square shaped).
 via_size = {
     l_poly_contact: 80,
     l_diff_contact: 80,
     l_via1: 100
 }
 
-# TODO
+# Minimum width rules.
 minimum_width = {
     l_poly: gate_length,
     l_metal1: 100,
     l_metal2: 100
 }
 
+# Minimum via enclosure rules.
 minimum_via_enclosure = {
     l_active: 10,
     l_poly: 10,
@@ -138,6 +150,7 @@ minimum_via_enclosure = {
     l_metal2: 20,
 }
 
+# Minimum notch rules.
 minimum_notch = {
     l_active: 50,
     l_poly: 50,
@@ -146,6 +159,7 @@ minimum_notch = {
     l_nwell: 50
 }
 
+# Minimum area rules.
 min_area = {
     l_metal1: 100 * 100,
     l_metal2: 100 * 100,
@@ -157,7 +171,7 @@ min_area = {
 # This will avoid creating zig-zag routings.
 orientation_change_penalty = 100
 
-# Routing edge weights by layer.
+# Routing edge weights per data base unit.
 weights_horizontal = {
     l_poly: 2,
     l_metal1: 1,

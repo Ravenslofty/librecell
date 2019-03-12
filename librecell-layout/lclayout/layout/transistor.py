@@ -128,10 +128,10 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
     nw_box = None
     if t.channel_type == ChannelType.PMOS:
         nw_box = pya.Box(
-            x_eff - tech.nw2rx_overlap_x,
-            y_eff - tech.nw2rx_overlap_y,
-            x_eff + w + tech.nw2rx_overlap_x,
-            y_eff + h + tech.nw2rx_overlap_y
+            x_eff - tech.nwell2active_overlap_x,
+            y_eff - tech.nwell2active_overlap_y,
+            x_eff + w + tech.nwell2active_overlap_x,
+            y_eff + h + tech.nwell2active_overlap_y
         )
 
     center_x = rx_box.center().x
