@@ -24,6 +24,7 @@ import networkx as nx
 l_active = 'active'
 l_nwell = 'nwell'
 l_poly = 'poly'
+l_poly_label = 'poly_label'
 l_diff_contact = 'diff_contact'
 l_poly_contact = 'poly_contact'
 l_metal1 = 'metal1'
@@ -39,6 +40,7 @@ layermap = {
     l_nwell: (1, 0),
     l_active: (2, 0),
     l_poly: (3, 0),
+    l_poly_label: (3, 1),
     l_diff_contact: (4, 0),
     l_poly_contact: (5, 0),
     l_metal1: (6, 0),

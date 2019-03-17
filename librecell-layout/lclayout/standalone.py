@@ -40,6 +40,7 @@ from .lef import types as lef
 from .routing_graph import *
 
 from .drc_cleaner import drc_cleaner
+from .lvs import lvs
 
 # klayout.db should not be imported if script is run from KLayout GUI.
 if 'pya' not in sys.modules:
@@ -652,6 +653,10 @@ def main():
                                               placer=placers[args.placer](),
                                               debug_routing_graph=args.debug_routing_graph,
                                               debug_smt_solver=args.debug_smt_solver)
+
+    # LVS check
+    logger.info("Running LVS check")
+    lvs.extract_netlist(layout, cell)
 
     def remap_layers(layout: pya.Layout) -> pya.Layout:
         """
