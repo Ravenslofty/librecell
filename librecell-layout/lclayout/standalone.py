@@ -81,7 +81,7 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
     :param G: Full graph of routing grid
     :param rt: Graph representing the wires
     :param tech: module containing technology information
-    :param debug_routing_graph: Draw narrowser wires for easier visual inspection
+    :param debug_routing_graph: Draw narrower wires for easier visual inspection
     :return:
     """
 

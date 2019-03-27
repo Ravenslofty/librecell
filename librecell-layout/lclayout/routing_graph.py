@@ -93,7 +93,7 @@ def create_routing_graph_base(grid: Grid2D, tech) -> nx.Graph:
     return G
 
 
-def prepare_routing_nodes(G: nx.Graph, grid: Grid2D, shapes: Dict[Any, pya.Region], tech):
+def prepare_routing_nodes(G: nx.Graph, grid: Grid2D, shapes: Dict[Any, pya.Region], tech) -> Dict[Any, List[Any]]:
     """ Get legal routing nodes for each routing layer by removing nodes that would conflict
     with predefined `shapes`.
     :param grid: The routing grid (Grid2D).
