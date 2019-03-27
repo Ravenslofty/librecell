@@ -25,6 +25,7 @@ from itertools import count
 from .layout.grid_helpers import *
 from .layout.geometry_helpers import *
 from .layout.grid import Grid2D
+from .layout.layers import *
 from .layout.transistor import TransistorLayout
 from .data_types import Transistor
 from . import tech_util
@@ -61,9 +62,13 @@ def create_routing_graph_base(grid: Grid2D, tech) -> nx.Graph:
                 n1 = (l1, p)
                 n2 = (l2, p)
 
+                weight = tech.via_weights[(l1, l2)]
+
+                # Create edge: n1 -- n2
                 G.add_edge(n1, n2,
-                           weight=tech.via_weights[(l1, l2)],
-                           multi_via=tech.multi_via.get((l1, l2), 1)
+                           weight=weight,
+                           multi_via=tech.multi_via.get((l1, l2), 1),
+                           layer=via_layer
                            )
 
     # Create intra layer routing edges.
@@ -81,14 +86,14 @@ def create_routing_graph_base(grid: Grid2D, tech) -> nx.Graph:
                 n_right = layer, (x2, y1)
                 if n_right in G.nodes:
                     weight = tech.weights_horizontal[layer] * abs(x2 - x1)
-                    G.add_edge(n, n_right, weight=weight, orientation='h')
+                    G.add_edge(n, n_right, weight=weight, orientation='h', layer=layer)
 
             # Vertical edge.
             if 'v' in directions:
                 n_upper = layer, (x1, y2)
                 if n_upper in G.nodes:
                     weight = tech.weights_vertical[layer] * abs(y2 - y1)
-                    G.add_edge(n, n_upper, weight=weight, orientation='v')
+                    G.add_edge(n, n_upper, weight=weight, orientation='v', layer=layer)
 
     return G
 
@@ -108,7 +113,8 @@ def prepare_routing_nodes(G: nx.Graph, grid: Grid2D, shapes: Dict[Any, pya.Regio
 
     routing_nodes = dict()
     # Create routing grid and remove nodes that interact with some layers.
-    for l in tech.routing_layers.keys():
+    # TODO: get layers in a non-hardcoded way.
+    for l in [l_active, l_diff_contact, l_poly, l_poly_contact, l_metal1, l_metal2]:
 
         # Find nodes that interact with a blocking layer.
         illegal_nodes = set()
@@ -195,7 +201,8 @@ def extract_terminal_nodes(routing_nodes: List[Tuple[str, str, Tuple[int, int]]]
     error = False
     for net_name, layer, terminals in terminals_by_net:
         if len(terminals) == 0:
-            logger.error("Shape of net {} on layer '{}' does not contain any routing grid point.".format(net_name, layer))
+            logger.error(
+                "Shape of net {} on layer '{}' does not contain any routing grid point.".format(net_name, layer))
             error = True
 
     return terminals_by_net
