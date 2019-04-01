@@ -678,6 +678,11 @@ def main():
                 dest_layers = src_layer
             else:
                 src_layer_name = layermap_reverse[src_layer]
+
+                if src_layer_name not in tech.output_map:
+                    logger.info("Layer not written to output: {}".format(src_layer_name))
+                    continue
+
                 dest_layers = tech.output_map[src_layer_name]
 
             if not isinstance(dest_layers, list):
