@@ -2,38 +2,34 @@ from klayout import db
 from ..layout.layers import *
 
 import logging
+
 logger = logging.getLogger(__name__)
 
-def extract_netlist(ly: db.Layout, top_cell: db.Cell):
-    l2n = db.LayoutToNetlist(db.RecursiveShapeIterator(ly, top_cell, []))
 
-    # def make_layer(layer_index, layer_name):
-    #     layer_num, layer_type = layer_index
-    #
-    #     if layer_type in [0, 2]:
-    #         return l2n.make_layer(ly.layer(layer_num, layer_type), layer_name)
-    #     elif layer_type == 1:
-    #         return l2n.make_text_layer(ly.layer(layer_num, layer_type), layer_name)
-    #     assert False, "Unknown data type: {}".format(layer_type)
-    #
-    # r = {
-    #     layer_name: make_layer(index, layer_name)
-    #     for layer_name, index in layers.layermap.items()
-    # }
+def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
+    """
+    Extract a device level netlist of 3-terminal MOSFETs from the cell `top_cell` of layout `layout`.
+    :param layout: Layout object.
+    :param top_cell: The top cell of the circuit.
+    :return: Netlist as a `klayout.db.Circuit` object.
+    """
 
-    l = layermap
+    l2n = db.LayoutToNetlist(db.RecursiveShapeIterator(layout, top_cell, []))
 
-    rnwell = l2n.make_layer(l[l_nwell], l_nwell)
-    ractive = l2n.make_layer(l[l_active], l_active)
-    rpoly = l2n.make_polygon_layer(l[l_poly], l_poly)
-    rpoly_lbl = l2n.make_text_layer(l[l_poly_label], l_poly_label)
-    rdiff_cont = l2n.make_polygon_layer(l[l_diff_contact], l_diff_contact)
-    rpoly_cont = l2n.make_polygon_layer(l[l_poly_contact], l_poly_contact)
-    rmetal1 = l2n.make_polygon_layer(l[l_metal1], l_metal1)
-    rmetal1_lbl = l2n.make_text_layer(l[l_metal1_label], l_metal1_label)
-    rvia1 = l2n.make_polygon_layer(l[l_via1], l_via1)
-    rmetal2 = l2n.make_polygon_layer(l[l_metal2], l_metal2)
-    rmetal2_lbl = l2n.make_text_layer(l[l_metal1_label], l_metal2_label)
+    def make_layer(layer_name: str):
+        return l2n.make_layer(layout.layer(*layermap[layer_name]), layer_name)
+
+    rnwell = make_layer(l_nwell)
+    ractive = make_layer(l_active)
+    rpoly = make_layer(l_poly)
+    rpoly_lbl = make_layer(l_poly_label)
+    rdiff_cont = make_layer(l_diff_contact)
+    rpoly_cont = make_layer(l_poly_contact)
+    rmetal1 = make_layer(l_metal1)
+    rmetal1_lbl = make_layer(l_metal1_label)
+    rvia1 = make_layer(l_via1)
+    rmetal2 = make_layer(l_metal2)
+    rmetal2_lbl = make_layer(l_metal2_label)
 
     rpactive = ractive & rnwell
     rpgate = rpactive & rpoly
@@ -70,6 +66,7 @@ def extract_netlist(ly: db.Layout, top_cell: db.Cell):
     l2n.connect(rpoly_cont)
     l2n.connect(rmetal1)
     l2n.connect(rmetal2)
+    # TODO: what if more than 2 metal layers?
 
     # Inter-layer
     l2n.connect(rpsd, rdiff_cont)
@@ -91,3 +88,8 @@ def extract_netlist(ly: db.Layout, top_cell: db.Cell):
     netlist.make_top_level_pins()
     netlist.purge()
     netlist.purge_nets()
+
+    assert netlist.top_circuit_count() == 1, "A well formed netlist should have exactly one top circuit."
+
+    return netlist
+
