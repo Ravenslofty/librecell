@@ -98,10 +98,27 @@ def create_routing_graph_base(grid: Grid2D, tech) -> nx.Graph:
     return G
 
 
-def prepare_routing_nodes(G: nx.Graph, grid: Grid2D, shapes: Dict[Any, pya.Region], tech) -> Dict[Any, Set[Any]]:
-    """ Get legal routing nodes for each routing layer by removing nodes that would conflict
+def _get_routing_node_locations_per_layer(g: nx.Graph) -> Dict[Any, Tuple[int, int]]:
+    """ For each layer extract the positions of the routing nodes.
+
+    :param g: Routing graph.
+    :return: Dict[layer name, set of (x,y) coordinates of routing nodes]
+    """
+    # Dict that will contain for each layer the node coordinates that can be used for routing.
+    routing_nodes = dict()
+    # Populate `routing_nodes`
+    for e in g.edges:
+        (l1, p1), (l2, p2) = e
+        routing_nodes.setdefault(l1, set()).add(p1)
+        routing_nodes.setdefault(l2, set()).add(p2)
+
+    return routing_nodes
+
+
+def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
+    """ Remove nodes and edges from  G that would conflict
     with predefined `shapes`.
-    :param grid: The routing grid (Grid2D).
+    :param graph: routing graph.
     :param shapes: Dict[layer name, pya.Shapes]
     :param tech: module containing technology information
     :return: Dict[layer name, List[Node]]
@@ -116,7 +133,7 @@ def prepare_routing_nodes(G: nx.Graph, grid: Grid2D, shapes: Dict[Any, pya.Regio
     illegal_edges = set()
     # For each edge in the graph check if it conflicts with an existing shape.
     # Remember the edge if it is in conflict.
-    for e in G.edges:
+    for e in graph.edges:
         (l1, p1), (l2, p2) = e
         is_via = l1 != l2
 
@@ -152,17 +169,7 @@ def prepare_routing_nodes(G: nx.Graph, grid: Grid2D, shapes: Dict[Any, pya.Regio
                                 illegal_edges.add(e)
 
     # Now remove all edges from G that are in conflict with existing shapes.
-    G.remove_edges_from(illegal_edges)
-
-    # Dict that will contain for each layer the node coordinates that can be used for routing.
-    routing_nodes = dict()
-    # Populate `routing_nodes`
-    for e in G.edges:
-        (l1, p1), (l2, p2) = e
-        routing_nodes.setdefault(l1, set()).add(p1)
-        routing_nodes.setdefault(l2, set()).add(p2)
-
-    return routing_nodes
+    graph.remove_edges_from(illegal_edges)
 
 
 def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
@@ -183,15 +190,17 @@ def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Region], te
                 G.remove_edge(*e)
 
 
-def extract_terminal_nodes(routing_nodes: List[Tuple[str, str, Tuple[int, int]]],
+def extract_terminal_nodes(graph: nx.Graph,
                            net_regions: Dict[str, List[pya.Region]],
                            tech):
     """ Get terminal nodes for each net.
-    :param routing_nodes: Legal routing nodes for each layer.
+    :param graph: Routing graph.
     :param net_regions: Regions that are connected to a net: Dict[net, Dict[layer, pya.Region]]
     :param tech: module containing technology information
     :return: list of terminals: [(net, layer, [terminal, ...]), ...]
     """
+
+    routing_nodes = _get_routing_node_locations_per_layer(graph)
 
     # Create a list of terminal areas: [(net, layer, [terminal, ...]), ...]
     terminals_by_net = []
@@ -267,18 +276,20 @@ def embed_transistor_terminal_nodes(G: nx.Graph,
 
 
 def create_virtual_terminal_nodes(G: nx.Graph,
-                                  routing_nodes,
                                   terminals_by_net: List[Tuple[str, str, Tuple[int, int]]],
                                   io_pins: Iterable,
                                   tech):
     """ Create virtual terminal nodes for each net.
     :param G: The routing graph. Will be modified.
-    :param routing_nodes:
     :param terminals_by_net:
     :param io_pins: Names of the I/O nets.
     :param tech: module containing technology information
     :return: Returns a set of virtual terminal nodes: Dict[('virtual...', net, layer, id)]
     """
+
+    # Extract all routing nodes for each layer.
+    routing_nodes = _get_routing_node_locations_per_layer(G)
+
     # Create virtual graph nodes for each net terminal.
     virtual_terminal_nodes = {}
     cnt = count()

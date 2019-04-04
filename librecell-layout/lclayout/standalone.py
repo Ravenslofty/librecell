@@ -334,13 +334,13 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     G = create_routing_graph_base(grid, tech)
 
     # Remove illegal routing nodes from graph and get a dict of legal routing nodes per layer.
-    routing_nodes = prepare_routing_nodes(G, grid, shapes, tech)
+    remove_illegal_routing_edges(G, shapes, tech)
 
     # Remove pre-routed edges from G.
     remove_existing_routing_edges(G, shapes, tech)
 
     # Create a list of terminal areas: [(net, layer, [terminal, ...]), ...]
-    terminals_by_net = extract_terminal_nodes(routing_nodes, net_regions, tech)
+    terminals_by_net = extract_terminal_nodes(G, net_regions, tech)
 
     # Embed transistor terminal nodes in to routing graph.
     embed_transistor_terminal_nodes(G, terminals_by_net, transistor_layouts, tech)
@@ -363,7 +363,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         assert not error, "Nets without terminals. Check the routing graph (--debug-routing-graph)!"
 
     # Create virtual graph nodes for each net terminal.
-    virtual_terminal_nodes = create_virtual_terminal_nodes(G, routing_nodes, terminals_by_net, io_pins, tech)
+    virtual_terminal_nodes = create_virtual_terminal_nodes(G, terminals_by_net, io_pins, tech)
 
     if debug_routing_graph:
         # Display terminals on layout.
