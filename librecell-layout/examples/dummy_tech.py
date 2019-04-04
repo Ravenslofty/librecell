@@ -54,6 +54,7 @@ routing_layers = {
 # Minimum spacing rules for layer pairs.
 min_spacing = {
     (l_active, l_active): 50,
+    (l_active, l_poly_contact): 10,
     (l_nwell, l_nwell): 50,
     (l_poly, l_nwell): 50,
     (l_poly, l_active): 50,
