@@ -95,6 +95,11 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
     print(all_vdd_paths)
     print(all_gnd_paths)
 
+    gate_nets = [
+        [gate_net for (a,b), (gate_net, channel_type)] for paths in all_vdd_paths
+    ]
+    print(gate_nets)
+
     # pull_up = [
     #     [cmos_graph[a][b] for a, b in pairwise(path)] for path in all_vdd_paths
     # ]
