@@ -58,16 +58,9 @@ min_spacing = {
     (l_poly, l_nwell): 50,
     (l_poly, l_active): 50,
     (l_poly, l_poly): 50,
+    (l_poly, l_diff_contact): 10,
     (l_metal1, l_metal1): 50,
     (l_metal2, l_metal2): 100,
-}
-
-# Define layer is used for vias between two other layers.
-# Syntax: {(layer1, layer2): via_layer, ...}
-via_layers = {
-    (l_metal1, l_active): l_diff_contact,
-    (l_metal1, l_poly): l_poly_contact,
-    (l_metal1, l_metal2): l_via1
 }
 
 # Layer for the pins.

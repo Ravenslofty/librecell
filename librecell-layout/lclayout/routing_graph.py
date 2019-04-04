@@ -30,7 +30,7 @@ from .layout.transistor import TransistorLayout
 from .data_types import Transistor
 from . import tech_util
 
-from typing import Any, Dict, List, Tuple, Iterable, Optional
+from typing import Any, Dict, List, Tuple, Iterable, Set
 import logging
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ def create_routing_graph_base(grid: Grid2D, tech) -> nx.Graph:
     return G
 
 
-def prepare_routing_nodes(G: nx.Graph, grid: Grid2D, shapes: Dict[Any, pya.Region], tech) -> Dict[Any, List[Any]]:
+def prepare_routing_nodes(G: nx.Graph, grid: Grid2D, shapes: Dict[Any, pya.Region], tech) -> Dict[Any, Set[Any]]:
     """ Get legal routing nodes for each routing layer by removing nodes that would conflict
     with predefined `shapes`.
     :param grid: The routing grid (Grid2D).
@@ -111,37 +111,56 @@ def prepare_routing_nodes(G: nx.Graph, grid: Grid2D, shapes: Dict[Any, pya.Regio
     # a-b in the graph with weight=min_spacing.
     spacing_graph = tech_util.spacing_graph(tech.min_spacing)
 
-    routing_nodes = dict()
-    # Create routing grid and remove nodes that interact with some layers.
-    # TODO: get layers in a non-hardcoded way.
-    for l in [l_active, l_diff_contact, l_poly, l_poly_contact, l_metal1, l_metal2]:
+    # Get a dict mapping layer names to pya.Regions
+    regions = {l: pya.Region(s) for l, s in shapes.items()}
+    illegal_edges = set()
+    # For each edge in the graph check if it conflicts with an existing shape.
+    # Remember the edge if it is in conflict.
+    for e in G.edges:
+        (l1, p1), (l2, p2) = e
+        is_via = l1 != l2
 
-        # Find nodes that interact with a blocking layer.
-        illegal_nodes = set()
-
-        if l in spacing_graph:
-            other_layers = spacing_graph[l]
-
-            w1 = (tech.wire_width.get(l, 1) + 1) // 2
+        if not is_via:
+            layer = l1
+            other_layers = spacing_graph[layer]
             for other_layer in other_layers:
-                if other_layer not in spacing_graph:
-                    # No spacing defined for this layer.
-                    continue
+                if other_layer != layer:
+                    min_spacing = spacing_graph[layer][other_layer]['min_spacing']
+                    wire_width_half = (tech.wire_width.get(layer, 0) + 1) // 2
+                    margin = wire_width_half + min_spacing
+                    # TODO: treat horizontal and vertical lines differently if they don't have the same wire width.
+                    region = regions[other_layer]
+                    is_illegal_edge = interacts(p1, region, margin) or interacts(p2, region, margin)
 
-                if l == other_layer:
-                    # Intra layer spacings are not handled here.
-                    continue
+                    if is_illegal_edge:
+                        illegal_edges.add(e)
+        else:
+            assert p1 == p2, "End point coordinates of a via edge must match."
+            layer = via_layers[l1][l2]['layer']
+            if layer in spacing_graph:
+                other_layers = spacing_graph[layer]
+                for other_layer in other_layers:
+                    if other_layer != layer:
+                        if layer in spacing_graph and other_layer in spacing_graph:
+                            min_spacing = spacing_graph[layer][other_layer]['min_spacing']
+                            via_width_half = (tech.via_size[layer] + 1) // 2
+                            margin = via_width_half + min_spacing
+                            region = regions[other_layer]
+                            is_illegal_edge = interacts(p1, region, margin)
 
-                w2 = (tech.wire_width.get(other_layer, 0) + 1) // 2
-                spacing = spacing_graph[l][other_layer]['min_spacing']
-                margin = w1 + w2 + spacing
-                r_other = pya.Region(shapes[other_layer])
-                illegal = interacting(grid, r_other, margin)
-                illegal_nodes.update(illegal)
+                            if is_illegal_edge:
+                                illegal_edges.add(e)
 
-            G.remove_nodes_from(((l, p) for p in illegal_nodes))
+    # Now remove all edges from G that are in conflict with existing shapes.
+    G.remove_edges_from(illegal_edges)
 
-        routing_nodes[l] = set(grid) - illegal_nodes
+    # Dict that will contain for each layer the node coordinates that can be used for routing.
+    routing_nodes = dict()
+    # Populate `routing_nodes`
+    for e in G.edges:
+        (l1, p1), (l2, p2) = e
+        routing_nodes.setdefault(l1, set()).add(p1)
+        routing_nodes.setdefault(l2, set()).add(p2)
 
     return routing_nodes
 
@@ -195,7 +214,6 @@ def extract_terminal_nodes(routing_nodes: List[Tuple[str, str, Tuple[int, int]]]
                 # Don't use terminals for normal routing
                 routing_nodes[layer] -= set(routing_terminals)
                 # TODO: need to be removed from G also. Better: construct edges in G afterwards.
-                # G.remove_nodes_from((('pc',p) for p in routing_terminals))
 
     # Sanity check
     error = False
