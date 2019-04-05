@@ -105,27 +105,33 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
         f = simplify_logic(f)
         return f
 
+    def bool_equals(f1, f2):
+        """
+        Check equality of two boolean formulas.
+        :param f1:
+        :param f2:
+        :return:
+        """
+        return not satisfiable(f1 ^ f2)
+
     output_at_vdd = conductivity_condition(cmos_graph, output_node, vdd_node)
     output_at_gnd = conductivity_condition(cmos_graph, output_node, gnd_node)
-
-    is_complementary = output_at_gnd.equals(~output_at_vdd)
-    print("is complementary: {}".format(is_complementary))
-    has_short = satisfiable(output_at_vdd & output_at_gnd)
-    print("has short: {}".format(has_short))
-    has_tri_state = satisfiable((~output_at_vdd) & (~output_at_gnd))
-    print("has tri-state: {}".format(has_tri_state))
-
+    print(output_at_vdd)
+    print(output_at_gnd)
     print(~output_at_vdd)
+    is_complementary = bool_equals(output_at_gnd, ~output_at_vdd)
+    print("is complementary: {}".format(is_complementary))
+    short_condition = output_at_vdd & output_at_gnd
+    has_short = satisfiable(short_condition)
+    print("has short: {}".format(has_short))
+    # print("has when: {}".format(short_condition))
+    tri_state_condition = simplify_logic((~output_at_vdd) & (~output_at_gnd))
+    has_tri_state = satisfiable(tri_state_condition)
+    print("has tri-state: {}".format(has_tri_state))
+    print("tri-state when: {}".format(tri_state_condition))
 
-    # pull_up = [
-    #     [cmos_graph[a][b] for a, b in pairwise(path)] for path in all_vdd_paths
-    # ]
-    # print(pull_up)
-    # minterms = minterms_from_cmos_graph(cmos_graph, vdd_node, gnd_node, output_node, input_names)
-    # dontcares = []
-    # input_symbols = [sympy.Symbol(n) for n in input_names]
-    # sop = SOPform(input_symbols, minterms, dontcares)
-    # sop = sympy.simplify_logic(sop)
+    f_out = simplify_logic(output_at_vdd)
+    print(output_node, "=", f_out)
 
     return None
 
