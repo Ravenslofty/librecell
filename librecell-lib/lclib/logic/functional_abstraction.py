@@ -25,6 +25,8 @@ from typing import Any, Dict, List, Iterable, Tuple
 from enum import Enum
 import collections
 import sympy
+from sympy.logic import simplify_logic, satisfiable
+from sympy.logic import boolalg
 from sympy.logic import SOPform
 
 from lclayout.data_types import ChannelType
@@ -51,7 +53,7 @@ def all_simple_paths_multigraph(G: nx.MultiGraph, source, target, cutoff=None):
     if cutoff < 1:
         return []
     visited = collections.OrderedDict.fromkeys([source])
-    edges = list() # Store sequence of edges.
+    edges = list()  # Store sequence of edges.
     stack = [(((u, v), key) for u, v, key in G.edges(source, keys=True))]
     while stack:
         children = stack[-1]
@@ -62,15 +64,13 @@ def all_simple_paths_multigraph(G: nx.MultiGraph, source, target, cutoff=None):
             edges = edges[:-1]
         elif len(visited) < cutoff:
             if child == target:
-                # yield list(visited) + [((child_source, child), child_key)]
                 yield list(edges) + [((child_source, child), child_key)]
             elif child not in visited:
                 visited[child] = None
                 edges.append(((child_source, child), child_key))
                 stack.append((((u, v), k) for u, v, k in G.edges(child, keys=True)))
         else:  # len(visited) == cutoff:
-            edges.append(((child_source, child), child_key))
-            count = ([child] + list(children)).count(target)
+            count = (list(children) + [child]).count(target)
             for i in range(count):
                 yield list(edges) + [((child_source, child), child_key)]
             stack.pop()
@@ -90,15 +90,32 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
     :return: sympy.Symbol
     """
 
-    all_vdd_paths = list(all_simple_paths_multigraph(cmos_graph, output_node, vdd_node))
-    all_gnd_paths = list(all_simple_paths_multigraph(cmos_graph, output_node, gnd_node))
-    print(all_vdd_paths)
-    print(all_gnd_paths)
+    def conductivity_condition(cmos_graph: nx.MultiGraph, source, target):
+        all_paths = list(all_simple_paths_multigraph(cmos_graph, source, target))
+        transistor_paths = [
+            [(gate_net, channel_type) for (net1, net2), (gate_net, channel_type) in path] for path in all_paths
+        ]
+        f = boolalg.Or(
+            *[boolalg.And(
+                *(sympy.Symbol(gate) if channel_type == ChannelType.NMOS else ~sympy.Symbol(gate)
+                  for gate, channel_type in path
+                  )
+            ) for path in transistor_paths]
+        )
+        f = simplify_logic(f)
+        return f
 
-    gate_nets = [
-        [gate_net for (a,b), (gate_net, channel_type)] for paths in all_vdd_paths
-    ]
-    print(gate_nets)
+    output_at_vdd = conductivity_condition(cmos_graph, output_node, vdd_node)
+    output_at_gnd = conductivity_condition(cmos_graph, output_node, gnd_node)
+
+    is_complementary = output_at_gnd.equals(~output_at_vdd)
+    print("is complementary: {}".format(is_complementary))
+    has_short = satisfiable(output_at_vdd & output_at_gnd)
+    print("has short: {}".format(has_short))
+    has_tri_state = satisfiable((~output_at_vdd) & (~output_at_gnd))
+    print("has tri-state: {}".format(has_tri_state))
+
+    print(~output_at_vdd)
 
     # pull_up = [
     #     [cmos_graph[a][b] for a, b in pairwise(path)] for path in all_vdd_paths
