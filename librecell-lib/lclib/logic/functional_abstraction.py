@@ -129,7 +129,7 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
     has_tri_state = satisfiable(tri_state_condition)
     print("has tri-state: {}".format(has_tri_state))
     print("tri-state when: {}".format(tri_state_condition))
-
+    
     f_out = simplify_logic(output_at_vdd)
     print(output_node, "=", f_out)
 
