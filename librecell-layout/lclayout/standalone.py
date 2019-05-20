@@ -25,6 +25,7 @@ import numpy
 
 from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
+
 from .place.place import TransistorPlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer
@@ -34,6 +35,7 @@ from .graphrouter.pathfinder import PathFinderGraphRouter
 from .graphrouter.signal_router import DijkstraRouter
 
 from .layout.transistor import *
+from .layout import cell_template
 from .layout.notch_removal import fill_notches
 from .lef import types as lef
 
@@ -256,8 +258,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     net_regions = {}
 
     # Draw cell template.
-    # Draw abutment box.
-    shapes[l_abutment_box].insert(pya.Box(0, 0, cell_width, cell_height))
+    cell_template.draw_cell_template(shapes,
+                                     cell_shape=(cell_width, cell_height)
+                                     )
 
     # Draw power rails.
     vdd_rail = pya.Path([pya.Point(0, tech.unit_cell_height), pya.Point(cell_width, tech.unit_cell_height)],
@@ -525,15 +528,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
         # Clean DRC violations that are not handled above.
 
-        # Fill half of the cell with nwell.
-        # TODO: do this in the cell template or after placing the transistors.
-        nwell_box = pya.Box(
-            pya.Point(0, cell_height // 2),
-            pya.Point(cell_width, cell_height)
-        )
-
-        shapes[l_nwell].insert(nwell_box)
-
         # Fill notches that violate a notch rule.
         fill_all_notches()
         # Do a second time because first iteration could have introduced new notch violations.
@@ -676,7 +670,8 @@ def main():
                 src_layer_name = layermap_reverse[src_layer]
 
                 if src_layer_name not in tech.output_map:
-                    msg = "Layer '{}' will not be written to the output. This might be alright though.".format(src_layer_name)
+                    msg = "Layer '{}' will not be written to the output. This might be alright though.". \
+                        format(src_layer_name)
                     logger.warning(msg)
                     continue
 

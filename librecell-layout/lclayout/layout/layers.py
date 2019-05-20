@@ -23,6 +23,7 @@ import networkx as nx
 
 l_active = 'active'
 l_nwell = 'nwell'
+l_pwell = 'pwell'
 l_poly = 'poly'
 l_diff_contact = 'diff_contact'
 l_poly_contact = 'poly_contact'
@@ -37,17 +38,18 @@ l_abutment_box = 'abutment_box'
 
 layermap = {
     l_nwell: (1, 0),
-    l_active: (2, 0),
-    l_poly: (3, 0),
-    l_diff_contact: (4, 0),
-    l_poly_contact: (5, 0),
-    l_metal1: (6, 0),
-    l_metal1_label: (6, 1),
-    l_metal1_pin: (6, 2),
-    l_via1: (7, 0),
-    l_metal2: (8, 0),
-    l_metal2_label: (8, 1),
-    l_metal2_pin: (8, 2),
+    l_pwell: (2, 0),
+    l_active: (3, 0),
+    l_poly: (4, 0),
+    l_diff_contact: (5, 0),
+    l_poly_contact: (6, 0),
+    l_metal1: (7, 0),
+    l_metal1_label: (7, 1),
+    l_metal1_pin: (7, 2),
+    l_via1: (8, 0),
+    l_metal2: (9, 0),
+    l_metal2_label: (9, 1),
+    l_metal2_pin: (9, 2),
     l_abutment_box: (100, 0)
 }
 

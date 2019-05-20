@@ -10,6 +10,7 @@ transistor_channel_width_sizing = 0.7
 my_active = (1, 0)
 my_nwell = (2, 0)
 my_nwell2 = (2, 1)
+my_pwell = (2, 7)
 my_poly = (3, 0)
 my_poly_contact = (4, 0)
 my_diff_contact = (5, 0)
@@ -28,6 +29,7 @@ my_abutment_box = (200, 0)
 output_map = {
     l_active: my_active,
     l_nwell: [my_nwell, my_nwell2],  # Map l_nwell to two output layers.
+    # l_pwell: [my_pwell], # Output layer for pwell. Uncomment this if needed. For instance for twin-well processes.
     l_poly: my_poly,
     l_poly_contact: my_poly_contact,
     l_diff_contact: my_diff_contact,
