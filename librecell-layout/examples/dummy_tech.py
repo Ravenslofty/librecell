@@ -29,7 +29,7 @@ my_abutment_box = (200, 0)
 output_map = {
     l_active: my_active,
     l_nwell: [my_nwell, my_nwell2],  # Map l_nwell to two output layers.
-    # l_pwell: [my_pwell], # Output layer for pwell. Uncomment this if needed. For instance for twin-well processes.
+    l_pwell: [my_pwell],  # Output layer for pwell. Uncomment this if needed. For instance for twin-well processes.
     l_poly: my_poly,
     l_poly_contact: my_poly_contact,
     l_diff_contact: my_diff_contact,
@@ -58,6 +58,8 @@ min_spacing = {
     (l_active, l_active): 50,
     (l_active, l_poly_contact): 10,
     (l_nwell, l_nwell): 50,
+    (l_nwell, l_pwell): 0,  # This might be used when n-well and p-well layers are used for a twin-well process.
+    (l_pwell, l_pwell): 50,
     (l_poly, l_nwell): 50,
     (l_poly, l_active): 50,
     (l_poly, l_poly): 50,

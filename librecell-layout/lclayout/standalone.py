@@ -257,9 +257,13 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     # Create mapping from nets to {layer: region}
     net_regions = {}
 
+    # Load spacing rules in form of a graph.
+    spacing_graph = tech_util.spacing_graph(tech.min_spacing)
+
     # Draw cell template.
     cell_template.draw_cell_template(shapes,
-                                     cell_shape=(cell_width, cell_height)
+                                     cell_shape=(cell_width, cell_height),
+                                     nwell_pwell_spacing=spacing_graph[l_nwell][l_pwell]['min_spacing']
                                      )
 
     # Draw power rails.
@@ -433,7 +437,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         """
         logger.debug("Find conflicting nodes.")
         conflicts = dict()
-        spacing_graph = tech_util.spacing_graph(tech.min_spacing)
         # Loop through all nodes in the routing graph G.
         for n in G:
             # Skip virtual nodes wich have no physical representation.

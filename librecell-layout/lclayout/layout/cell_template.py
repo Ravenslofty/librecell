@@ -34,7 +34,16 @@ from typing import Dict, Tuple
 
 
 def draw_cell_template(shapes: Dict[str, db.Shapes],
-                       cell_shape: Tuple[int, int]):
+                       cell_shape: Tuple[int, int],
+                       nwell_pwell_spacing: int = 0) -> None:
+    """
+    Draw shapes of the cell that can be drawn without knowledge of the transistor placement.
+    This includes the cell boundary, nwell/pwell.
+    :param shapes: KLayout shapes that will be modified.
+    :param cell_shape: Dimensions of the cell (width, height).
+    :param nwell_pwell_spacing: Minimum spacing between nwell and pwell for twin-well layouts.
+    :return: None
+    """
     cell_width, cell_height = cell_shape
 
     # Draw abutment box.
@@ -44,11 +53,11 @@ def draw_cell_template(shapes: Dict[str, db.Shapes],
 
     # Fill half of the cell with nwell.
 
-    nwell_start_y = cell_height // 2
+    nwell_start_y = cell_height // 2 + nwell_pwell_spacing // 2
     nwell_end_y = cell_height
 
     pwell_start_y = 0
-    pwell_end_y = cell_height // 2
+    pwell_end_y = cell_height // 2 - nwell_pwell_spacing // 2
 
     nwell_box = db.Box(
         db.Point(0, nwell_start_y),
