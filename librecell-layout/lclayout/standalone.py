@@ -669,10 +669,17 @@ def main():
             src_layer = (layer_info.layer, layer_info.datatype)
 
             if src_layer not in layermap_reverse:
-                logger.warning("Layer {} not defined in `layermap_reverse`.".format(src_layer))
+                msg = "Layer {} not defined in `layermap_reverse`.".format(src_layer)
+                logger.warning(msg)
                 dest_layers = src_layer
             else:
                 src_layer_name = layermap_reverse[src_layer]
+
+                if src_layer_name not in tech.output_map:
+                    msg = "Layer '{}' will not be written to the output. This might be alright though.".format(src_layer_name)
+                    logger.warning(msg)
+                    continue
+
                 dest_layers = tech.output_map[src_layer_name]
 
             if not isinstance(dest_layers, list):
