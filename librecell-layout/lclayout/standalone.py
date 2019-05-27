@@ -70,7 +70,8 @@ def _draw_label(shapes, layer, pos: Tuple[int, int], text: str) -> None:
     :return: None
     """
     x, y = pos
-    shapes[layer].insert(pya.Text.new(text, pya.Trans(x, y), 0.1, 2))
+    # shapes[layer].insert(pya.Text.new(text, pya.Trans(x, y), 0.1, 2))
+    shapes[layer].insert(pya.Text.new(text, x, y))
 
 
 def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
