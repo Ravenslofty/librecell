@@ -453,7 +453,7 @@ def _transistors2graph(transistors: Iterable[Transistor]) -> nx.MultiGraph:
     G = nx.MultiGraph()
     for t in transistors:
         G.add_edge(t.left, t.right, t)
-    assert nx.is_connected(G)
+    # assert nx.is_connected(G)
     return G
 
 
