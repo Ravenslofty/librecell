@@ -324,11 +324,11 @@ def lef_format(lef_obj, indent=-1, indent_char=' ') -> str:
     elif isinstance(lef_obj, list):
         return "\n".join((lef_format(e, indent + 1, indent_char) for e in lef_obj))
     elif isinstance(lef_obj, LefStatement):
-        return i + "{};".format(lef_obj.format())
+        return i + "{} ;".format(lef_obj.format())
     elif isinstance(lef_obj, str):
         return i + lef_obj
     elif isinstance(lef_obj, Enum):
-        return i + "{} {};".format(type(lef_obj).__name__.upper(), lef_obj.name.upper())
+        return i + "{} {} ;".format(type(lef_obj).__name__.upper(), lef_obj.name.upper())
     else:
         assert False, "Unsupported type: {} ({})".format(type(lef_obj), lef_obj)
 
