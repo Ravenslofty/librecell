@@ -25,7 +25,9 @@ from itertools import combinations, permutations, chain, product
 from typing import List, Set
 
 import logging
+
 logger = logging.getLogger(__name__)
+
 
 def construct_even_degree_graphs(G: nx.MultiGraph) -> List[nx.MultiGraph]:
     """ Construct all graphs of even degree by inserting a minimal number of virtual edges.
