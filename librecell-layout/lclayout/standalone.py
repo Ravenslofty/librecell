@@ -25,6 +25,7 @@ import numpy
 
 from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
+
 from .place.place import TransistorPlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer
@@ -34,6 +35,7 @@ from .graphrouter.pathfinder import PathFinderGraphRouter
 from .graphrouter.signal_router import DijkstraRouter
 
 from .layout.transistor import *
+from .layout import cell_template
 from .layout.notch_removal import fill_notches
 from .lef import types as lef
 
@@ -68,7 +70,8 @@ def _draw_label(shapes, layer, pos: Tuple[int, int], text: str) -> None:
     :return: None
     """
     x, y = pos
-    shapes[layer].insert(pya.Text.new(text, pya.Trans(x, y), 0.1, 2))
+    # shapes[layer].insert(pya.Text.new(text, pya.Trans(x, y), 0.1, 2))
+    shapes[layer].insert(pya.Text.new(text, x, y))
 
 
 def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
@@ -255,9 +258,14 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     # Create mapping from nets to {layer: region}
     net_regions = {}
 
+    # Load spacing rules in form of a graph.
+    spacing_graph = tech_util.spacing_graph(tech.min_spacing)
+
     # Draw cell template.
-    # Draw abutment box.
-    shapes[l_abutment_box].insert(pya.Box(0, 0, cell_width, cell_height))
+    cell_template.draw_cell_template(shapes,
+                                     cell_shape=(cell_width, cell_height),
+                                     nwell_pwell_spacing=spacing_graph[l_nwell][l_pwell]['min_spacing']
+                                     )
 
     # Draw power rails.
     vdd_rail = pya.Path([pya.Point(0, tech.unit_cell_height), pya.Point(cell_width, tech.unit_cell_height)],
@@ -430,7 +438,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         """
         logger.debug("Find conflicting nodes.")
         conflicts = dict()
-        spacing_graph = tech_util.spacing_graph(tech.min_spacing)
         # Loop through all nodes in the routing graph G.
         for n in G:
             # Skip virtual nodes wich have no physical representation.
@@ -524,15 +531,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     if not debug_routing_graph:
 
         # Clean DRC violations that are not handled above.
-
-        # Fill half of the cell with nwell.
-        # TODO: do this in the cell template or after placing the transistors.
-        nwell_box = pya.Box(
-            pya.Point(0, cell_height // 2),
-            pya.Point(cell_width, cell_height)
-        )
-
-        shapes[l_nwell].insert(nwell_box)
 
         # Fill notches that violate a notch rule.
         fill_all_notches()
@@ -669,10 +667,18 @@ def main():
             src_layer = (layer_info.layer, layer_info.datatype)
 
             if src_layer not in layermap_reverse:
-                logger.warning("Layer {} not defined in `layermap_reverse`.".format(src_layer))
+                msg = "Layer {} not defined in `layermap_reverse`.".format(src_layer)
+                logger.warning(msg)
                 dest_layers = src_layer
             else:
                 src_layer_name = layermap_reverse[src_layer]
+
+                if src_layer_name not in tech.output_map:
+                    msg = "Layer '{}' will not be written to the output. This might be alright though.". \
+                        format(src_layer_name)
+                    logger.warning(msg)
+                    continue
+
                 dest_layers = tech.output_map[src_layer_name]
 
             if not isinstance(dest_layers, list):

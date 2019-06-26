@@ -23,7 +23,7 @@ from ..place.place import Transistor, ChannelType
 
 from .grid_helpers import *
 from .layers import *
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Optional
 import sys
 
 # klayout.db should not be imported if script is run from KLayout GUI.
@@ -37,21 +37,27 @@ class TransistorLayout:
     Contains the shapes of the transistor plus shapes that mark possible locations of contacts.
     """
 
-    def __init__(self, gate, active, source_box, drain_box, terminals, nwell=None):
+    def __init__(self, gate: pya.Box,
+                 active: pya.Box,
+                 source_box: pya.Box,
+                 drain_box: pya.Box,
+                 terminals,
+                 nwell: Optional[pya.Box] = None,
+                 pwell: Optional[pya.Box] = None):
         """
 
         :param gate: pya.Path
           Layout of PC gate.
-        
+
         :param active: pya.Box
           Layout of l_active.
-        
+
         :param source_box: pya.Box
           Marks possible locations for contacts to source.
-        
+
         :param drain_box: pya.Box
           Marks possible locations for contacts to drain.
-          
+
         """
         # Transistor polygons/paths
         self.gate = gate
@@ -59,6 +65,9 @@ class TransistorLayout:
 
         # n-well for P-mos
         self.nwell = nwell
+
+        # p-well for N-mos
+        self.pwell = pwell
 
         # Terminal areas for source and drain.
         self.source_box = source_box
@@ -81,6 +90,10 @@ def draw_transistor(t: TransistorLayout, shapes: Dict[Any, pya.Region]):
     if t.nwell:
         # For PMOS only.
         shapes[l_nwell].insert(t.nwell)
+
+    if t.pwell:
+        # For NMOS only.
+        shapes[l_pwell].insert(t.pwell)
 
     shapes[l_poly].insert(t.gate)
 
@@ -124,19 +137,31 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
     )
 
     nwell_box = None
-    # Enclose active regions of PMOS transistors with l_nwell.
-    if t.channel_type == ChannelType.PMOS:
-        nwell2active_overlap = tech.minimum_enclosure[(l_nwell, l_active)]
-        if not isinstance(nwell2active_overlap, tuple):
-            nwell2active_overlap = (nwell2active_overlap, nwell2active_overlap)
-        nwell2active_overlap_x, nwell2active_overlap_y = nwell2active_overlap
+    pwell_box = None
 
-        nwell_box = pya.Box(
-            x_eff - nwell2active_overlap_x,
-            y_eff - nwell2active_overlap_y,
-            x_eff + w + nwell2active_overlap_x,
-            y_eff + h + nwell2active_overlap_y
-        )
+    # Enclose active regions of PMOS transistors with l_nwell.
+
+    # Get layer depending on channel type.
+    l_well = l_nwell if t.channel_type == ChannelType.PMOS else l_pwell
+
+    # Get minimum overlap from tech file.
+    well2active_overlap = tech.minimum_enclosure.get((l_well, l_active), 0)
+    if not isinstance(well2active_overlap, tuple):
+        well2active_overlap = (well2active_overlap, well2active_overlap)
+    well2active_overlap_x, well2active_overlap_y = well2active_overlap
+
+    # Create shape of nwell or pwell.
+    well_box = pya.Box(
+        x_eff - well2active_overlap_x,
+        y_eff - well2active_overlap_y,
+        x_eff + w + well2active_overlap_x,
+        y_eff + h + well2active_overlap_y
+    )
+
+    if t.channel_type == ChannelType.PMOS:
+        nwell_box = well_box
+    elif t.channel_type == ChannelType.NMOS:
+        pwell_box = well_box
 
     center_x = active_box.center().x
     assert (center_x - tech.grid_offset_x) % tech.routing_grid_pitch_x == 0, Exception("Gate not x-aligned on grid.")
@@ -177,4 +202,6 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
         0,
         0)
 
-    return TransistorLayout(gate_path, active_box, source_box, drain_box, terminals, nwell=nwell_box)
+    return TransistorLayout(gate_path, active_box, source_box, drain_box, terminals,
+                            nwell=nwell_box,
+                            pwell=pwell_box)

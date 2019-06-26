@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 def create_routing_graph_base(grid: Grid2D, tech) -> nx.Graph:
     """ Construct the full mesh of the routing graph.
-    :param grid_points: set of grid points
+    :param grid: grid points
     :param tech: module containing technology information
     :return: nx.Graph
     """
@@ -56,20 +56,26 @@ def create_routing_graph_base(grid: Grid2D, tech) -> nx.Graph:
             G.add_node(n)
 
     # Create via edges.
-    for (l1, l2), via_layer in tech.via_layers.items():
-        if l1 in tech.routing_layers and l2 in tech.routing_layers:
-            for p in grid:
-                n1 = (l1, p)
-                n2 = (l2, p)
+    for l1, l2, data in via_layers.edges(data=True):
+        via_layer = data['layer']
+        for p in grid:
+            n1 = (l1, p)
+            n2 = (l2, p)
 
-                weight = tech.via_weights[(l1, l2)]
+            weight = tech.via_weights.get((l1, l2))
+            if weight is None:
+                weight = tech.via_weights[(l2, l1)]
 
-                # Create edge: n1 -- n2
-                G.add_edge(n1, n2,
-                           weight=weight,
-                           multi_via=tech.multi_via.get((l1, l2), 1),
-                           layer=via_layer
-                           )
+            multi_via = tech.multi_via.get((l1, l2))
+            if multi_via is None:
+                multi_via = tech.multi_via.get((l2, l1), 1)
+
+            # Create edge: n1 -- n2
+            G.add_edge(n1, n2,
+                       weight=weight,
+                       multi_via=multi_via,
+                       layer=via_layer
+                       )
 
     # Create intra layer routing edges.
     for layer, directions in tech.routing_layers.items():
@@ -95,6 +101,7 @@ def create_routing_graph_base(grid: Grid2D, tech) -> nx.Graph:
                     weight = tech.weights_vertical[layer] * abs(y2 - y1)
                     G.add_edge(n, n_upper, weight=weight, orientation='v', layer=layer)
 
+    assert nx.is_connected(G)
     return G
 
 
@@ -171,6 +178,16 @@ def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Region],
     # Now remove all edges from G that are in conflict with existing shapes.
     graph.remove_edges_from(illegal_edges)
 
+    # Remove unconnected nodes.
+    unconnected = set()
+    for n in graph:
+        d = nx.degree(graph, n)
+        if d < 1:
+            unconnected.add(n)
+    graph.remove_nodes_from(unconnected)
+
+    assert nx.is_connected(graph)
+
 
 def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
     """ Remove edges in G that are already routed by a shape in `shapes`.
@@ -208,7 +225,7 @@ def extract_terminal_nodes(graph: nx.Graph,
         for layer, region in regions.items():
             for net_shape in region.each_merged():
 
-                possible_via_layers = [v for l, v in tech.via_layers.items() if layer in l]
+                possible_via_layers = [data['layer'] for _, _, data in via_layers.edges(layer, data=True)]
                 enc = max((tech.minimum_enclosure.get((layer, via_layer), 0) for via_layer in possible_via_layers))
                 max_via_size = max((tech.via_size[l] for l in possible_via_layers))
 
