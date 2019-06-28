@@ -35,6 +35,7 @@ from . import eulertours
 from . import partition
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,18 +59,59 @@ def _trim_none(l: List) -> List:
     return l
 
 
-def _assemble_cell(nmos: List[Transistor], pmos: List[Transistor]) -> Cell:
+def _remove_gaps(cell: Cell) -> Cell:
+    """
+    Remove unnecessary diffusion gaps where possible.
+    :param cell: The input cell.
+    :return: The compacted.
+    """
+
+    upper = []
+    lower = []
+
+    n = len(cell.upper)
+    assert n == len(cell.lower)
+
+    for i in range(n):
+        l = cell.lower[i]
+        u = cell.upper[i]
+
+        if u is not None or l is not None:
+            upper.append(u)
+            lower.append(l)
+        else:
+            # Both places are empty.
+            assert u is None and l is None
+
+            # Place the gap only if it is need to avoid a short circuit.
+            if i >= 1 and i+1 < n:
+                prev_u = upper[-1]
+                prev_l = lower[-1]
+                next_u = cell.upper[i+1]
+                next_l = cell.lower[i+1]
+
+                # Check if the upper or lower row needs the diffusion gap.
+                need_gap = __need_gap(prev_u, next_u) or __need_gap(prev_l, next_l)
+
+                if need_gap:
+                    upper.append(None)
+                    lower.append(None)
+
+    return _assemble_cell(lower, upper)
+
+
+def _assemble_cell(lower_row: List[Transistor], upper_row: List[Transistor]) -> Cell:
     """ Build a Cell object from a nmos and pmos row.
-    :param nmos:
-    :param pmos:
+    :param lower_row:
+    :param upper_row:
     :return:
     """
-    width = max(len(nmos), len(pmos))
+    width = max(len(lower_row), len(upper_row))
     cell = Cell(width)
-    for i, t in enumerate(pmos):
+    for i, t in enumerate(upper_row):
         cell.upper[i] = t
 
-    for i, t in enumerate(nmos):
+    for i, t in enumerate(lower_row):
         cell.lower[i] = t
     return cell
 
@@ -425,13 +467,10 @@ class HierarchicalPlacer(TransistorPlacer):
                 transistors = intra_placements[n]
                 n_row.extend(transistors)
 
-            # TODO: remove gaps where possible
-
-            # Remove Nones at begin and end of row
-            p_row = _trim_none(p_row)
-            n_row = _trim_none(n_row)
-
             cell = _assemble_cell(n_row, p_row)
+
+            # Remove gaps where possible.
+            cell = _remove_gaps(cell)
 
             input_nets = net_util.get_cell_inputs(transistors)
             output_nets = {}
