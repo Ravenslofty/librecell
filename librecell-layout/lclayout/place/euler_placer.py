@@ -84,11 +84,11 @@ def _remove_gaps(cell: Cell) -> Cell:
             assert u is None and l is None
 
             # Place the gap only if it is need to avoid a short circuit.
-            if i >= 1 and i+1 < n:
+            if i >= 1 and i + 1 < n:
                 prev_u = upper[-1]
                 prev_l = lower[-1]
-                next_u = cell.upper[i+1]
-                next_l = cell.lower[i+1]
+                next_u = cell.upper[i + 1]
+                next_l = cell.lower[i + 1]
 
                 # Check if the upper or lower row needs the diffusion gap.
                 need_gap = __need_gap(prev_u, next_u) or __need_gap(prev_l, next_l)
@@ -612,6 +612,11 @@ class EulerPlacer(TransistorPlacer):
 
         logger.debug('Number of NMOS placements with cyclic shifts: %d', len(all_nmos))
         logger.debug('Number of PMOS placements with cyclic shifts: %d', len(all_pmos))
+
+        if len(all_nmos) * len(all_pmos) > 100000:
+            # Notify the user that the hierarchical placer might be better.
+            logger.info('`EulerPlacer` will not perform well in this case. '
+                        '`HierarchicalPlacer` could be a better choice.')
 
         # Find best nmos/pmos row pair.
 
