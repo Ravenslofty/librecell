@@ -91,6 +91,18 @@ lclayout --output-dir /tmp/mylibrary --tech examples/dummy_tech.py --netlist exa
 # Use a GDS viewer such as KLayout to inspect the generated layout file `/tmp/mylibrary/*.gds`
 ```
 
+### Known issues
+
+#### Reproducibility
+You may want to generate standard cells in a fully reproducable manner.
+Right now there is some non-determinism in LibreCell that has not been investigated yet.
+The current workaround is to set the `PYTHONHASHSEED` environment variable.
+
+```sh
+export PYTHONHASHSEED=42
+lclayout ...
+```
+
 ## Contact
 ```python
 "codextkramerych".replace("x", "@").replace("y", ".")
