@@ -347,8 +347,9 @@ class HierarchicalPlacer(TransistorPlacer):
             ppos = get_subcell_net_position(ps)
             npos = get_subcell_net_position(ns)
 
-            # TODO: make quality metric more flexible.
-
+            # TODO: make quality metric parametrizable.
+            # Optimize for wiring length estimate and break ties with the ordering of IO nets.
+            # Want input nets to be on the left.
             wiring_length = _wiring_length_bbox1(chain(ppos, npos))
             cost = wiring_length, _io_ordering_cost(chain(ppos, npos), input_nets, output_nets)
 
