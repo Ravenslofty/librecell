@@ -4,7 +4,8 @@ from lclayout.layout.layers import *
 db_unit = 1e-9
 
 # Scale transistor width.
-transistor_channel_width_sizing = 0.7
+# In this example the channel width has units 'meters' and must be converted to data base units.
+transistor_channel_width_sizing = 1/db_unit
 
 # GDS2 layer numbers for final output.
 my_active = (1, 0)
