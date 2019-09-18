@@ -113,7 +113,7 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
     # Choose l_active width such that at least one contact can be placed on each side of the transistor.
     w = tech.unit_cell_width + tech.via_size[l_diff_contact] + 2 * tech.minimum_enclosure[(l_active, l_diff_contact)]
 
-    h = int(t.channel_width)
+    h = t.channel_width
 
     x_eff = (x + 1) * tech.unit_cell_width - w // 2
     y_eff = 0
