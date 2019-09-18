@@ -1,11 +1,16 @@
 from lclayout.layout.layers import *
 
 # Physical size of one data base unit in meters.
+# All dimensions in this file must be given in this unit.
 db_unit = 1e-9
 
 # Scale transistor width.
-# In this example the channel width has units 'meters' and must be converted to data base units.
-transistor_channel_width_sizing = 1/db_unit
+# Transistor dimensions are read from the SPICE netlist and assumed to have unit 'meters'.
+# Based on this assumption the dimensions are automatically converted into db_units.
+#
+# The transistor widths as defined in the netlist can be scaled by an arbitrary factor.
+# If `transistor_channel_width_sizing` is equal to 1, then no scaling is performed.
+transistor_channel_width_sizing = 1
 
 # GDS2 layer numbers for final output.
 my_active = (1, 0)

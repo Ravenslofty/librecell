@@ -36,7 +36,7 @@ class Transistor:
         """
         params:
         left: Either source or drain net.
-        right: Eigher source or drain net.
+        right: Either source or drain net.
         """
         self.name = name
         self.channel_type = channel_type

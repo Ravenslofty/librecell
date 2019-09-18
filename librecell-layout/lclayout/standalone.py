@@ -201,6 +201,10 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     transistors_abstract, cell_pins = load_transistor_netlist(netlist_path, cell_name)
     io_pins = net_util.get_io_pins(cell_pins)
 
+    # Convert transistor dimensions into data base units.
+    for t in transistors_abstract:
+        t.channel_width = t.channel_width / tech.db_unit
+
     top = layout.create_cell(cell_name)
 
     # Setup layers.
