@@ -189,6 +189,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     :param cell_name: str
       The name of the cell to be drawn.
     :param netlist_path: Path to SPICE transistor netlist.
+    :param placer: `TransistorPlacer` object which is used for the placement. If not supplied, a default will be chosen.
     :param debug_routing_graph: bool
       If set to True, the full routing graph is written to the layout instead of the routing paths.
     :param debug_smt_solver: Tell DRC cleaner to show which assertions are not satisfiable.
