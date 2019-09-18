@@ -443,7 +443,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         conflicts = dict()
         # Loop through all nodes in the routing graph G.
         for n in G:
-            # Skip virtual nodes wich have no physical representation.
+            # Skip virtual nodes which have no physical representation.
             if not n[0].startswith('virtual'):
                 layer, point = n
                 wire_width1 = tech.wire_width.get(layer, 0) // 2
