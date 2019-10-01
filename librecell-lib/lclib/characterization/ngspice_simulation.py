@@ -55,12 +55,13 @@ def simulate_circuit(circuit: Circuit,
     #                               simulator='ngspice-shared',
     #                               ngspice_shared=ngspice_shared
     #                               )
-
+    logger = logging.getLogger(__name__)
+    logger.info("circuit.simulator")
     simulator = circuit.simulator(temperature=temperature,
                                   nominal_temperature=temperature
                                   )
 
-    # Create input drivers.
+    logger.info("Create input drivers.")
     for name, voltage in input_voltages.items():
         if isinstance(voltage, PieceWiseLinear):
             piece_wise_linear_voltage_source(circuit, 'in_{}'.format(name), name, circuit.gnd,
@@ -74,12 +75,16 @@ def simulate_circuit(circuit: Circuit,
     if initial_voltages is not None:
         simulator.initial_condition(**initial_voltages)
 
-    # Run transient analysis.
+    logger.info("Run transient analysis.")
     # Set use_initial_condition (uic) to False to enable DC bias computation. See ngspice manual 15.2.2 2)
+    logger.info("step_time: {}".format(time_step))
+    logger.info("end_time: {}".format(end_time))
+
     analysis = simulator.transient(step_time=time_step,
                                    end_time=end_time,
                                    use_initial_condition=False
                                    )
+    logger.info("Transient analysis done.")
     return analysis
 
 

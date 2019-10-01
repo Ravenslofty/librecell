@@ -303,9 +303,9 @@ def get_clock_to_output_delay(
     :return:
     """
 
+    logger.info("get_clock_to_output_delay() ...")
     _circuit = circuit.clone()
-
-    # Attach output load.
+    logger.info("Attach output load.")
     _circuit.C('out', circuit.gnd, data_out, output_load_capacitance)
 
     period = max(simulation_duration_hint, input_rise_time + input_fall_time)
@@ -341,7 +341,7 @@ def get_clock_to_output_delay(
 
     simulation_end = t_clock_edge + 4 * period
 
-    # Create data pulse.
+    logger.info("Create data pulse.")
     input_wave = PulseWave(
         start_time=float(t_clock_edge - setup_time),
         duration=float(setup_time + hold_time),
@@ -385,7 +385,7 @@ def get_clock_to_output_delay(
     if not rising_data_edge:
         output_voltage = 1 - output_voltage
 
-    # Normalize
+    logger.info("Normalize")
     clock_voltage /= vdd
     input_voltage /= vdd
     output_voltage /= vdd

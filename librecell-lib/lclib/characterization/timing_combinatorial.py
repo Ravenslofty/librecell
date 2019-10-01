@@ -73,17 +73,17 @@ def measure_comb_cell(circuit: Circuit,
         Should be one of {min, max, np.mean}
     :return:
     """
-    # Create an independent copy of the circuit.
+    logger.info("Create an independent copy of the circuit.")
     circuit = circuit.clone(title='Timing simulation for pin "{}"'.format(active_pin))
 
     if float(output_load_capacitance) > 0:
         # Add output capacitance.
         circuit.C('load', circuit.gnd, output_net, output_load_capacitance)
 
-    # Get all input nets that are not toggled during a simulation run.
+    logger.info("Get all input nets that are not toggled during a simulation run.")
     static_input_nets = [i for i in inputs_nets if i != active_pin]
 
-    # Get a list of all input combinations that will be used for measuring conditional timing arcs.
+    logger.info("Get a list of all input combinations that will be used for measuring conditional timing arcs.")
     num_inputs = len(static_input_nets)
     static_inputs = list(product(*([[0, 1]] * num_inputs)))
 
@@ -95,7 +95,7 @@ def measure_comb_cell(circuit: Circuit,
     rise_powers = []
     fall_powers = []
 
-    # Determine length of simulation.
+    logger.info("Determine length of simulation.")
     period = max(simulation_duration_hint, input_rise_time + input_fall_time)
 
     def _is_signal_stable(signal: np.ndarray, samples_per_period: int, sample_point: float = 1.0,
@@ -118,7 +118,7 @@ def measure_comb_cell(circuit: Circuit,
         "Boolean function not defined for output pin '{}'".format(output_net)
     output_function = output_functions[output_net]
 
-    # Loop through all combinations of inputs.
+    logger.info("Loop through all combinations of inputs.")
     for static_input in static_inputs:
 
         # Check if the output is controllable with this static input.
@@ -140,7 +140,7 @@ def measure_comb_cell(circuit: Circuit,
 
             bitsequence = [0, 1] if input_rising else [1, 0]
 
-            # Get voltages at static inputs.
+            logger.info("Get voltages at static inputs.")
             input_voltages = {net: vdd * value @ u_V for net, value in zip(static_input_nets, static_input)}
 
             # Do some quick simulations to check if signals settle to a stable state within simulation time.
@@ -178,7 +178,7 @@ def measure_comb_cell(circuit: Circuit,
                 else:
                     period = period * 2
 
-            # Perform high-resolution simulation
+            logger.info("Perform high-resolution simulation")
             samples_per_period = int(period / time_step)
 
             analysis = simulate_circuit(__circuit, input_voltages, time_step=time_step,
