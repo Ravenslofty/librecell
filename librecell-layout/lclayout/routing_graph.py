@@ -224,7 +224,7 @@ def extract_terminal_nodes(graph: nx.Graph,
     for net, regions in net_regions.items():
         for layer, region in regions.items():
             for net_shape in region.each_merged():
-
+                logger.info("net {} layer {} net_shape {} ".format(net,layer,net_shape))
                 possible_via_layers = [data['layer'] for _, _, data in via_layers.edges(layer, data=True)]
                 enc = max((tech.minimum_enclosure.get((layer, via_layer), 0) for via_layer in possible_via_layers))
                 max_via_size = max((tech.via_size[l] for l in possible_via_layers))
@@ -235,11 +235,14 @@ def extract_terminal_nodes(graph: nx.Graph,
                 else:
                     # A routing node must be properly enclosed to be used.
                     d = enc + max_via_size // 2
-                routing_terminals = inside(routing_nodes[layer], pya.Region(net_shape), d)
-                terminals_by_net.append((net, layer, routing_terminals))
-                # Don't use terminals for normal routing
-                routing_nodes[layer] -= set(routing_terminals)
-                # TODO: need to be removed from G also. Better: construct edges in G afterwards.
+                if layer in routing_nodes:
+                    routing_terminals = inside(routing_nodes[layer], pya.Region(net_shape), d)
+                    terminals_by_net.append((net, layer, routing_terminals))
+                    # Don't use terminals for normal routing
+                    routing_nodes[layer] -= set(routing_terminals)
+                    # TODO: need to be removed from G also. Better: construct edges in G afterwards.
+                else:
+                    logger.error("layer {} is not in routing_nodes, perhaps the routing mesh has the wrong size".format(layer))
 
     # Sanity check
     error = False
