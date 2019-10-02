@@ -32,29 +32,30 @@ from sympy.logic import SOPform
 from lclayout.data_types import ChannelType
 
 
-def all_simple_paths_multigraph(G: nx.MultiGraph, source, target, cutoff=None):
+def all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=None):
     """
-    Get edges inclusive keys of all simple paths in a multi graph.
-    :param G:
+    Enumerate all simple paths (no node occurs more than once) from source to target.
+    Yields edges inclusive keys of all simple paths in a multi graph.
+    :param graph: 
     :param source:
     :param target:
     :param cutoff:
     :return:
     """
 
-    if source not in G:
+    if source not in graph:
         raise nx.NodeNotFound('source node %s not in graph' % source)
-    if target not in G:
+    if target not in graph:
         raise nx.NodeNotFound('target node %s not in graph' % target)
     if source == target:
         return []
     if cutoff is None:
-        cutoff = len(G) - 1
+        cutoff = len(graph) - 1
     if cutoff < 1:
         return []
     visited = collections.OrderedDict.fromkeys([source])
     edges = list()  # Store sequence of edges.
-    stack = [(((u, v), key) for u, v, key in G.edges(source, keys=True))]
+    stack = [(((u, v), key) for u, v, key in graph.edges(source, keys=True))]
     while stack:
         children = stack[-1]
         (child_source, child), child_key = next(children, ((None, None), None))
@@ -68,7 +69,7 @@ def all_simple_paths_multigraph(G: nx.MultiGraph, source, target, cutoff=None):
             elif child not in visited:
                 visited[child] = None
                 edges.append(((child_source, child), child_key))
-                stack.append((((u, v), k) for u, v, k in G.edges(child, keys=True)))
+                stack.append((((u, v), k) for u, v, k in graph.edges(child, keys=True)))
         else:  # len(visited) == cutoff:
             count = (list(children) + [child]).count(target)
             for i in range(count):
@@ -83,18 +84,29 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
     """
     Find the boolean formula implemented by the push-pull network `cmos_graph`.
     :param cmos_graph:
-    :param vdd_node:
-    :param gnd_node:
+    :param vdd_node: Name of VDD supply node.
+    :param gnd_node: Name of GND supply node.
     :param output_node:
     :param input_names: Ordering of input names.
     :return: sympy.Symbol
     """
 
     def conductivity_condition(cmos_graph: nx.MultiGraph, source, target):
+        """
+        Find a boolean equation that evaluates to true iff there is a conductive path from `source` to `target`
+        given the input signals.
+        :param cmos_graph:
+        :param source:
+        :param target:
+        :return: Boolean function. (sympy.Symbol)
+        """
+        # Get all simple paths from source to target.
         all_paths = list(all_simple_paths_multigraph(cmos_graph, source, target))
         transistor_paths = [
             [(gate_net, channel_type) for (net1, net2), (gate_net, channel_type) in path] for path in all_paths
         ]
+        # There is a conductive path if at least one of the paths is conductive -> Or
+        # A path is conductive if all edges (transistors) along the path are conductive -> And
         f = boolalg.Or(
             *[boolalg.And(
                 *(sympy.Symbol(gate) if channel_type == ChannelType.NMOS else ~sympy.Symbol(gate)
@@ -102,6 +114,7 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
                   )
             ) for path in transistor_paths]
         )
+        # Try to simplfy the boolean expression.
         f = simplify_logic(f)
         return f
 
@@ -129,11 +142,11 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
     has_tri_state = satisfiable(tri_state_condition)
     print("has tri-state: {}".format(has_tri_state))
     print("tri-state when: {}".format(tri_state_condition))
-    
+
     f_out = simplify_logic(output_at_vdd)
     print(output_node, "=", f_out)
 
-    return None
+    return f_out
 
 
 def test_cmos_graph_to_formula():
@@ -148,5 +161,7 @@ def test_cmos_graph_to_formula():
 
     formula = cmos_graph_to_formula(g, 'vdd', 'gnd', 'output', input_names)
 
+    # Verify that the deduced formula equals a NAND.
     a, b = sympy.symbols('a b')
-    # assert formula.equals(~(a & b)), "Transformation of CMOS graph into formula failed."
+    nand = ~(a & b)
+    assert formula.equals(nand), "Transformation of CMOS graph into formula failed."
