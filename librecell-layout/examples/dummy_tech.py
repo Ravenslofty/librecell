@@ -1,10 +1,16 @@
 from lclayout.layout.layers import *
 
 # Physical size of one data base unit in meters.
+# All dimensions in this file must be given in this unit.
 db_unit = 1e-9
 
 # Scale transistor width.
-transistor_channel_width_sizing = 0.7
+# Transistor dimensions are read from the SPICE netlist and assumed to have unit 'meters'.
+# Based on this assumption the dimensions are automatically converted into db_units.
+#
+# The transistor widths as defined in the netlist can be scaled by an arbitrary factor.
+# If `transistor_channel_width_sizing` is equal to 1, then no scaling is performed.
+transistor_channel_width_sizing = 1
 
 # GDS2 layer numbers for final output.
 my_active = (1, 0)
@@ -84,7 +90,7 @@ connectable_layers = {l_nwell}
 unit_cell_width = 400
 unit_cell_height = 2400
 
-# Width of the gate polysilicon stripe.
+# Width of the gate polysilicon stripe, i.e. length of the transistor gate.
 gate_length = 50
 
 # Minimum length a polysilicon gate must overlap the silicon.
@@ -101,7 +107,7 @@ grid_offset_y = routing_grid_pitch_y // 2
 # Width of power rail.
 power_rail_width = 360
 
-# Minimum width of polysilicon gate stripes.
+# Minimum gate widths of transistors, i.e. minimal widths of l_active.
 minimum_gate_width_nfet = 200
 minimum_gate_width_pfet = 200
 
@@ -109,6 +115,7 @@ minimum_gate_width_pfet = 200
 minimum_pin_width = 50
 
 # Width of routing wires.
+# This values must be larger or equal to the values in `minimum_width`.
 wire_width = {
     l_poly: 100,
     l_metal1: 100,

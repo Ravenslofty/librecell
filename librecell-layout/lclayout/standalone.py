@@ -201,6 +201,10 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     transistors_abstract, cell_pins = load_transistor_netlist(netlist_path, cell_name)
     io_pins = net_util.get_io_pins(cell_pins)
 
+    # Convert transistor dimensions into data base units.
+    for t in transistors_abstract:
+        t.channel_width = t.channel_width / tech.db_unit
+
     top = layout.create_cell(cell_name)
 
     # Setup layers.
@@ -225,7 +229,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         t.channel_width = t.channel_width * tech.transistor_channel_width_sizing
 
         min_size = tech.minimum_gate_width_nfet if t.channel_type == ChannelType.NMOS else tech.minimum_gate_width_pfet
-        min_size *= tech.db_unit
 
         if t.channel_width < min_size:
             logger.warning("Channel width too small changing it to minimal size: %.2e < %.2e", t.channel_width,
@@ -693,6 +696,17 @@ def main():
 
     # Re-map layers
     layout = remap_layers(layout)
+
+    # Set database unit.
+    # klayout expects dbu to be in µm, the tech file takes it in meters.
+    layout.dbu = tech.db_unit * 1e6
+    logger.info("dbu = {} µm".format(layout.dbu))
+
+    # Possibly scale the layout.
+    scaling_factor = 1
+    if scaling_factor != 1:
+        logger.info("Scaling layout by factor {}".format(scaling_factor))
+        layout.transform(pya.DCplxTrans(scaling_factor))
 
     # Store result
     gds_file_name = '{}.gds'.format(cell_name)
