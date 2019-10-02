@@ -51,7 +51,7 @@ def characterize_input_capacitances(cell_name: str,
                                     time_resolution=50 @ u_ps,
                                     temperature=27,
                                     ):
-    logger.info("characterize_input_capacitances()")
+    logger.debug("characterize_input_capacitances()")
     # Find ports of the SPICE netlist.
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
     logger.info("Subcircuit ports: {}".format(", ".join(ports)))
@@ -65,8 +65,9 @@ def characterize_input_capacitances(cell_name: str,
     if spice_include_files is None:
         spice_include_files = []
     spice_include_files = spice_include_files + [spice_netlist_file]
-
-    logger.info("Load include files.")
+    
+    # Load include files.
+    logger.info("Load SPICE include files.")
     for inc in spice_include_files:
         logger.info("Include '{}'".format(inc))
         circuit.include(inc)
@@ -75,18 +76,19 @@ def characterize_input_capacitances(cell_name: str,
     logger.info("Instantiate circuit under test.")
     circuit.X('circuit_unter_test', cell_name, *ports)
 
-    logger.info("Power supply.")
+    # Power supply.
+    logger.info("Instantiate power supply: {} V".format(supply_voltage))
     circuit.V('power_vdd', supply, circuit.gnd, supply_voltage @ u_V)
 
     # Find function to summarize different timing arcs.
-    logger.info("Find function to summarize differnet timing arcs")
     reduction_function = {
         TimingCorner.WORST: max,
         TimingCorner.BEST: min,
         TimingCorner.TYPICAL: np.mean
     }[timing_corner]
+    logger.info("Reduction function for summarizing multiple timing arcs: {}".format(reduction_function.__name__))
 
-    logger.info("Measuring input capactiance...")
+    logger.info("Measuring input capactiance.")
     result = measure_input_capacitance(
         circuit=circuit,
         inputs_nets=input_pins,
@@ -100,7 +102,8 @@ def characterize_input_capacitances(cell_name: str,
         simulation_duration_hint=1 @ u_ns,
         reduction_function=reduction_function
     )
-    logger.info("Measured.")
+
+    logger.info("Characterizing input capacitances: Done")
 
     return result
 
@@ -135,9 +138,9 @@ def measure_input_capacitance(circuit: Circuit,
         Should be one of {min, max, np.mean}
     :return: A dict containing values of 'rise_capacitance' and 'fall_capacitance' in Farads.
     """
-    logger.info("measure_input_capacitance()")
+    logger.debug("measure_input_capacitance()")
     # Create an independent copy of the circuit.
-    logger.info("Create an independent copy of the circuit")
+    logger.debug("Create an independent copy of the circuit.")
     circuit = circuit.clone(title='Input capacitance measurement for pin "{}"'.format(active_pin))
 
     if float(output_load_capacitance) > 0:
@@ -152,12 +155,13 @@ def measure_input_capacitance(circuit: Circuit,
 
     # TODO: set initial voltage at active_pin.
 
-    logger.info("Set input current")
     input_current = 10000 @ u_nA
+    logger.info("Input current: {}".format(input_current))
 
     time_step = 1 @ u_ps
-    logger.info("Guess of necessary simulation duration.")
+    # Guess of necessary simulation duration.
     period = 1000 @ u_ps
+    logger.info("Guess of necessary simulation duration: {}".format(period))
     # Loop through all combinations of inputs.
     capacitances_rising = []
     capacitances_falling = []
@@ -167,8 +171,7 @@ def measure_input_capacitance(circuit: Circuit,
 
             # Get voltages at static inputs.
             input_voltages = {net: vdd * value @ u_V for net, value in zip(static_input_nets, static_input)}
-            logger.info("Input Voltages: {}".format(vdd))
-            logger.info(input_voltages)
+            logger.debug("Static input voltages: {}".format(input_voltages))
 
             # Switch polarity of current for falling edges.
             _input_current = input_current if input_rising else -input_current
@@ -178,10 +181,11 @@ def measure_input_capacitance(circuit: Circuit,
             # Get initial voltage of active pin.
             initial_voltage = 0 @ u_V if input_rising else vdd @ u_V
 
-            logger.info("Run simulation")
-            logger.info("Loop because it might be necessary to run a longer simulation.")
+            # Run simulation
+            # Loop because it might be necessary to run a longer simulation.
+            logger.info("Run simulation.")
             while True:
-                analysis = simulate_circuit(_circuit, input_voltages, time_step=time_step,
+                analysis = simulate_circuit(_circuit, input_voltages, step_time=time_step,
                                             end_time=period, temperature=temperature,
                                             initial_voltages={active_pin: initial_voltage @ u_V}
                                             )
@@ -190,8 +194,8 @@ def measure_input_capacitance(circuit: Circuit,
                 assert len(time) > 0
                 input_voltage = np.array(analysis[active_pin])
                 output_voltage = np.array(analysis[output_nets[0]])
-                logger.info("input_voltage[0]: {}".format(input_voltage[0]))
-                logger.info("input_voltage[-1]: {}".format(input_voltage[-1]))
+                logger.debug("Input voltage at start input_voltage[0]: {}".format(input_voltage[0]))
+                logger.debug("Input voltage at end input_voltage[-1]: {}".format(input_voltage[-1]))
 
                 if input_voltage[0] < 0.1 * vdd and input_voltage[-1] > vdd or \
                         input_voltage[0] > 0.9 * vdd and input_voltage[-1] < 0:
@@ -201,6 +205,8 @@ def measure_input_capacitance(circuit: Circuit,
                 else:
                     # Simulation was not long enough, double it.
                     period = period * 2
+                    logger.info("Simulation was not long enough. New simulation time: {}".format(period))
+
                 if period>100000 @ u_ps:
                     logger.info("VDD: {}".format(vdd))
                     logger.info("input_voltage[0]: {}".format(input_voltage[0]))
@@ -263,7 +269,8 @@ def measure_input_capacitance(circuit: Circuit,
     # plt.legend()
     # plt.show()
 
-    logger.info("Find max, min or average.")
+    # Find max, min or average depending on 'reduction_function'.
+    logger.debug("Convert capacitances of all timing arcs into the default capacitance ({})".format(reduction_function.__name__))
     final_capacitance_falling = reduction_function(capacitances_falling)
     final_capacitance_rising = reduction_function(capacitances_rising)
     final_capacitance = reduction_function([final_capacitance_falling, final_capacitance_rising])

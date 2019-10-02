@@ -70,7 +70,13 @@ def main():
     DEBUG = args.debug
     log_level = logging.DEBUG if DEBUG else logging.INFO
 
-    logging.basicConfig(format='%(module)16s %(levelname)8s: %(message)s', level=log_level)
+    if DEBUG:
+        log_format = '%(module)16s %(levelname)8s: %(message)s'
+    else:
+        # Also output name of function in DEBUG mode.
+        log_format = '%(module)16s %(funcName)16s %(levelname)8s: %(message)s'
+
+    logging.basicConfig(format=log_format, level=log_level)
 
     cell_name = args.cell
     lib_file = args.liberty

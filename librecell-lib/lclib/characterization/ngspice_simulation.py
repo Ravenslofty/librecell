@@ -27,10 +27,12 @@ from typing import Any, Dict, Union, Optional
 
 from .piece_wise_linear import PieceWiseLinear
 
+logger = logging.getLogger(__name__)
+
 
 def simulate_circuit(circuit: Circuit,
                      input_voltages: Dict[Any, Union[float, PieceWiseLinear]],
-                     time_step: Second,
+                     step_time: Second,
                      end_time: Second,
                      temperature: float = 25,
                      initial_voltages: Optional[Dict[str, Volt]] = None):
@@ -40,7 +42,7 @@ def simulate_circuit(circuit: Circuit,
     :param input_voltages: Dict[node name, input voltage]
         Input voltages can either be a `float` for constant values or a `.util.PieceWiseLinearWave`
         changing wave forms.
-    :param time_step: Time step of simulation.
+    :param step_time: Time step of simulation.
     :param end_time: End time of simulation.
     :param temperature: Simulation temperature.
     :param initial_voltages: Dict[node name, voltage].
@@ -49,19 +51,21 @@ def simulate_circuit(circuit: Circuit,
     """
     circuit = circuit.clone()
 
+    logger.info("Instantiate ngspice simulator.")
     # ngspice_shared = NgSpiceShared.new_instance(send_data=False)
     # simulator = circuit.simulator(temperature=temperature,
     #                               nominal_temperature=temperature,
     #                               simulator='ngspice-shared',
     #                               ngspice_shared=ngspice_shared
     #                               )
-    logger = logging.getLogger(__name__)
-    logger.info("circuit.simulator")
+
     simulator = circuit.simulator(temperature=temperature,
                                   nominal_temperature=temperature
                                   )
 
-    logger.info("Create input drivers.")
+    # Create input drivers.
+    # This will be either constant voltages for static input signals or piece-wise linear sources for dynamic inputs.
+    logger.debug("Create input drivers.")
     for name, voltage in input_voltages.items():
         if isinstance(voltage, PieceWiseLinear):
             piece_wise_linear_voltage_source(circuit, 'in_{}'.format(name), name, circuit.gnd,
@@ -75,12 +79,10 @@ def simulate_circuit(circuit: Circuit,
     if initial_voltages is not None:
         simulator.initial_condition(**initial_voltages)
 
-    logger.info("Run transient analysis.")
+    # Run transient analysis.
     # Set use_initial_condition (uic) to False to enable DC bias computation. See ngspice manual 15.2.2 2)
-    logger.info("step_time: {}".format(time_step))
-    logger.info("end_time: {}".format(end_time))
-
-    analysis = simulator.transient(step_time=time_step,
+    logger.info("Run transient analysis. step_time = {}, end_time = {}".format(step_time, end_time))
+    analysis = simulator.transient(step_time=step_time,
                                    end_time=end_time,
                                    use_initial_condition=False
                                    )
