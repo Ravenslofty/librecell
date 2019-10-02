@@ -41,6 +41,7 @@ def main():
     """
 
     logger = logging.getLogger(__name__)
+    logger.info("lctime main function")
 
     parser = argparse.ArgumentParser(
         description='Characterize the timing of a combinatorial cell based on a SPICE netlist. '
