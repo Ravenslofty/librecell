@@ -99,7 +99,7 @@ def measure_comb_cell(circuit: Circuit,
 
     # Determine length of simulation.
     period = max(simulation_duration_hint, input_rise_time + input_fall_time)
-    logger.debug('Length of simulation: {}'.format(period)
+    logger.debug('Length of simulation: {}'.format(period))
 
     def _is_signal_stable(signal: np.ndarray, samples_per_period: int, sample_point: float = 1.0,
                           epsilon: float = 0.01):
@@ -169,7 +169,7 @@ def measure_comb_cell(circuit: Circuit,
                                                  __circuit.gnd,
                                                  input_wave)
 
-                analysis = simulate_circuit(__circuit, input_voltages, time_step=step @ u_s,
+                analysis = simulate_circuit(__circuit, input_voltages, step_time=step @ u_s,
                                             end_time=period * len(bitsequence), temperature=temperature)
 
                 must_be_stable = [analysis[active_pin], analysis[output_net]]
@@ -188,7 +188,7 @@ def measure_comb_cell(circuit: Circuit,
             logger.info("Perform high-resolution simulation.")
             samples_per_period = int(period / time_step)
 
-            analysis = simulate_circuit(__circuit, input_voltages, time_step=time_step,
+            analysis = simulate_circuit(__circuit, input_voltages, step_time=time_step,
                                         end_time=period * len(bitsequence), temperature=temperature)
 
             time = np.array(analysis.time)

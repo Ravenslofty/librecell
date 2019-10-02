@@ -366,7 +366,7 @@ def get_clock_to_output_delay(
 
     samples_per_period = int(period / time_step)
     logger.debug("Run simulation.")
-    analysis = simulate_circuit(_circuit, input_voltages, time_step=time_step,
+    analysis = simulate_circuit(_circuit, input_voltages, step_time=time_step,
                                 end_time=simulation_end, temperature=temperature)
 
     time = np.array(analysis.time)

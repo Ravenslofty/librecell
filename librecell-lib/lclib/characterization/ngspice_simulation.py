@@ -27,11 +27,12 @@ from typing import Any, Dict, Union, Optional
 
 from .piece_wise_linear import PieceWiseLinear
 
-    logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+
 
 def simulate_circuit(circuit: Circuit,
                      input_voltages: Dict[Any, Union[float, PieceWiseLinear]],
-                     time_step: Second,
+                     step_time: Second,
                      end_time: Second,
                      temperature: float = 25,
                      initial_voltages: Optional[Dict[str, Volt]] = None):
@@ -41,7 +42,7 @@ def simulate_circuit(circuit: Circuit,
     :param input_voltages: Dict[node name, input voltage]
         Input voltages can either be a `float` for constant values or a `.util.PieceWiseLinearWave`
         changing wave forms.
-    :param time_step: Time step of simulation.
+    :param step_time: Time step of simulation.
     :param end_time: End time of simulation.
     :param temperature: Simulation temperature.
     :param initial_voltages: Dict[node name, voltage].
@@ -81,7 +82,7 @@ def simulate_circuit(circuit: Circuit,
     # Run transient analysis.
     # Set use_initial_condition (uic) to False to enable DC bias computation. See ngspice manual 15.2.2 2)
     logger.info("Run transient analysis. step_time = {}, end_time = {}".format(step_time, end_time))
-    analysis = simulator.transient(step_time=time_step,
+    analysis = simulator.transient(step_time=step_time,
                                    end_time=end_time,
                                    use_initial_condition=False
                                    )

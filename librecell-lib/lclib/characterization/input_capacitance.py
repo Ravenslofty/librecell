@@ -185,7 +185,7 @@ def measure_input_capacitance(circuit: Circuit,
             # Loop because it might be necessary to run a longer simulation.
             logger.info("Run simulation.")
             while True:
-                analysis = simulate_circuit(_circuit, input_voltages, time_step=time_step,
+                analysis = simulate_circuit(_circuit, input_voltages, step_time=time_step,
                                             end_time=period, temperature=temperature,
                                             initial_voltages={active_pin: initial_voltage @ u_V}
                                             )
