@@ -21,7 +21,7 @@
 import networkx as nx
 from networkx.utils import pairwise
 from itertools import product
-from typing import Any, Dict, List, Iterable, Tuple
+from typing import Any, Dict, List, Iterable, Tuple, Set
 from enum import Enum
 import collections
 import sympy
@@ -30,6 +30,35 @@ from sympy.logic import boolalg
 from sympy.logic import SOPform
 
 from lclayout.data_types import ChannelType
+
+
+def find_input_gates(graph: nx.MultiGraph) -> Set:
+    """
+    Find names of input signals.
+    Every net that is connected only to transistor gates is considered an input to the cell.
+    :param graph:
+    :return: Set of input signal names.
+    """
+
+    all_gate_nets = {net_name for (_a, _b, (net_name, _channel_type)) in graph.edges(keys=True)}
+    all_nodes = set(graph.nodes)
+
+    input_nets = all_gate_nets - all_nodes
+
+    return input_nets
+
+
+def test_find_input_gates():
+    g = nx.MultiGraph()
+    g.add_edge('vdd', 'nand', ('a', ChannelType.PMOS))
+    g.add_edge('vdd', 'nand', ('b', ChannelType.PMOS))
+    g.add_edge('gnd', '1', ('a', ChannelType.NMOS))
+    g.add_edge('1', 'nand', ('b', ChannelType.NMOS))
+    g.add_edge('vdd', 'output', ('nand', ChannelType.PMOS))
+    g.add_edge('gnd', 'output', ('nand', ChannelType.NMOS))
+
+    inputs = find_input_gates(g)
+    assert inputs == {'a', 'b'}
 
 
 def all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=None):
@@ -79,8 +108,7 @@ def all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=Non
             edges = edges[:-1]
 
 
-def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_node,
-                          input_names: List) -> sympy.Symbol:
+def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_node) -> sympy.Symbol:
     """
     Find the boolean formula implemented by the push-pull network `cmos_graph`.
     :param cmos_graph:
@@ -157,11 +185,28 @@ def test_cmos_graph_to_formula():
     g.add_edge('gnd', '1', ('a', ChannelType.NMOS))
     g.add_edge('1', 'output', ('b', ChannelType.NMOS))
 
-    input_names = ['a', 'b']
-
-    formula = cmos_graph_to_formula(g, 'vdd', 'gnd', 'output', input_names)
+    formula = cmos_graph_to_formula(g, 'vdd', 'gnd', 'output')
 
     # Verify that the deduced formula equals a NAND.
     a, b = sympy.symbols('a b')
     nand = ~(a & b)
     assert formula.equals(nand), "Transformation of CMOS graph into formula failed."
+
+
+def test_complex_cmos_graph_to_formula():
+    # Create CMOS network of a AND gate (NAND -> INV).
+    g = nx.MultiGraph()
+    g.add_edge('vdd', 'nand', ('a', ChannelType.PMOS))
+    g.add_edge('vdd', 'nand', ('b', ChannelType.PMOS))
+    g.add_edge('gnd', '1', ('a', ChannelType.NMOS))
+    g.add_edge('1', 'nand', ('b', ChannelType.NMOS))
+
+    g.add_edge('vdd', 'output', ('nand', ChannelType.PMOS))
+    g.add_edge('gnd', 'output', ('nand', ChannelType.NMOS))
+
+    formula = cmos_graph_to_formula(g, 'vdd', 'gnd', 'output')
+
+    # Verify that the deduced formula equals a NAND.
+    a, b = sympy.symbols('a b')
+    AND = (a & b)
+    assert formula.equals(AND), "Transformation of CMOS graph into formula failed."
