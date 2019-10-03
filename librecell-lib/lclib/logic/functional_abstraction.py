@@ -30,6 +30,9 @@ from sympy.logic import boolalg
 from sympy.logic import SOPform
 
 from lclayout.data_types import ChannelType
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def find_input_gates(graph: nx.MultiGraph) -> Set:
@@ -155,24 +158,35 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
         """
         return not satisfiable(f1 ^ f2)
 
+    # Find condition that output is connected to VDD.
     output_at_vdd = conductivity_condition(cmos_graph, output_node, vdd_node)
+    # Find condition that output is connected to GND.
     output_at_gnd = conductivity_condition(cmos_graph, output_node, gnd_node)
-    print(output_at_vdd)
-    print(output_at_gnd)
-    print(~output_at_vdd)
+
+    # Check if the two conditions are complementary.
     is_complementary = bool_equals(output_at_gnd, ~output_at_vdd)
-    print("is complementary: {}".format(is_complementary))
+
+    # Check if it is possible to create a path connecting VDD and GND.
     short_condition = output_at_vdd & output_at_gnd
     has_short = satisfiable(short_condition)
-    print("has short: {}".format(has_short))
-    # print("has when: {}".format(short_condition))
+
+    # Check if it is possible to disconnect the output from both VDD and GND (high-impedance).
     tri_state_condition = simplify_logic((~output_at_vdd) & (~output_at_gnd))
     has_tri_state = satisfiable(tri_state_condition)
-    print("has tri-state: {}".format(has_tri_state))
-    print("tri-state when: {}".format(tri_state_condition))
 
+    # TODO: This only works if the circuit is complementary.
     f_out = simplify_logic(output_at_vdd)
-    print(output_node, "=", f_out)
+
+    logger.info("Deduced formula: {} = {}".format(output_node, f_out))
+    logger.info("Is complementary circuit: {}".format(is_complementary))
+
+    logger.info("Has tri-state = {}".format(has_tri_state))
+    if has_tri_state:
+        logger.info("High impedance output when: {}".format(tri_state_condition))
+
+    logger.info("Has short circuit = {}".format(has_short))
+    if has_short:
+        logger.warning("Short circuit when: {}".format(short_condition))
 
     return f_out
 
@@ -254,7 +268,7 @@ def test_complex_cmos_graph_to_formula():
 
     assert len(cycles) == 0, "Abstraction of feed-back loops not yet supported."
 
-    print(cycles)
+    print('cycles = ', cycles)
 
     def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol], output: sympy.Symbol):
         f = formulas[output].copy()
@@ -266,7 +280,7 @@ def test_complex_cmos_graph_to_formula():
     # Solve equation system for output.
     f = resolve_intermediate_variables(formulas, sympy.Symbol('output'))
 
-    f = sympy.simplify(f)
+    f = simplify_logic(f)
     print('f = ', f)
 
     # Verify that the deduced formula equals a NAND.
