@@ -32,6 +32,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _get_gate_nets(graph: nx.MultiGraph) -> Set:
+    """
+    Return a set of all net names that connect to a transistor gate.
+    :param graph:
+    :return: Set of net names.
+    """
+    all_gate_nets = {net_name for (_a, _b, (net_name, _channel_type)) in graph.edges(keys=True)}
+    return all_gate_nets
+
+
 def _find_input_gates(graph: nx.MultiGraph) -> Set:
     """
     Find names of input signals.
@@ -40,9 +50,8 @@ def _find_input_gates(graph: nx.MultiGraph) -> Set:
     :return: Set of input signal names.
     """
 
-    all_gate_nets = {net_name for (_a, _b, (net_name, _channel_type)) in graph.edges(keys=True)}
+    all_gate_nets = _get_gate_nets(graph)
     all_nodes = set(graph.nodes)
-
     input_nets = all_gate_nets - all_nodes
 
     return input_nets
@@ -173,9 +182,9 @@ def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output
 
     # TODO: This only works if the circuit is complementary.
     f_out = simplify_logic(output_at_vdd)
-
     logger.info("Deduced formula: {} = {}".format(output_node, f_out))
     logger.info("Is complementary circuit: {}".format(is_complementary))
+    assert is_complementary, "Non-complementary circuits not supported yet."
 
     logger.info("Has tri-state = {}".format(has_tri_state))
     if has_tri_state:
@@ -214,6 +223,10 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node,
     :param output_nodes:
     :return: (Dict[intermediate variable, expression for it], Set[input variables of the circuit])
     """
+
+    for n in output_nodes:
+        assert n in cmos_graph.node, "Output node is not in the graph: {}".format(n)
+
     inputs = _find_input_gates(cmos_graph)
 
     unknown_nodes = {n for n in output_nodes}
@@ -221,7 +234,7 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node,
 
     # Loop as long as there is a intermediary node with unknown value.
     while unknown_nodes:
-        # Grab a node with
+        # Grab a node with unknown boolean expression.
         temp_output_node = unknown_nodes.pop()
         assert temp_output_node not in known_nodes
         f = _cmos_graph_to_formula(cmos_graph, vdd_node, gnd_node, temp_output_node)
@@ -284,3 +297,89 @@ def test_complex_cmos_graph_to_formula():
     a, b = sympy.symbols('a b')
     AND = (a & b)
     assert f.equals(AND), "Transformation of CMOS graph into formula failed."
+
+
+class PowerPin:
+    pass
+
+
+class InputPin:
+    pass
+
+
+class OutputPin:
+    pass
+
+
+def analyze_circuit_graph(graph: nx.MultiGraph,
+                          pins_of_interest: Set,
+                          vdd_pin,
+                          gnd_pin
+                          ):
+    gate_nets = _get_gate_nets(graph)
+    nets = set(graph.nodes)
+    all_nets = gate_nets | nets
+
+    # Sanity check for the inputs.
+    for p in pins_of_interest:
+        assert p in all_nets, "Net '{}' is not in the graph.".format(p)
+
+    logger.info("VDD net: {}".format(vdd_pin))
+    logger.info("GND net: {}".format(gnd_pin))
+
+    input_nets = gate_nets - nets
+    output_nodes = pins_of_interest - input_nets
+    logger.info("Detected input nets: {}".format(input_nets))
+    logger.info("Detected output nets: {}".format(output_nodes))
+
+    formulas, inputs = complex_cmos_graph_to_formula(graph, 'vdd', 'gnd', output_nodes=output_nodes)
+
+    # Convert from strings into sympy symbols.
+    formulas = {sympy.Symbol(k): v for k, v in formulas.items()}
+    inputs = {sympy.Symbol(i) for i in inputs}
+    print(formulas)
+    print('inputs = ', inputs)
+
+    # Detect loops in the circuit.
+    # Create a graph representing the dependencies of the variables/expressions.
+    dependency_graph = nx.DiGraph()
+    for atom, expression in formulas.items():
+        dependency_graph.add_edge(atom, expression)
+
+    # Check for cycles.
+    cycles = list(nx.simple_cycles(dependency_graph))
+    logger.debug("Number of feed-back loops: {}".format(len(cycles)))
+
+    assert len(cycles) == 0, "Abstraction of feed-back loops not yet supported."
+
+    print('cycles = ', cycles)
+
+    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol], output: sympy.Symbol):
+        f = formulas[output].copy()
+        # TODO: detect loops
+        while f.atoms() - inputs:
+            f = f.subs(formulas)
+        return f
+
+    # Solve equation system for output.
+    for output_net in output_nodes:
+        output_symbol = sympy.Symbol(output_net)
+        formula = resolve_intermediate_variables(formulas, output_symbol)
+        formula = simplify_logic(formula)
+        logger.info("Deduced formula: {} = {}".format(output_symbol, formula))
+
+    assert False
+
+
+def test_analyze_circuit_graph():
+    # Create CMOS network of a AND gate (NAND -> INV).
+    g = nx.MultiGraph()
+    g.add_edge('vdd', 'nand', ('a', ChannelType.PMOS))
+    g.add_edge('vdd', 'nand', ('b', ChannelType.PMOS))
+    g.add_edge('gnd', '1', ('a', ChannelType.NMOS))
+    g.add_edge('1', 'nand', ('b', ChannelType.NMOS))
+    g.add_edge('vdd', 'output', ('nand', ChannelType.PMOS))
+    g.add_edge('gnd', 'output', ('nand', ChannelType.NMOS))
+
+    pins_of_interest = {'output'}
+    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd')
