@@ -38,6 +38,8 @@ def is_unate_in_xi(bool_function, param_name: str) -> Unate:
     :return: Unate.NON_UNATE, Unate.NEGATIVE_UNATE or Unate.POSITIVE_UNATE
     """
 
+    # TODO: use sympy to do this more elegantly (satisfiability solver)
+
     # Get number of inputs to function.
 
     params = list(inspect.signature(bool_function).parameters)

@@ -111,7 +111,7 @@ def all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=Non
             edges = edges[:-1]
 
 
-def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_node) -> sympy.Symbol:
+def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_node) -> boolalg.Boolean:
     """
     Find the boolean formula implemented by the push-pull network `cmos_graph`.
     :param cmos_graph:
@@ -122,7 +122,7 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
     :return: sympy.Symbol
     """
 
-    def conductivity_condition(cmos_graph: nx.MultiGraph, source, target):
+    def conductivity_condition(cmos_graph: nx.MultiGraph, source, target) -> boolalg.Boolean:
         """
         Find a boolean equation that evaluates to true iff there is a conductive path from `source` to `target`
         given the input signals.
@@ -149,7 +149,7 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
         f = simplify_logic(f)
         return f
 
-    def bool_equals(f1, f2):
+    def bool_equals(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
         """
         Check equality of two boolean formulas.
         :param f1:
@@ -208,7 +208,7 @@ def test_cmos_graph_to_formula():
 
 
 def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_nodes: Set) \
-        -> Tuple[Dict[Any, sympy.Symbol], Set[sympy.Symbol]]:
+        -> Tuple[Dict[Any, boolalg.Boolean], Set[boolalg.Boolean]]:
     """
     Iteratively find formulas of intermediate nodes in complex gates which consist of multiple pull-up/pull-down networks.
     :param cmos_graph:
