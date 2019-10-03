@@ -193,14 +193,15 @@ def test_cmos_graph_to_formula():
     assert formula.equals(nand), "Transformation of CMOS graph into formula failed."
 
 
-def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_nodes: Set) -> Dict[Any, sympy.Symbol]:
+def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_nodes: Set) \
+        -> Tuple[Dict[Any, sympy.Symbol], Set[sympy.Symbol]]:
     """
     Iteratively find formulas of intermediate nodes in complex gates which consist of multiple pull-up/pull-down networks.
     :param cmos_graph:
     :param vdd_node:
     :param gnd_node:
-    :param output_node:
-    :return:
+    :param output_nodes:
+    :return: (Dict[intermediate variable, expression for it], Set[input variables of the circuit])
     """
     inputs = find_input_gates(cmos_graph)
 
@@ -221,7 +222,7 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node,
 
         unknown_nodes = unknown_nodes | unknown_inputs_to_f
 
-    return known_nodes
+    return known_nodes, inputs
 
 
 def test_complex_cmos_graph_to_formula():
@@ -235,20 +236,26 @@ def test_complex_cmos_graph_to_formula():
     g.add_edge('vdd', 'output', ('nand', ChannelType.PMOS))
     g.add_edge('gnd', 'output', ('nand', ChannelType.NMOS))
 
-    formulas = complex_cmos_graph_to_formula(g, 'vdd', 'gnd', {'output'})
-    formulas = {sympy.Symbol(k): v for k,v in formulas.items()}
+    formulas, inputs = complex_cmos_graph_to_formula(g, 'vdd', 'gnd', {'output'})
+    # Convert from strings into sympy symbols.
+    formulas = {sympy.Symbol(k): v for k, v in formulas.items()}
+    inputs = {sympy.Symbol(i) for i in inputs}
     print(formulas)
+    print('inputs = ', inputs)
 
-    f = formulas[sympy.Symbol('output')].copy()
-    print('f = ', f)
-    f.subs(formulas)
-    print('f = ', f)
-    f.subs(formulas)
-    print('f = ', f)
+    # Solve equation system for output.
+    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol], output: sympy.Symbol):
+        f = formulas[output].copy()
+        while f.atoms() - inputs:
+            f = f.subs(formulas)
+        return f
+
+    f = resolve_intermediate_variables(formulas, sympy.Symbol('output'))
+
     f = sympy.simplify(f)
     print('f = ', f)
 
     # Verify that the deduced formula equals a NAND.
     a, b = sympy.symbols('a b')
     AND = (a & b)
-    assert formulas.equals(AND), "Transformation of CMOS graph into formula failed."
+    assert f.equals(AND), "Transformation of CMOS graph into formula failed."
