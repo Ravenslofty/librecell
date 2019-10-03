@@ -19,15 +19,12 @@
 ##
 
 import networkx as nx
-from networkx.utils import pairwise
-from itertools import product
 from typing import Any, Dict, List, Iterable, Tuple, Set
 from enum import Enum
 import collections
 import sympy
 from sympy.logic import simplify_logic, satisfiable
 from sympy.logic import boolalg
-from sympy.logic import SOPform
 
 from lclayout.data_types import ChannelType
 import logging
@@ -35,7 +32,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def find_input_gates(graph: nx.MultiGraph) -> Set:
+def _find_input_gates(graph: nx.MultiGraph) -> Set:
     """
     Find names of input signals.
     Every net that is connected only to transistor gates is considered an input to the cell.
@@ -60,11 +57,11 @@ def test_find_input_gates():
     g.add_edge('vdd', 'output', ('nand', ChannelType.PMOS))
     g.add_edge('gnd', 'output', ('nand', ChannelType.NMOS))
 
-    inputs = find_input_gates(g)
+    inputs = _find_input_gates(g)
     assert inputs == {'a', 'b'}
 
 
-def all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=None):
+def _all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=None):
     """
     Enumerate all simple paths (no node occurs more than once) from source to target.
     Yields edges inclusive keys of all simple paths in a multi graph.
@@ -72,7 +69,7 @@ def all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=Non
     :param source:
     :param target:
     :param cutoff:
-    :return:
+    :return: Generator object.
     """
 
     if source not in graph:
@@ -111,7 +108,7 @@ def all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=Non
             edges = edges[:-1]
 
 
-def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_node) -> boolalg.Boolean:
+def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_node) -> boolalg.Boolean:
     """
     Find the boolean formula implemented by the push-pull network `cmos_graph`.
     :param cmos_graph:
@@ -132,7 +129,7 @@ def cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_
         :return: Boolean function. (sympy.Symbol)
         """
         # Get all simple paths from source to target.
-        all_paths = list(all_simple_paths_multigraph(cmos_graph, source, target))
+        all_paths = list(_all_simple_paths_multigraph(cmos_graph, source, target))
         transistor_paths = [
             [(gate_net, channel_type) for (net1, net2), (gate_net, channel_type) in path] for path in all_paths
         ]
@@ -199,7 +196,7 @@ def test_cmos_graph_to_formula():
     g.add_edge('gnd', '1', ('a', ChannelType.NMOS))
     g.add_edge('1', 'output', ('b', ChannelType.NMOS))
 
-    formula = cmos_graph_to_formula(g, 'vdd', 'gnd', 'output')
+    formula = _cmos_graph_to_formula(g, 'vdd', 'gnd', 'output')
 
     # Verify that the deduced formula equals a NAND.
     a, b = sympy.symbols('a b')
@@ -217,7 +214,7 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node,
     :param output_nodes:
     :return: (Dict[intermediate variable, expression for it], Set[input variables of the circuit])
     """
-    inputs = find_input_gates(cmos_graph)
+    inputs = _find_input_gates(cmos_graph)
 
     unknown_nodes = {n for n in output_nodes}
     known_nodes = {i: i for i in inputs}
@@ -227,7 +224,7 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node,
         # Grab a node with
         temp_output_node = unknown_nodes.pop()
         assert temp_output_node not in known_nodes
-        f = cmos_graph_to_formula(cmos_graph, vdd_node, gnd_node, temp_output_node)
+        f = _cmos_graph_to_formula(cmos_graph, vdd_node, gnd_node, temp_output_node)
         known_nodes[temp_output_node] = f
 
         inputs_to_f = {a.name for a in f.atoms()}
