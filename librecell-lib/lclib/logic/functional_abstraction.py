@@ -243,13 +243,27 @@ def test_complex_cmos_graph_to_formula():
     print(formulas)
     print('inputs = ', inputs)
 
-    # Solve equation system for output.
+    # Detect loops in the circuit.
+    # Create a graph representing the dependencies of the variables/expressions.
+    dependency_graph = nx.DiGraph()
+    for atom, expression in formulas.items():
+        dependency_graph.add_edge(atom, expression)
+
+    # Check for cycles.
+    cycles = list(nx.simple_cycles(dependency_graph))
+
+    assert len(cycles) == 0, "Abstraction of feed-back loops not yet supported."
+
+    print(cycles)
+
     def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol], output: sympy.Symbol):
         f = formulas[output].copy()
+        # TODO: detect loops
         while f.atoms() - inputs:
             f = f.subs(formulas)
         return f
 
+    # Solve equation system for output.
     f = resolve_intermediate_variables(formulas, sympy.Symbol('output'))
 
     f = sympy.simplify(f)
