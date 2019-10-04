@@ -32,6 +32,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _bool_equals(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
+    """
+    Check equality of two boolean formulas.
+    :param f1:
+    :param f2:
+    :return:
+    """
+    return not satisfiable(f1 ^ f2)
+
+
 def _get_gate_nets(graph: nx.MultiGraph) -> Set:
     """
     Return a set of all net names that connect to a transistor gate.
@@ -117,16 +127,25 @@ def _all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=No
             edges = edges[:-1]
 
 
-def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_node) -> boolalg.Boolean:
+def _get_conductivity_conditions(cmos_graph: nx.MultiGraph,
+                                 inputs: Set,
+                                 output_node) -> Dict[sympy.Symbol, boolalg.Boolean]:
     """
-    Find the boolean formula implemented by the push-pull network `cmos_graph`.
+    For each input-output pair find the condition that there is a conductive path.
     :param cmos_graph:
     :param vdd_node: Name of VDD supply node.
     :param gnd_node: Name of GND supply node.
+    :param inputs: Set of all input pins including power pins.
     :param output_node:
-    :param input_names: Ordering of input names.
     :return: sympy.Symbol
     """
+
+    gate_input_nets = _find_input_gates(cmos_graph)
+    # Find input nets that also connect to a source or drain, i.e. to a transmission gate.
+    transmission_input_pins = inputs - gate_input_nets
+    logger.info("Input pins to a transmission gate: {}".format(transmission_input_pins))
+    if len(transmission_input_pins) < 2:
+        logger.warning("`inputs` is expected to also contain VDD and GND.")
 
     def conductivity_condition(cmos_graph: nx.MultiGraph, source, target) -> boolalg.Boolean:
         """
@@ -151,26 +170,53 @@ def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output
                   )
             ) for path in transistor_paths]
         )
-        # Try to simplfy the boolean expression.
+        # Try to simplify the boolean expression.
         f = simplify_logic(f)
+        logger.debug("Conductivity condition from '{}' to '{}': {}".format(source, target, f))
         return f
 
-    def bool_equals(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
-        """
-        Check equality of two boolean formulas.
-        :param f1:
-        :param f2:
-        :return:
-        """
-        return not satisfiable(f1 ^ f2)
+    # Calculate conductivity conditions from each input-pin (i.e. power pins and inputs to transmission gates) to output.
+    conductivity_conditions = {
+        sympy.Symbol(i): conductivity_condition(cmos_graph, output_node, i)
+        for i in transmission_input_pins
+    }
+
+    return conductivity_conditions
+
+
+def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
+                           vdd_node,
+                           gnd_node,
+                           output_node,
+                           input_pins: Set = None) -> boolalg.Boolean:
+    """
+    Find the boolean formula implemented by the push-pull network `cmos_graph`.
+    :param cmos_graph:
+    :param vdd_node: Name of VDD supply node.
+    :param gnd_node: Name of GND supply node.
+    :param input_pins: Set of all input pins including power pins.
+    :param output_node:
+    :return: sympy.Symbol
+    """
+
+    if input_pins is None:
+        input_pins = set()
+    else:
+        input_pins = input_pins.copy()
+
+    input_pins.add(vdd_node)
+    input_pins.add(gnd_node)
+
+    # Calculate conductivity conditions from each input-pin to output.
+    conductivity_conditions = _get_conductivity_conditions(cmos_graph, input_pins, output_node)
 
     # Find condition that output is connected to VDD.
-    output_at_vdd = conductivity_condition(cmos_graph, output_node, vdd_node)
+    output_at_vdd = conductivity_conditions[vdd_node]
     # Find condition that output is connected to GND.
-    output_at_gnd = conductivity_condition(cmos_graph, output_node, gnd_node)
+    output_at_gnd = conductivity_conditions[gnd_node]
 
     # Check if the two conditions are complementary.
-    is_complementary = bool_equals(output_at_gnd, ~output_at_vdd)
+    is_complementary = _bool_equals(output_at_gnd, ~output_at_vdd)
 
     # Check if it is possible to create a path connecting VDD and GND.
     short_condition = output_at_vdd & output_at_gnd
@@ -213,7 +259,11 @@ def test_cmos_graph_to_formula():
     assert formula.equals(nand), "Transformation of CMOS graph into formula failed."
 
 
-def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output_nodes: Set) \
+def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
+                                  vdd_node,
+                                  gnd_node,
+                                  output_nodes: Set,
+                                  input_pins: Set = None) \
         -> Tuple[Dict[Any, boolalg.Boolean], Set[boolalg.Boolean]]:
     """
     Iteratively find formulas of intermediate nodes in complex gates which consist of multiple pull-up/pull-down networks.
@@ -228,6 +278,7 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node,
         assert n in cmos_graph.node, "Output node is not in the graph: {}".format(n)
 
     inputs = _find_input_gates(cmos_graph)
+    
 
     # Find inputs that connect to a source or drain of a transistor.
     sd_inputs = inputs & cmos_graph.nodes
@@ -241,7 +292,9 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node,
         # Grab a node with unknown boolean expression.
         temp_output_node = unknown_nodes.pop()
         assert temp_output_node not in known_nodes
-        f = _cmos_graph_to_formula(cmos_graph, vdd_node, gnd_node, temp_output_node)
+        f = _cmos_graph_to_formula(cmos_graph, vdd_node, gnd_node,
+                                   temp_output_node,
+                                   input_pins=input_pins)
         known_nodes[temp_output_node] = f
 
         inputs_to_f = {a.name for a in f.atoms()}
