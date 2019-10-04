@@ -211,36 +211,50 @@ def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
     conductivity_conditions = _get_conductivity_conditions(cmos_graph, input_pins, output_node)
 
     # Find condition that output is connected to VDD.
-    output_at_vdd = conductivity_conditions[vdd_node]
-    # Find condition that output is connected to GND.
-    output_at_gnd = conductivity_conditions[gnd_node]
-
-    # Check if the two conditions are complementary.
-    is_complementary = _bool_equals(output_at_gnd, ~output_at_vdd)
-
-    # Check if it is possible to create a path connecting VDD and GND.
-    short_condition = output_at_vdd & output_at_gnd
-    has_short = satisfiable(short_condition)
-
-    # Check if it is possible to disconnect the output from both VDD and GND (high-impedance).
-    tri_state_condition = simplify_logic((~output_at_vdd) & (~output_at_gnd))
-    has_tri_state = satisfiable(tri_state_condition)
+    output_at_vdd = conductivity_conditions[sympy.Symbol(vdd_node)]
+    # # Find condition that output is connected to GND.
+    # output_at_gnd = conductivity_conditions[gnd_node]
+    #
+    # # Check if the two conditions are complementary.
+    # is_complementary = _bool_equals(output_at_gnd, ~output_at_vdd)
+    #
+    # # Check if it is possible to create a path connecting VDD and GND.
+    # short_condition = output_at_vdd & output_at_gnd
+    # has_short = satisfiable(short_condition)
+    #
+    # # Check if it is possible to disconnect the output from both VDD and GND (high-impedance).
+    # tri_state_condition = simplify_logic((~output_at_vdd) & (~output_at_gnd))
+    # has_tri_state = satisfiable(tri_state_condition)
 
     # TODO: This only works if the circuit is complementary.
     f_out = simplify_logic(output_at_vdd)
-    logger.info("Deduced formula: {} = {}".format(output_node, f_out))
-    logger.info("Is complementary circuit: {}".format(is_complementary))
-    assert is_complementary, "Non-complementary circuits not supported yet."
-
-    logger.info("Has tri-state: {}".format(has_tri_state))
-    if has_tri_state:
-        logger.info("High impedance output when: {}".format(tri_state_condition))
-
-    logger.info("Has short circuit: {}".format(has_short))
-    if has_short:
-        logger.warning("Short circuit when: {}".format(short_condition))
+    # logger.info("Deduced formula: {} = {}".format(output_node, f_out))
+    # logger.info("Is complementary circuit: {}".format(is_complementary))
+    # assert is_complementary, "Non-complementary circuits not supported yet."
+    #
+    # logger.info("Has tri-state: {}".format(has_tri_state))
+    # if has_tri_state:
+    #     logger.info("High impedance output when: {}".format(tri_state_condition))
+    #
+    # logger.info("Has short circuit: {}".format(has_short))
+    # if has_short:
+    #     logger.warning("Short circuit when: {}".format(short_condition))
 
     return f_out
+
+
+def _high_impedance_condition(conductivity_conditions: Dict[sympy.Symbol, boolalg.Boolean]) -> boolalg.Boolean:
+    pass
+
+
+def _is_complementary(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
+    """
+    Check if two formulas are complementary.
+    :param f1:
+    :param f2:
+    :return:
+    """
+    return _bool_equals(f1, ~f2)
 
 
 def test_cmos_graph_to_formula():
@@ -271,39 +285,59 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
     :param vdd_node:
     :param gnd_node:
     :param output_nodes:
+    :param input_pins: Specify additional input pins that could otherwise not be deduced.
+        This is mainly meant for inputs that connect not only to transistor gates but also source or drain.
     :return: (Dict[intermediate variable, expression for it], Set[input variables of the circuit])
     """
 
     for n in output_nodes:
         assert n in cmos_graph.node, "Output node is not in the graph: {}".format(n)
 
-    inputs = _find_input_gates(cmos_graph)
-    
+    if input_pins is None:
+        input_pins = set()
+    else:
+        input_pins = input_pins.copy()
 
-    # Find inputs that connect to a source or drain of a transistor.
-    sd_inputs = inputs & cmos_graph.nodes
-    assert len(sd_inputs) == 0, "Input pins that connect to a source or drain are not supported."
+    input_pins.add(vdd_node)
+    input_pins.add(gnd_node)
+
+    # Consider all nodes as input variables that are either connected to transistor
+    # gates only or are specified by the caller.
+    inputs = _find_input_gates(cmos_graph) | input_pins
 
     unknown_nodes = {n for n in output_nodes}
-    known_nodes = {i: i for i in inputs}
+    known_nodes = {i for i in inputs}
+    output_formulas = dict()
 
     # Loop as long as there is a intermediary node with unknown value.
     while unknown_nodes:
         # Grab a node with unknown boolean expression.
         temp_output_node = unknown_nodes.pop()
         assert temp_output_node not in known_nodes
-        f = _cmos_graph_to_formula(cmos_graph, vdd_node, gnd_node,
-                                   temp_output_node,
-                                   input_pins=input_pins)
-        known_nodes[temp_output_node] = f
+        # f = _cmos_graph_to_formula(cmos_graph, vdd_node, gnd_node,
+        #                            temp_output_node,
+        #                            input_pins=input_pins)
 
-        inputs_to_f = {a.name for a in f.atoms()}
+        conductivity_conditions = _get_conductivity_conditions(cmos_graph, input_pins, temp_output_node)
 
-        unknown_inputs_to_f = inputs_to_f - known_nodes.keys()
+        output_formulas[temp_output_node] = conductivity_conditions
+        known_nodes.add(temp_output_node)
 
-        unknown_nodes = unknown_nodes | unknown_inputs_to_f
+        # Find all variables that occur in the conductivity conditions to later resolve them too.
+        inputs_to_f = {a.name for f in conductivity_conditions.values() for a in f.atoms()}
 
-    return known_nodes, inputs
+        # Update the set of unknown variables.
+        unknown_nodes = (unknown_nodes | inputs_to_f) - known_nodes
+
+    return output_formulas, inputs
+
+
+def _convert_graph_into_sympy_symbols(graph: nx.MultiGraph) -> nx.MultiGraph:
+    g2 = nx.MultiGraph()
+    for n1, n2, (gate_net, channel_type) in graph.edges(keys=True):
+        g2.add_edge(sympy.Symbol(n1), sympy.Symbol(n2), (sympy.Symbol(gate_net, channel_type)))
+
+    return g2
 
 
 def test_complex_cmos_graph_to_formula():
@@ -317,11 +351,13 @@ def test_complex_cmos_graph_to_formula():
     g.add_edge('vdd', 'output', ('nand', ChannelType.PMOS))
     g.add_edge('gnd', 'output', ('nand', ChannelType.NMOS))
 
-    formulas, inputs = complex_cmos_graph_to_formula(g, 'vdd', 'gnd', {'output'})
+    conductivity_conditions, inputs = complex_cmos_graph_to_formula(g, 'vdd', 'gnd', {'output'})
+    print(conductivity_conditions)
+    formulas = {sympy.Symbol(output): cc[sympy.Symbol('vdd')] for output, cc in conductivity_conditions.items()}
+
     # Convert from strings into sympy symbols.
-    formulas = {sympy.Symbol(k): v for k, v in formulas.items()}
     inputs = {sympy.Symbol(i) for i in inputs}
-    print(formulas)
+    print('formulas: ', formulas)
     print('inputs = ', inputs)
 
     # Detect loops in the circuit.
@@ -337,11 +373,13 @@ def test_complex_cmos_graph_to_formula():
 
     print('cycles = ', cycles)
 
-    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol], output: sympy.Symbol):
+    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol],
+                                       output: sympy.Symbol) -> boolalg.Boolean:
         f = formulas[output].copy()
         # TODO: detect loops
         while f.atoms() - inputs:
             f = f.subs(formulas)
+            f = simplify_logic(f)
         return f
 
     # Solve equation system for output.
@@ -389,18 +427,23 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     logger.info("Detected input nets: {}".format(input_nets))
     logger.info("Detected output nets: {}".format(output_nodes))
 
-    formulas, inputs = complex_cmos_graph_to_formula(graph, 'vdd', 'gnd', output_nodes=output_nodes)
+    conductivity_conditions, inputs = complex_cmos_graph_to_formula(graph,
+                                                                    'vdd',
+                                                                    'gnd',
+                                                                    output_nodes=output_nodes,
+                                                                    )
+    print('conductivity_conditions = ', conductivity_conditions)
+    vdd_formulas = {sympy.Symbol(output): cc[sympy.Symbol('vdd')] for output, cc in conductivity_conditions.items()}
 
     # Convert from strings into sympy symbols.
-    formulas = {sympy.Symbol(k): v for k, v in formulas.items()}
     inputs = {sympy.Symbol(i) for i in inputs}
-    print(formulas)
+    print(vdd_formulas)
     print('inputs = ', inputs)
 
     # Detect loops in the circuit.
     # Create a graph representing the dependencies of the variables/expressions.
     dependency_graph = nx.DiGraph()
-    for atom, expression in formulas.items():
+    for atom, expression in vdd_formulas.items():
         dependency_graph.add_edge(atom, expression)
 
     # Check for cycles.
@@ -416,12 +459,14 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         # TODO: detect loops
         while f.atoms() - inputs:
             f = f.subs(formulas)
+            f = simplify_logic(f)
+            print(f)
         return f
 
     # Solve equation system for output.
     for output_net in output_nodes:
         output_symbol = sympy.Symbol(output_net)
-        formula = resolve_intermediate_variables(formulas, output_symbol)
+        formula = resolve_intermediate_variables(vdd_formulas, output_symbol)
         formula = simplify_logic(formula)
         logger.info("Deduced formula: {} = {}".format(output_symbol, formula))
 
