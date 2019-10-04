@@ -186,11 +186,11 @@ def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node, output
     logger.info("Is complementary circuit: {}".format(is_complementary))
     assert is_complementary, "Non-complementary circuits not supported yet."
 
-    logger.info("Has tri-state = {}".format(has_tri_state))
+    logger.info("Has tri-state: {}".format(has_tri_state))
     if has_tri_state:
         logger.info("High impedance output when: {}".format(tri_state_condition))
 
-    logger.info("Has short circuit = {}".format(has_short))
+    logger.info("Has short circuit: {}".format(has_short))
     if has_short:
         logger.warning("Short circuit when: {}".format(short_condition))
 
@@ -228,6 +228,10 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph, vdd_node, gnd_node,
         assert n in cmos_graph.node, "Output node is not in the graph: {}".format(n)
 
     inputs = _find_input_gates(cmos_graph)
+
+    # Find inputs that connect to a source or drain of a transistor.
+    sd_inputs = inputs & cmos_graph.nodes
+    assert len(sd_inputs) == 0, "Input pins that connect to a source or drain are not supported."
 
     unknown_nodes = {n for n in output_nodes}
     known_nodes = {i: i for i in inputs}
@@ -382,4 +386,22 @@ def test_analyze_circuit_graph():
     g.add_edge('gnd', 'output', ('nand', ChannelType.NMOS))
 
     pins_of_interest = {'output'}
+    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd')
+
+
+def test_analyze_circuit_graph_transmission_gate_xor():
+    g = nx.MultiGraph()
+    # Inverter A
+    g.add_edge('vdd', 'a_not', ('a', ChannelType.PMOS))
+    g.add_edge('gnd', 'a_not', ('a', ChannelType.NMOS))
+    # Inverter B
+    g.add_edge('vdd', 'b_not', ('b', ChannelType.PMOS))
+    g.add_edge('gnd', 'b_not', ('b', ChannelType.NMOS))
+    # Transmission gates
+    g.add_edge('a_not', 'c', ('b', ChannelType.PMOS))
+    g.add_edge('a_not', 'c', ('b_not', ChannelType.NMOS))
+    g.add_edge('a', 'c', ('b_not', ChannelType.PMOS))
+    g.add_edge('a', 'c', ('b', ChannelType.NMOS))
+
+    pins_of_interest = {'c'}
     result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd')
