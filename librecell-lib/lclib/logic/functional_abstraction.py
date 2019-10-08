@@ -408,18 +408,6 @@ def test_complex_cmos_graph_to_formula():
     assert f.equals(AND), "Transformation of CMOS graph into formula failed."
 
 
-class PowerPin:
-    pass
-
-
-class InputPin:
-    pass
-
-
-class OutputPin:
-    pass
-
-
 def analyze_circuit_graph(graph: nx.MultiGraph,
                           pins_of_interest: Set,
                           vdd_pin,
