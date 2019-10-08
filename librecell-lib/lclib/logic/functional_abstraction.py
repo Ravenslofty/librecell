@@ -516,6 +516,7 @@ def test_analyze_circuit_graph():
     pins_of_interest = {'output'}
     result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd')
 
+    # Verify that the deduced boolean function is equal to the AND function.
     a, b = sympy.symbols('a, b')
     assert _bool_equals(result[sympy.Symbol('output')], a & b)
 
@@ -537,5 +538,7 @@ def test_analyze_circuit_graph_transmission_gate_xor():
     pins_of_interest = {'a', 'b', 'c'}
     result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd',
                                    user_input_nets={'a', 'b'})
+
+    # Verify that the deduced boolean function is equal to the XOR function.
     a, b = sympy.symbols('a, b')
     assert _bool_equals(result[sympy.Symbol('c')], a ^ b)
