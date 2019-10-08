@@ -452,8 +452,6 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                                                                     output_nodes=output_nodes,
                                                                     )
     print('conductivity_conditions = ', conductivity_conditions)
-    # For each output get the condition that it is connected to VDD.
-    vdd_formulas = {sympy.Symbol(output): cc[sympy.Symbol(vdd_pin)] for output, cc in conductivity_conditions.items()}
 
     formulas = dict()
     for output, cc in conductivity_conditions.items():
@@ -479,8 +477,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     print('formulas: ', formulas)
 
     # Convert from strings into sympy symbols.
-    inputs = {sympy.Symbol(i) for i in inputs}
-    print('vdd formulas: ', vdd_formulas)
+    inputs = {sympy.Symbol(i) for i in inputs} - {sympy.Symbol(vdd_pin), sympy.Symbol(gnd_pin)}
     print('inputs = ', inputs)
 
     # Detect loops in the circuit.
@@ -497,8 +494,8 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     print('cycles = ', cycles)
 
-    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol], output: sympy.Symbol):
-        f = formulas[output].copy()
+    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean], root: boolalg.Boolean):
+        f = formulas[root]
         # TODO: detect loops
         while f.atoms() - inputs:
             f = f.subs(formulas)
