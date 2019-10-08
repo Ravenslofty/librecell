@@ -175,9 +175,20 @@ def _get_conductivity_conditions(cmos_graph: nx.MultiGraph,
         logger.debug("Conductivity condition from '{}' to '{}': {}".format(source, target, f))
         return f
 
+    def remove_nodes(graph: nx.MultiGraph, delete_nodes: Set) -> nx.MultiGraph:
+        remaining_nodes = graph.node - delete_nodes
+        return graph.subgraph(remaining_nodes)
+
     # Calculate conductivity conditions from each input-pin (i.e. power pins and inputs to transmission gates) to output.
     conductivity_conditions = {
-        sympy.Symbol(i): conductivity_condition(cmos_graph, output_node, i)
+        sympy.Symbol(i):
+            conductivity_condition(
+                # Remove all other nodes connected to transmission input pins.
+                # This avoids for instance finding a path to GND leading over VDD.
+                remove_nodes(cmos_graph, transmission_input_pins - {i}),
+                output_node,
+                i
+            )
         for i in transmission_input_pins
     }
 
@@ -206,6 +217,9 @@ def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
 
     input_pins.add(vdd_node)
     input_pins.add(gnd_node)
+
+    logger.debug("Input nets: {}".format(input_pins))
+    logger.debug("Output net: {}".format(output_node))
 
     # Calculate conductivity conditions from each input-pin to output.
     conductivity_conditions = _get_conductivity_conditions(cmos_graph, input_pins, output_node)
@@ -277,15 +291,15 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
                                   vdd_node,
                                   gnd_node,
                                   output_nodes: Set,
-                                  input_pins: Set = None) \
-        -> Tuple[Dict[Any, boolalg.Boolean], Set[boolalg.Boolean]]:
+                                  user_input_pins: Set = None) \
+        -> Tuple[Dict[Any, boolalg.Boolean], set]:
     """
     Iteratively find formulas of intermediate nodes in complex gates which consist of multiple pull-up/pull-down networks.
     :param cmos_graph:
     :param vdd_node:
     :param gnd_node:
     :param output_nodes:
-    :param input_pins: Specify additional input pins that could otherwise not be deduced.
+    :param user_input_pins: Specify additional input pins that could otherwise not be deduced.
         This is mainly meant for inputs that connect not only to transistor gates but also source or drain.
     :return: (Dict[intermediate variable, expression for it], Set[input variables of the circuit])
     """
@@ -293,17 +307,20 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
     for n in output_nodes:
         assert n in cmos_graph.node, "Output node is not in the graph: {}".format(n)
 
-    if input_pins is None:
-        input_pins = set()
+    if user_input_pins is None:
+        user_input_pins = set()
     else:
-        input_pins = input_pins.copy()
+        user_input_pins = user_input_pins.copy()
 
-    input_pins.add(vdd_node)
-    input_pins.add(gnd_node)
+    user_input_pins.add(vdd_node)
+    user_input_pins.add(gnd_node)
 
     # Consider all nodes as input variables that are either connected to transistor
     # gates only or are specified by the caller.
-    inputs = _find_input_gates(cmos_graph) | input_pins
+    deduced_input_pins = _find_input_gates(cmos_graph)
+    logger.info("Deduced input pins: {}".format(deduced_input_pins))
+    inputs = deduced_input_pins | user_input_pins
+    logger.info("All input pins: {}".format(deduced_input_pins))
 
     unknown_nodes = {n for n in output_nodes}
     known_nodes = {i for i in inputs}
@@ -314,11 +331,8 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
         # Grab a node with unknown boolean expression.
         temp_output_node = unknown_nodes.pop()
         assert temp_output_node not in known_nodes
-        # f = _cmos_graph_to_formula(cmos_graph, vdd_node, gnd_node,
-        #                            temp_output_node,
-        #                            input_pins=input_pins)
-
-        conductivity_conditions = _get_conductivity_conditions(cmos_graph, input_pins, temp_output_node)
+        logger.debug("Find conductivity conditions for: {}".format(temp_output_node))
+        conductivity_conditions = _get_conductivity_conditions(cmos_graph, user_input_pins, temp_output_node)
 
         output_formulas[temp_output_node] = conductivity_conditions
         known_nodes.add(temp_output_node)
@@ -409,7 +423,8 @@ class OutputPin:
 def analyze_circuit_graph(graph: nx.MultiGraph,
                           pins_of_interest: Set,
                           vdd_pin,
-                          gnd_pin
+                          gnd_pin,
+                          user_input_nets: Set = None
                           ):
     gate_nets = _get_gate_nets(graph)
     nets = set(graph.nodes)
@@ -422,28 +437,56 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     logger.info("VDD net: {}".format(vdd_pin))
     logger.info("GND net: {}".format(gnd_pin))
 
-    input_nets = gate_nets - nets
+    if user_input_nets is None:
+        user_input_nets = set()
+
+    input_nets = user_input_nets | _find_input_gates(graph)
     output_nodes = pins_of_interest - input_nets
     logger.info("Detected input nets: {}".format(input_nets))
     logger.info("Detected output nets: {}".format(output_nodes))
 
     conductivity_conditions, inputs = complex_cmos_graph_to_formula(graph,
-                                                                    'vdd',
-                                                                    'gnd',
+                                                                    vdd_pin,
+                                                                    gnd_pin,
+                                                                    user_input_pins=input_nets,
                                                                     output_nodes=output_nodes,
                                                                     )
     print('conductivity_conditions = ', conductivity_conditions)
-    vdd_formulas = {sympy.Symbol(output): cc[sympy.Symbol('vdd')] for output, cc in conductivity_conditions.items()}
+    # For each output get the condition that it is connected to VDD.
+    vdd_formulas = {sympy.Symbol(output): cc[sympy.Symbol(vdd_pin)] for output, cc in conductivity_conditions.items()}
+
+    formulas = dict()
+    for output, cc in conductivity_conditions.items():
+        output = sympy.Symbol(output)
+        or_terms = []
+        for input_pin, condition in cc.items():
+            assert isinstance(input_pin, sympy.Symbol)
+            assert isinstance(condition, boolalg.Boolean)
+            # if `condition` then output is `connected` to `input_pin`.
+            connected_to_input = condition & input_pin
+            connected_to_input = simplify_logic(connected_to_input)
+            or_terms.append(connected_to_input)
+
+        # TODO: if more than one of the OR terms evaluates to True, then there could be a short circuit.
+
+        # Logic OR of all elements.
+        or_formula = sympy.Or(*or_terms)
+        formulas[output] = or_formula
+
+    # Add known values for VDD, GND
+    formulas[sympy.Symbol(vdd_pin)] = True
+    formulas[sympy.Symbol(gnd_pin)] = False
+    print('formulas: ', formulas)
 
     # Convert from strings into sympy symbols.
     inputs = {sympy.Symbol(i) for i in inputs}
-    print(vdd_formulas)
+    print('vdd formulas: ', vdd_formulas)
     print('inputs = ', inputs)
 
     # Detect loops in the circuit.
     # Create a graph representing the dependencies of the variables/expressions.
     dependency_graph = nx.DiGraph()
-    for atom, expression in vdd_formulas.items():
+    for atom, expression in formulas.items():
         dependency_graph.add_edge(atom, expression)
 
     # Check for cycles.
@@ -466,7 +509,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     # Solve equation system for output.
     for output_net in output_nodes:
         output_symbol = sympy.Symbol(output_net)
-        formula = resolve_intermediate_variables(vdd_formulas, output_symbol)
+        formula = resolve_intermediate_variables(formulas, output_symbol)
         formula = simplify_logic(formula)
         logger.info("Deduced formula: {} = {}".format(output_symbol, formula))
 
@@ -496,10 +539,11 @@ def test_analyze_circuit_graph_transmission_gate_xor():
     g.add_edge('vdd', 'b_not', ('b', ChannelType.PMOS))
     g.add_edge('gnd', 'b_not', ('b', ChannelType.NMOS))
     # Transmission gates
-    g.add_edge('a_not', 'c', ('b', ChannelType.PMOS))
-    g.add_edge('a_not', 'c', ('b_not', ChannelType.NMOS))
-    g.add_edge('a', 'c', ('b_not', ChannelType.PMOS))
-    g.add_edge('a', 'c', ('b', ChannelType.NMOS))
+    g.add_edge('a_not', 'c', ('b', ChannelType.NMOS))
+    g.add_edge('a_not', 'c', ('b_not', ChannelType.PMOS))
+    g.add_edge('a', 'c', ('b_not', ChannelType.NMOS))
+    g.add_edge('a', 'c', ('b', ChannelType.PMOS))
 
-    pins_of_interest = {'c'}
-    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd')
+    pins_of_interest = {'a', 'b', 'c'}
+    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd',
+                                   user_input_nets={'a', 'b'})
