@@ -413,7 +413,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                           vdd_pin,
                           gnd_pin,
                           user_input_nets: Set = None
-                          ):
+                          ) -> Dict[sympy.Symbol, boolalg.Boolean]:
     gate_nets = _get_gate_nets(graph)
     nets = set(graph.nodes)
     all_nets = gate_nets | nets
@@ -492,13 +492,15 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         return f
 
     # Solve equation system for output.
+    output_formulas = dict()
     for output_net in output_nodes:
         output_symbol = sympy.Symbol(output_net)
         formula = resolve_intermediate_variables(formulas, output_symbol)
         formula = simplify_logic(formula)
         logger.info("Deduced formula: {} = {}".format(output_symbol, formula))
+        output_formulas[output_symbol] = formula
 
-    assert False
+    return output_formulas
 
 
 def test_analyze_circuit_graph():
@@ -513,6 +515,9 @@ def test_analyze_circuit_graph():
 
     pins_of_interest = {'output'}
     result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd')
+
+    a, b = sympy.symbols('a, b')
+    assert _bool_equals(result[sympy.Symbol('output')], a & b)
 
 
 def test_analyze_circuit_graph_transmission_gate_xor():
@@ -532,3 +537,5 @@ def test_analyze_circuit_graph_transmission_gate_xor():
     pins_of_interest = {'a', 'b', 'c'}
     result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd',
                                    user_input_nets={'a', 'b'})
+    a, b = sympy.symbols('a, b')
+    assert _bool_equals(result[sympy.Symbol('c')], a ^ b)
