@@ -119,16 +119,17 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
     y_eff = 0
     if y % 2 == 1:
         # Top aligned.
-        y_eff = y * tech.unit_cell_height - 2 * tech.routing_grid_pitch_y
+        y_eff = y * tech.unit_cell_height - tech.unit_cell_height // 4
         y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) + tech.via_size[l_diff_contact] // 2 + \
                 tech.minimum_enclosure[(l_active, l_diff_contact)]
+        # y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) + h //2
         y_eff = y_eff - h
     else:
         # Bottom aligned
-        y_eff = y * tech.unit_cell_height + 1 * tech.routing_grid_pitch_y
+        y_eff = y * tech.unit_cell_height + tech.unit_cell_height // 4
         y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) - tech.via_size[l_diff_contact] // 2 - \
                 tech.minimum_enclosure[(l_active, l_diff_contact)]
-
+        # y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) - h // 2
     active_box = pya.Box(
         x_eff,
         y_eff,

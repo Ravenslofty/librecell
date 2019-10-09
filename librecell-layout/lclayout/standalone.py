@@ -141,39 +141,40 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                 shapes[via_layer].insert(via)
 
                 # Ensure minimum via enclosure.
-                for l in (l1, l2):
-                    # TODO: Check on which sides minimum enclosure is not yet satisfied by some wire.
+                if not debug_routing_graph:
+                    for l in (l1, l2):
+                        # TODO: Check on which sides minimum enclosure is not yet satisfied by some wire.
 
-                    neighbors = rt.neighbors((l, (x1, y1)))
-                    neighbors = [n for n in neighbors if n[0] == l]
+                        neighbors = rt.neighbors((l, (x1, y1)))
+                        neighbors = [n for n in neighbors if n[0] == l]
 
-                    w_ext = via_width // 2 + tech.minimum_enclosure[(l, via_layer)]
-                    w_noext = via_width // 2
+                        w_ext = via_width // 2 + tech.minimum_enclosure[(l, via_layer)]
+                        w_noext = via_width // 2
 
-                    # Check on which sides the enclosure must be extended.
-                    # Some sides will already be covered by a routing wire.
-                    ext_right = w_ext
-                    ext_upper = w_ext
-                    ext_left = w_ext
-                    ext_lower = w_ext
-                    # TODO
-                    # for _, (n_x, n_y) in neighbors:
-                    #     if n_x == x1:
-                    #         if n_y < y1:
-                    #             ext_lower = w_noext
-                    #         if n_y > y1:
-                    #             ext_upper = w_noext
-                    #     if n_y == y1:
-                    #         if n_x < x1:
-                    #             ext_left = w_noext
-                    #         if n_x > x1:
-                    #             ext_right = w_noext
+                        # Check on which sides the enclosure must be extended.
+                        # Some sides will already be covered by a routing wire.
+                        ext_right = w_ext
+                        ext_upper = w_ext
+                        ext_left = w_ext
+                        ext_lower = w_ext
+                        # TODO
+                        # for _, (n_x, n_y) in neighbors:
+                        #     if n_x == x1:
+                        #         if n_y < y1:
+                        #             ext_lower = w_noext
+                        #         if n_y > y1:
+                        #             ext_upper = w_noext
+                        #     if n_y == y1:
+                        #         if n_x < x1:
+                        #             ext_left = w_noext
+                        #         if n_x > x1:
+                        #             ext_right = w_noext
 
-                    enc = pya.Box(
-                        pya.Point(x1 - ext_left, y1 - ext_lower),
-                        pya.Point(x1 + ext_right, y1 + ext_upper)
-                    )
-                    shapes[l].insert(enc)
+                        enc = pya.Box(
+                            pya.Point(x1 - ext_left, y1 - ext_lower),
+                            pya.Point(x1 + ext_right, y1 + ext_upper)
+                        )
+                        shapes[l].insert(enc)
 
 
 def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: str,
@@ -347,6 +348,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Remove illegal routing nodes from graph and get a dict of legal routing nodes per layer.
     remove_illegal_routing_edges(G, shapes, tech)
+
+    # if not debug_routing_graph:
+    #     assert nx.is_connected(G)
 
     # Remove pre-routed edges from G.
     remove_existing_routing_edges(G, shapes, tech)

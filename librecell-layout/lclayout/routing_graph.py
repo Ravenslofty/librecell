@@ -186,8 +186,6 @@ def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Region],
             unconnected.add(n)
     graph.remove_nodes_from(unconnected)
 
-    assert nx.is_connected(graph)
-
 
 def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
     """ Remove edges in G that are already routed by a shape in `shapes`.
@@ -208,7 +206,7 @@ def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Region], te
 
 
 def extract_terminal_nodes(graph: nx.Graph,
-                           net_regions: Dict[str, List[pya.Region]],
+                           net_regions: Dict[str, Dict[str, pya.Region]],
                            tech):
     """ Get terminal nodes for each net.
     :param graph: Routing graph.
@@ -233,11 +231,12 @@ def extract_terminal_nodes(graph: nx.Graph,
                     if layer in tech.routing_layers:
                         # On routing layers enclosure can be added, so nodes are not required to be properly enclosed.
                         d = 1
+                        routing_terminals = interacting(routing_nodes[layer], pya.Region(net_shape), d)
                     else:
                         # A routing node must be properly enclosed to be used.
                         d = enc + max_via_size // 2
+                        routing_terminals = inside(routing_nodes[layer], pya.Region(net_shape), d)
 
-                    routing_terminals = inside(routing_nodes[layer], pya.Region(net_shape), d)
                     terminals_by_net.append((net, layer, routing_terminals))
                     # Don't use terminals for normal routing
                     routing_nodes[layer] -= set(routing_terminals)

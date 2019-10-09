@@ -117,11 +117,12 @@ def _route(detail_router: SignalRouter,
         G2 = graph.copy()
         if forbidden_nodes:
             # Need to delete some nodes from G.
+
             G2.remove_nodes_from(forbidden_nodes)
 
             for t1, t2 in combinations(terminals, 2):
                 assert nx.node_connectivity(G2, t1, t2) > 0, \
-                    Exception("Graph has been disconnected by removal of reserved nodes.")
+                    Exception("Graph has been disconnected by removal of reserved nodes ({}).".format(net))
 
             Gs[net] = G2
 
