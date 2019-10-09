@@ -223,23 +223,27 @@ def extract_terminal_nodes(graph: nx.Graph,
     terminals_by_net = []
     for net, regions in net_regions.items():
         for layer, region in regions.items():
-            for net_shape in region.each_merged():
+            if layer in routing_nodes:
+                for net_shape in region.each_merged():
 
-                possible_via_layers = [data['layer'] for _, _, data in via_layers.edges(layer, data=True)]
-                enc = max((tech.minimum_enclosure.get((layer, via_layer), 0) for via_layer in possible_via_layers))
-                max_via_size = max((tech.via_size[l] for l in possible_via_layers))
+                    possible_via_layers = [data['layer'] for _, _, data in via_layers.edges(layer, data=True)]
+                    enc = max((tech.minimum_enclosure.get((layer, via_layer), 0) for via_layer in possible_via_layers))
+                    max_via_size = max((tech.via_size[l] for l in possible_via_layers))
 
-                if layer in tech.routing_layers:
-                    # On routing layers enclosure can be added, so nodes are not required to be properly enclosed.
-                    d = 1
-                else:
-                    # A routing node must be properly enclosed to be used.
-                    d = enc + max_via_size // 2
-                routing_terminals = inside(routing_nodes[layer], pya.Region(net_shape), d)
-                terminals_by_net.append((net, layer, routing_terminals))
-                # Don't use terminals for normal routing
-                routing_nodes[layer] -= set(routing_terminals)
-                # TODO: need to be removed from G also. Better: construct edges in G afterwards.
+                    if layer in tech.routing_layers:
+                        # On routing layers enclosure can be added, so nodes are not required to be properly enclosed.
+                        d = 1
+                    else:
+                        # A routing node must be properly enclosed to be used.
+                        d = enc + max_via_size // 2
+
+                    routing_terminals = inside(routing_nodes[layer], pya.Region(net_shape), d)
+                    terminals_by_net.append((net, layer, routing_terminals))
+                    # Don't use terminals for normal routing
+                    routing_nodes[layer] -= set(routing_terminals)
+                    # TODO: need to be removed from G also. Better: construct edges in G afterwards.
+            else:
+                logger.warning("Layer '{}' does not contain any routing nodes.".format(layer))
 
     # Sanity check
     error = False
