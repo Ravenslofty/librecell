@@ -523,6 +523,10 @@ def test_analyze_circuit_graph():
 
 def test_analyze_circuit_graph_transmission_gate_xor():
     g = nx.MultiGraph()
+    # Represent an XOR gate with transmission-gates in its graph form.
+    # Edges correspond to transistors, nodes to nets. The 'key' of the edge
+    # Contains a Tuple ('net name of the gate', 'channel type').
+
     # Inverter A
     g.add_edge('vdd', 'a_not', ('a', ChannelType.PMOS))
     g.add_edge('gnd', 'a_not', ('a', ChannelType.NMOS))
@@ -535,6 +539,9 @@ def test_analyze_circuit_graph_transmission_gate_xor():
     g.add_edge('a', 'c', ('b_not', ChannelType.NMOS))
     g.add_edge('a', 'c', ('b', ChannelType.PMOS))
 
+    # Pin 'a' must be explicitly given as an input pin.
+    # It connects not only to gates but also to source/drains of transistors
+    # and therefore cannot be deduced to be an input pin.
     pins_of_interest = {'a', 'b', 'c'}
     result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, vdd_pin='vdd', gnd_pin='gnd',
                                    user_input_nets={'a', 'b'})
