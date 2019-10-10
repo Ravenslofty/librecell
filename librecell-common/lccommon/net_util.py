@@ -95,7 +95,6 @@ def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transisto
             Transistor(get_channel_type(t.model_name), t.ns, t.ng, t.nd, channel_width=t.params['W'], name=t.name)
             for t in circuit.content if type(t) is spice_parser.MOSFET
         ]
-
         return transistors, circuit.ports
 
 

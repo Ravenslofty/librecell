@@ -22,7 +22,8 @@ from liberty.types import *
 from liberty.arrays import *
 
 from ..logic.util import is_unate_in_xi
-from ..liberty.util import get_pin_information
+from ..liberty import util as liberty_util
+from ..logic import functional_abstraction
 
 from .util import *
 from .timing_combinatorial import characterize_comb_cell
@@ -31,6 +32,22 @@ import argparse
 import logging
 from copy import deepcopy
 from PySpice.Unit import *
+from lccommon import net_util
+from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
+import networkx as nx
+import sympy
+from typing import Iterable
+
+
+def _boolean_to_lambda(boolean: sympy.boolalg.Boolean):
+    """
+    Convert a sympy.boolalg.Boolean expression into a Python lambda function.
+    :param boolean:
+    :return:
+    """
+    simple = sympy.simplify(boolean)
+    f = sympy.lambdify(boolean.atoms(), simple)
+    return f
 
 
 def main():
@@ -123,8 +140,25 @@ def main():
     assert cell_group.args[0] == cell_name
     logger.info("Cell: {}".format(cell_name))
 
+    # Load netlist of cell
+    netlist_path = args.spice
+    logger.info('Load netlist: %s', netlist_path)
+    transistors_abstract, cell_pins = load_transistor_netlist(netlist_path, cell_name)
+    io_pins = net_util.get_io_pins(cell_pins)
+
+    # Detect power pins.
+    # TODO: don't decide based only on net name.
+    power_pins = [p for p in cell_pins if net_util.is_power_net(p)]
+    assert len(power_pins) == 2, "Expected to have 2 power pins."
+    vdd_pins = [p for p in power_pins if net_util.is_supply_net(p)]
+    gnd_pins = [p for p in power_pins if net_util.is_ground_net(p)]
+    assert len(vdd_pins) == 1, "Expected to find one VDD pin but found: {}".format(vdd_pins)
+    assert len(gnd_pins) == 1, "Expected to find one GND pin but found: {}".format(gnd_pins)
+    vdd_pin = vdd_pins[0]
+    gnd_pin = gnd_pins[0]
+
     # Get information on pins
-    input_pins, output_pins, output_functions = get_pin_information(cell_group)
+    input_pins, output_pins, output_functions_user = liberty_util.get_pin_information(cell_group)
 
     if len(input_pins) == 0:
         msg = "Cell has no input pins."
@@ -135,6 +169,47 @@ def main():
         msg = "Cell has no output pins."
         logger.error(msg)
         assert False, msg
+
+    def _transistors2multigraph(transistors) -> nx.MultiGraph:
+        """ Create a graph representing the transistor network.
+            Each edge corresponds to a transistor, each node to a net.
+        """
+        G = nx.MultiGraph()
+        for t in transistors:
+            G.add_edge(t.left, t.right, (t.gate, t.channel_type))
+        assert nx.is_connected(G)
+        return G
+
+    # Derive boolean functions for the outputs from the netlist.
+    logger.debug("Derive boolean functions for the outputs based on the netlist.")
+    transistor_graph = _transistors2multigraph(transistors_abstract)
+    output_functions_deduced = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
+                                                                            pins_of_interest=io_pins,
+                                                                            vdd_pin=vdd_pin,
+                                                                            gnd_pin=gnd_pin,
+                                                                            user_input_nets=input_pins)
+    # Convert keys into strings (they are `sympy.Symbol`s now)
+    output_functions_deduced = {output.name: function for output, function in output_functions_deduced.items()}
+
+    # Log deduced output functions.
+    for output_name, function in output_functions_deduced.items():
+        logger.info("Deduced output function: {} = {}".format(output_name, function))
+
+    for output_name, function in output_functions_user.items():
+        logger.info("User supplied output function: {} = {}".format(output_name, function))
+        assert output_name in output_functions_deduced, "No function has been deduced for output pin '{}'.".format(
+            output_name)
+        # Consistency check: verify that the deduced output formula is equal to the one defined in the liberty file.
+        equal = functional_abstraction.bool_equals(function, output_functions_deduced[output_name])
+        if not equal:
+            msg = "User supplied function does not match the deduced function for pin '{}'".format(output_name)
+            logger.error(msg)
+
+    # Convert deduced output functions into Python lambda functions.
+    output_functions = {
+        name: _boolean_to_lambda(f)
+        for name, f in output_functions_deduced.items()
+    }
 
     # Get timing corner from liberty file.
     # TODO: let user overwrite it.

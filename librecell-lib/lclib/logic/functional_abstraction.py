@@ -32,7 +32,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _bool_equals(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
+def bool_equals(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
     """
     Check equality of two boolean formulas.
     :param f1:
@@ -268,7 +268,7 @@ def _is_complementary(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
     :param f2:
     :return:
     """
-    return _bool_equals(f1, ~f2)
+    return bool_equals(f1, ~f2)
 
 
 def test_cmos_graph_to_formula():
@@ -414,6 +414,8 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                           gnd_pin,
                           user_input_nets: Set = None
                           ) -> Dict[sympy.Symbol, boolalg.Boolean]:
+    pins_of_interest = set(pins_of_interest)
+
     gate_nets = _get_gate_nets(graph)
     nets = set(graph.nodes)
     all_nets = gate_nets | nets
@@ -427,6 +429,8 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     if user_input_nets is None:
         user_input_nets = set()
+    else:
+        user_input_nets = set(user_input_nets)
 
     input_nets = user_input_nets | _find_input_gates(graph)
     output_nodes = pins_of_interest - input_nets
@@ -518,7 +522,7 @@ def test_analyze_circuit_graph():
 
     # Verify that the deduced boolean function is equal to the AND function.
     a, b = sympy.symbols('a, b')
-    assert _bool_equals(result[sympy.Symbol('output')], a & b)
+    assert bool_equals(result[sympy.Symbol('output')], a & b)
 
 
 def test_analyze_circuit_graph_transmission_gate_xor():
@@ -548,4 +552,4 @@ def test_analyze_circuit_graph_transmission_gate_xor():
 
     # Verify that the deduced boolean function is equal to the XOR function.
     a, b = sympy.symbols('a, b')
-    assert _bool_equals(result[sympy.Symbol('c')], a ^ b)
+    assert bool_equals(result[sympy.Symbol('c')], a ^ b)
