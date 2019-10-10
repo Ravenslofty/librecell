@@ -17,7 +17,9 @@
 ## You should have received a copy of the GNU General Public License
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 ##
-from liberty.parser import parse_liberty
+
+from liberty import parser as liberty_parser
+from liberty import boolean_functions as liberty_bools
 from liberty.types import *
 from liberty.arrays import *
 
@@ -102,7 +104,7 @@ def main():
     with open(lib_file) as f:
         data = f.read()
 
-    library = parse_liberty(data)
+    library = liberty_parser.parse_liberty(data)
 
     # Check if the delay model is supported.
     delay_model = library['delay_model']
@@ -190,11 +192,13 @@ def main():
                                                                             user_input_nets=input_pins)
     # Convert keys into strings (they are `sympy.Symbol`s now)
     output_functions_deduced = {output.name: function for output, function in output_functions_deduced.items()}
+    output_functions_symbolic = output_functions_deduced
 
     # Log deduced output functions.
     for output_name, function in output_functions_deduced.items():
         logger.info("Deduced output function: {} = {}".format(output_name, function))
 
+    # Merge deduced output functions with the ones read from the liberty file and perform consistency check.
     for output_name, function in output_functions_user.items():
         logger.info("User supplied output function: {} = {}".format(output_name, function))
         assert output_name in output_functions_deduced, "No function has been deduced for output pin '{}'.".format(
@@ -205,10 +209,15 @@ def main():
             msg = "User supplied function does not match the deduced function for pin '{}'".format(output_name)
             logger.error(msg)
 
+        if equal:
+            # Take the function defined by the liberty file.
+            # This might be desired because it is in another form (CND, DNF,...).
+            output_functions_symbolic[output_name] = function
+
     # Convert deduced output functions into Python lambda functions.
     output_functions = {
         name: _boolean_to_lambda(f)
-        for name, f in output_functions_deduced.items()
+        for name, f in output_functions_symbolic.items()
     }
 
     # Get timing corner from liberty file.
@@ -269,6 +278,10 @@ def main():
     logger.debug("Measuring timing.")
     for output_pin in output_pins:
         output_pin_group = new_cell_group.get_group('pin', output_pin)
+
+        # Insert boolean function of output.
+        output_pin_group['function'] = liberty_bools.format_boolean_function(output_functions_symbolic[output_pin])
+
         for related_pin in input_pins:
             logger.info("Timing arc: {} -> {}".format(related_pin, output_pin))
 
