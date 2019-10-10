@@ -280,7 +280,7 @@ def main():
         output_pin_group = new_cell_group.get_group('pin', output_pin)
 
         # Insert boolean function of output.
-        output_pin_group['function'] = liberty_bools.format_boolean_function(output_functions_symbolic[output_pin])
+        output_pin_group.set_boolean_function('function', output_functions_symbolic[output_pin])
 
         for related_pin in input_pins:
             logger.info("Timing arc: {} -> {}".format(related_pin, output_pin))
