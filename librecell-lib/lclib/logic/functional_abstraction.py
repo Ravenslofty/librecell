@@ -292,7 +292,7 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
                                   gnd_node,
                                   output_nodes: Set,
                                   user_input_pins: Set = None) \
-        -> Tuple[Dict[Any, boolalg.Boolean], set]:
+        -> Tuple[Dict[Any, Dict[sympy.Symbol, boolalg.Boolean]], set]:
     """
     Iteratively find formulas of intermediate nodes in complex gates which consist of multiple pull-up/pull-down networks.
     :param cmos_graph:
@@ -344,14 +344,6 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
         unknown_nodes = (unknown_nodes | inputs_to_f) - known_nodes
 
     return output_formulas, inputs
-
-
-def _convert_graph_into_sympy_symbols(graph: nx.MultiGraph) -> nx.MultiGraph:
-    g2 = nx.MultiGraph()
-    for n1, n2, (gate_net, channel_type) in graph.edges(keys=True):
-        g2.add_edge(sympy.Symbol(n1), sympy.Symbol(n2), (sympy.Symbol(gate_net, channel_type)))
-
-    return g2
 
 
 def test_complex_cmos_graph_to_formula():
@@ -445,9 +437,11 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                                                                     )
     print('conductivity_conditions = ', conductivity_conditions)
 
+    # Convert keys into symbols.
+    conductivity_conditions = {sympy.Symbol(k): v for k,v in conductivity_conditions.items()}
+
     formulas = dict()
     for output, cc in conductivity_conditions.items():
-        output = sympy.Symbol(output)
         or_terms = []
         for input_pin, condition in cc.items():
             assert isinstance(input_pin, sympy.Symbol)
@@ -475,8 +469,22 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     # Detect loops in the circuit.
     # Create a graph representing the dependencies of the variables/expressions.
     dependency_graph = nx.DiGraph()
-    for atom, expression in formulas.items():
-        dependency_graph.add_edge(atom, expression)
+    for output, expression in formulas.items():
+        print(output, ' = ', expression)
+
+        if isinstance(expression, boolalg.Boolean):
+            for atom in expression.atoms():
+                dependency_graph.add_edge(output, atom)
+        elif isinstance(expression, bool):
+            # Handle True and False constants.
+            dependency_graph.add_edge(output, expression)
+        else:
+            assert False, "Type not supported: '{}'".format(type(expression))
+
+    import matplotlib.pyplot as plt
+    nx.draw_networkx(dependency_graph)
+    plt.draw()
+    plt.show()
 
     # Check for cycles.
     cycles = list(nx.simple_cycles(dependency_graph))
