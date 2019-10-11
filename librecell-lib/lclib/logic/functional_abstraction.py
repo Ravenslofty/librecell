@@ -522,7 +522,43 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         print(f)
         return f
 
+    def boolean_derivatives(f: boolalg.Boolean, x: sympy.Symbol) \
+            -> Tuple[boolalg.Boolean, boolalg.Boolean, boolalg.Boolean]:
+        # TODO: Use this also for is_unate_in_xi in util.
+        assert isinstance(x, sympy.Symbol)
+
+        f0 = simplify_logic(f.subs({x: False}))
+        f1 = simplify_logic(f.subs({x: True}))
+        positive_derivative = simplify_logic(~f0 & f1)
+        negative_derivative = simplify_logic(f0 & ~f1)
+
+        derivative = simplify_logic(positive_derivative | negative_derivative) # == f0 ^ f1
+        print('calculate derivative: d/d{} ({})) = {}'.format(x, f, derivative))
+        return derivative, positive_derivative, negative_derivative
+
+    # Analyze potential memory elements.
+    for cycle in cycles:
+        assert len(cycle) >= 2, "Cycle is expected to have a length longer than 1."
+        # TODO: cycle_end should be the output of the memory, cycle_start the input.
+        # TODO: 1. find memory cycles, 2. trace back output until input pins or memory, 3. resolve memory, ... (Use some sort of task queue.)
+        # memory_outputs = [c for c in cycle if
+        #
+        #                   ]
+        memory_output = cycle[0]
+
+        # Break the loop by treating cycle_start as an unknown.
+        # _formulas = {k: v for k, v in formulas.items() if k in cycle}
+        cycle_start_resolved = resolve_intermediate_variables(formulas, memory_output)
+
+        d, dp, dn = boolean_derivatives(cycle_start_resolved, memory_output)
+
+        write_condition = ~dp
+        oscillation_condition = dn
+        print('write_condition = ', write_condition)
+        print('oscillation_condition = ', oscillation_condition)
+
     # Solve equation system for output.
+    # TODO: stop resolving at memory elements.
     output_formulas = dict()
     for output_net in output_nodes:
         output_symbol = sympy.Symbol(output_net)
