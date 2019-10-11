@@ -438,7 +438,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     print('conductivity_conditions = ', conductivity_conditions)
 
     # Convert keys into symbols.
-    conductivity_conditions = {sympy.Symbol(k): v for k,v in conductivity_conditions.items()}
+    conductivity_conditions = {sympy.Symbol(k): v for k, v in conductivity_conditions.items()}
 
     formulas = dict()
     for output, cc in conductivity_conditions.items():
@@ -458,22 +458,26 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         formulas[output] = or_formula
 
     # Add known values for VDD, GND
-    formulas[sympy.Symbol(vdd_pin)] = True
-    formulas[sympy.Symbol(gnd_pin)] = False
-    print('formulas: ', formulas)
+    constants = dict()
+    # formulas[sympy.Symbol(vdd_pin)] = True
+    # formulas[sympy.Symbol(gnd_pin)] = False
+    constants[sympy.Symbol(vdd_pin)] = True
+    constants[sympy.Symbol(gnd_pin)] = False
+    # Simplify formulas by substituting VDD and GND with known values.
+    formulas = {k: simplify_logic(f.subs(constants)) for k, f in formulas.items()}
+    logger.debug('formulas = {}'.format(formulas))
 
     # Convert from strings into sympy symbols.
     inputs = {sympy.Symbol(i) for i in inputs} - {sympy.Symbol(vdd_pin), sympy.Symbol(gnd_pin)}
-    print('inputs = ', inputs)
+    logger.debug('inputs = {}'.format(inputs))
 
     # Detect loops in the circuit.
     # Create a graph representing the dependencies of the variables/expressions.
     dependency_graph = nx.DiGraph()
     for output, expression in formulas.items():
-        print(output, ' = ', expression)
-
         if isinstance(expression, boolalg.Boolean):
             for atom in expression.atoms():
+                # Output depends on every variable (atom) in the expression.
                 dependency_graph.add_edge(output, atom)
         elif isinstance(expression, bool):
             # Handle True and False constants.
@@ -488,19 +492,34 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     # Check for cycles.
     cycles = list(nx.simple_cycles(dependency_graph))
-    logger.debug("Number of feed-back loops: {}".format(len(cycles)))
+    logger.info("Number of feed-back loops: {}".format(len(cycles)))
 
-    assert len(cycles) == 0, "Abstraction of feed-back loops not yet supported."
+    for cycle in cycles:
+        logger.info("cycle: {}".format(cycle))
+        print('cycle = ', cycle)
+        for el in cycle:
+            print('--> {} = {}'.format(el, formulas[el]))
+
+    # assert len(cycles) == 0, "Abstraction of feed-back loops is not yet supported."
 
     print('cycles = ', cycles)
 
     def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean], root: boolalg.Boolean):
         f = formulas[root]
-        # TODO: detect loops
+        f = simplify_logic(f)
+        # Remember previous results to be able to detect loops.
+        previous_formulas = {f}
         while f.atoms() - inputs:
             f = f.subs(formulas)
             f = simplify_logic(f)
-            print(f)
+
+            if f in previous_formulas:
+                # Break the loop.
+                print('loop detected')
+                break
+
+            previous_formulas.add(f)
+        print(f)
         return f
 
     # Solve equation system for output.
@@ -512,6 +531,8 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         logger.info("Deduced formula: {} = {}".format(output_symbol, formula))
         output_formulas[output_symbol] = formula
 
+    print(output_formulas)
+    assert len(cycles) == 0, "Abstraction of feed-back loops is not yet supported."
     return output_formulas
 
 
