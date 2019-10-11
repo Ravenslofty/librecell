@@ -481,10 +481,10 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         else:
             assert False, "Type not supported: '{}'".format(type(expression))
 
-    import matplotlib.pyplot as plt
-    nx.draw_networkx(dependency_graph)
-    plt.draw()
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # nx.draw_networkx(dependency_graph)
+    # plt.draw()
+    # plt.show()
 
     # Check for cycles.
     cycles = list(nx.simple_cycles(dependency_graph))
