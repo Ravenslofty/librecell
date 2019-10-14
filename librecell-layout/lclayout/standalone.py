@@ -296,11 +296,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     for net, shape in [(SUPPLY_VOLTAGE_NET, vdd_rail), (GND_NET, vss_rail)]:
         net_regions.setdefault(net, {}).setdefault(tech.power_layer, pya.Region()).insert(shape)
 
-    # Register Pins/Ports for LEF file.
-    lef_ports = {}
-    lef_ports.setdefault(SUPPLY_VOLTAGE_NET, []).append((tech.power_layer, vdd_rail))
-    lef_ports.setdefault(GND_NET, []).append((tech.power_layer, vss_rail))
-
     # Pre-route vertical gate-gate connections
     for i in range(abstract_cell.width):
         u = abstract_cell.upper[i]
@@ -531,6 +526,12 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
             _merge_all_layers(shapes)
 
+
+    # Register Pins/Ports for LEF file.
+    lef_ports = {}
+    lef_ports.setdefault(SUPPLY_VOLTAGE_NET, []).append((tech.power_layer, vdd_rail))
+    lef_ports.setdefault(GND_NET, []).append((tech.power_layer, vss_rail))
+
     if not debug_routing_graph:
 
         # Clean DRC violations that are not handled above.
@@ -574,13 +575,17 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
             logger.debug('Add pin label: %s, (%d, %d)', net_name, x, y)
             _draw_label(shapes, tech.pin_layer + '_label', (x, y), net_name)
 
+        # Add label for power rails
+        _draw_label(shapes, tech.power_layer + '_label', (cell_width // 2, 0), GND_NET)
+        _draw_label(shapes, tech.power_layer + '_label', (cell_width // 2, cell_height), SUPPLY_VOLTAGE_NET)
+
         # Add pin shapes.
         for net_name, pin_shapes in pin_shapes_by_net.items():
             shapes[tech.pin_layer + '_pin'].insert(pin_shapes)
 
-        # Add label for power rails
-        _draw_label(shapes, tech.power_layer + '_label', (cell_width // 2, 0), GND_NET)
-        _draw_label(shapes, tech.power_layer + '_label', (cell_width // 2, cell_height), SUPPLY_VOLTAGE_NET)
+        # Add pin shapes for power rails.
+        shapes[tech.pin_layer + '_pin'].insert(vdd_rail)
+        shapes[tech.pin_layer + '_pin'].insert(vss_rail)
 
     return top, lef_ports
 
