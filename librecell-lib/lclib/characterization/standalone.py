@@ -187,8 +187,7 @@ def main():
     transistor_graph = _transistors2multigraph(transistors_abstract)
     output_functions_deduced = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
                                                                             pins_of_interest=io_pins,
-                                                                            vdd_pin=vdd_pin,
-                                                                            gnd_pin=gnd_pin,
+                                                                            constant_input_pins={vdd_pin: True, gnd_pin: False},
                                                                             user_input_nets=input_pins)
     # Convert keys into strings (they are `sympy.Symbol`s now)
     output_functions_deduced = {output.name: function for output, function in output_functions_deduced.items()}
