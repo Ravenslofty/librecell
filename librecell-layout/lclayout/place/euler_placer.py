@@ -35,6 +35,7 @@ from . import eulertours
 from . import partition
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,33 +59,93 @@ def _trim_none(l: List) -> List:
     return l
 
 
-def _assemble_cell(nmos: List[Transistor], pmos: List[Transistor]) -> Cell:
+def _remove_gaps(cell: Cell) -> Cell:
+    """
+    Remove unnecessary diffusion gaps where possible.
+    :param cell: The input cell.
+    :return: The compacted.
+    """
+
+    upper = []
+    lower = []
+
+    n = len(cell.upper)
+    assert n == len(cell.lower)
+
+    for i in range(n):
+        l = cell.lower[i]
+        u = cell.upper[i]
+
+        if u is not None or l is not None:
+            upper.append(u)
+            lower.append(l)
+        else:
+            # Both places are empty.
+            assert u is None and l is None
+
+            # Place the gap only if it is need to avoid a short circuit.
+            if i >= 1 and i + 1 < n:
+                prev_u = upper[-1]
+                prev_l = lower[-1]
+                next_u = cell.upper[i + 1]
+                next_l = cell.lower[i + 1]
+
+                # Check if the upper or lower row needs the diffusion gap.
+                need_gap = __need_gap(prev_u, next_u) or __need_gap(prev_l, next_l)
+
+                if need_gap:
+                    upper.append(None)
+                    lower.append(None)
+
+    return _assemble_cell(lower, upper)
+
+
+def _assemble_cell(lower_row: List[Transistor], upper_row: List[Transistor]) -> Cell:
     """ Build a Cell object from a nmos and pmos row.
-    :param nmos:
-    :param pmos:
+    :param lower_row:
+    :param upper_row:
     :return:
     """
-    width = max(len(nmos), len(pmos))
+    width = max(len(lower_row), len(upper_row))
     cell = Cell(width)
-    for i, t in enumerate(pmos):
+    for i, t in enumerate(upper_row):
         cell.upper[i] = t
 
-    for i, t in enumerate(nmos):
+    for i, t in enumerate(lower_row):
         cell.lower[i] = t
     return cell
 
 
-def _io_ordering_cost(row: List[Transistor], input_nets: Set[Any], output_nets: Set[Any]) -> float:
+def _row_io_ordering_cost(row: List[Transistor], input_nets: Set[Any], output_nets: Set[Any]) -> float:
     """ Return a low cost if input nets are placed on the left side and outputs on the right side.
     """
 
-    w = len(row)
+    nets = [(net, pos) for pos, net in
+            enumerate(chain(*[[t.left, t.gate, t.right] for t in row if t is not None]))
+            ]
+    return _io_ordering_cost(nets, input_nets, output_nets)
+
+
+def _io_ordering_cost(nets: Iterable[Tuple[Hashable, float]], input_nets: Set[Any], output_nets: Set[Any]) -> float:
+    """ Return a low cost if input nets are placed on the left side and outputs on the right side.
+    :param nets: Tuples of (net name, x-position)
+    :param input_nets: Names of input nets.
+    :param output_nets: Names of output nets.
+    :return: Returns a cost which prefers that input nets are placed on the left and output nets are placed on the right.
+    """
+
+    nets = list(nets)
+
     cost = 0
-    for pos, net in enumerate(chain(*[[t.left, t.gate, t.right] for t in row if t is not None])):
+    min_x = min((pos for _, pos in nets))
+    max_x = max((pos for _, pos in nets))
+
+    for net, pos in nets:
         if net in input_nets:
-            cost += pos
+            cost += pos - min_x
         elif net in output_nets:
-            cost += w - pos
+            cost += max_x - pos
+
     return cost
 
 
@@ -110,9 +171,9 @@ def _cell_quality(cell: Cell, input_nets, output_nets):
     :param output_nets:
     :return:
     """
-    return _num_gate_matches(cell), -wiring_length_bbox(cell), - _io_ordering_cost(cell.upper, input_nets,
-                                                                                   output_nets) - \
-           _io_ordering_cost(cell.lower, input_nets, output_nets)
+    return _num_gate_matches(cell), -wiring_length_bbox(cell), \
+           - _row_io_ordering_cost(cell.upper, input_nets, output_nets) \
+           - _row_io_ordering_cost(cell.lower, input_nets, output_nets)
 
 
 def __need_gap(left: Transistor, right: Transistor):
@@ -164,15 +225,6 @@ def wiring_length_bbox(cell: Cell) -> float:
     The bounding box size of the nets is used as an approximation.
     """
 
-    # TODO use _wiring_length_bbox1
-    # Find for each net its leftmost (min) and rightmost (max) occurrence.
-    def find_all_bbox_x(row, minmax_x):
-        for pos, net in enumerate(chain(*[[t.left, t.gate, t.right] for t in row if t is not None])):
-            minmax_x[net] = (
-                min(pos, minmax_x.get(net, (pos, pos))[0]),
-                max(pos, minmax_x.get(net, (pos, pos))[1])
-            )
-
     net_positions = []
     for row in (cell.upper, cell.lower):
         for pos, net in enumerate(chain(*[[t.left, t.gate, t.right] for t in row if t is not None])):
@@ -193,6 +245,7 @@ class HierarchicalPlacer(TransistorPlacer):
         :param transistors:
         :return:
         """
+
         # Split into nmos / pmos
         nmos = [t for t in transistors if t.channel_type == ChannelType.NMOS]
         pmos = [t for t in transistors if t.channel_type == ChannelType.PMOS]
@@ -209,6 +262,7 @@ class HierarchicalPlacer(TransistorPlacer):
             """
             assert len(g) > 0
             placements = _find_optimal_single_row_placements(g)
+            # Append diffusion gap.
             placements = [list(chain(p, [None])) for p in placements]
             return placements
 
@@ -285,17 +339,24 @@ class HierarchicalPlacer(TransistorPlacer):
         best_subcell_placements = []
         best_wiring_length = None
 
+        # Extract input nets.
+        input_nets = net_util.get_cell_inputs(transistors)
+        output_nets = {} # TODO: extract output nets.
+
         for ps, ns in subcell_placements:
             ppos = get_subcell_net_position(ps)
             npos = get_subcell_net_position(ns)
 
-            # TODO: make quality metric more flexible.
+            # TODO: make quality metric parametrizable.
+            # Optimize for wiring length estimate and break ties with the ordering of IO nets.
+            # Want input nets to be on the left.
             wiring_length = _wiring_length_bbox1(chain(ppos, npos))
+            cost = wiring_length, _io_ordering_cost(chain(ppos, npos), input_nets, output_nets)
 
-            if best_wiring_length is None or wiring_length < best_wiring_length:
+            if best_wiring_length is None or cost < best_wiring_length:
                 best_subcell_placements.clear()
-                best_wiring_length = wiring_length
-            if wiring_length <= best_wiring_length:
+                best_wiring_length = cost
+            if cost <= best_wiring_length:
                 best_subcell_placements.append((ps, ns))
 
         logger.debug('Number of best sub cell placements: %d', len(best_subcell_placements))
@@ -425,13 +486,10 @@ class HierarchicalPlacer(TransistorPlacer):
                 transistors = intra_placements[n]
                 n_row.extend(transistors)
 
-            # TODO: remove gaps where possible
-
-            # Remove Nones at begin and end of row
-            p_row = _trim_none(p_row)
-            n_row = _trim_none(n_row)
-
             cell = _assemble_cell(n_row, p_row)
+
+            # Remove gaps where possible.
+            cell = _remove_gaps(cell)
 
             input_nets = net_util.get_cell_inputs(transistors)
             output_nets = {}
@@ -453,7 +511,7 @@ def _transistors2graph(transistors: Iterable[Transistor]) -> nx.MultiGraph:
     G = nx.MultiGraph()
     for t in transistors:
         G.add_edge(t.left, t.right, t)
-    assert nx.is_connected(G)
+    # assert nx.is_connected(G)
     return G
 
 
@@ -519,6 +577,7 @@ def _find_optimal_single_row_placements(transistor_graph: nx.MultiGraph) -> List
         # assert len(_optimal) == len(_optimal_set)
         # Deduplicate
         optimal = list(_optimal_set)
+
         return optimal
 
     def edges2transistors(edges: Tuple[Any, Any, int]) -> List[Transistor]:
@@ -574,6 +633,11 @@ class EulerPlacer(TransistorPlacer):
         logger.debug('Number of NMOS placements with cyclic shifts: %d', len(all_nmos))
         logger.debug('Number of PMOS placements with cyclic shifts: %d', len(all_pmos))
 
+        if len(all_nmos) * len(all_pmos) > 100000:
+            # Notify the user that the hierarchical placer might be better.
+            logger.info('`EulerPlacer` will not perform well in this case. '
+                        '`HierarchicalPlacer` could be a better choice.')
+
         # Find best nmos/pmos row pair.
 
         pairs = product(all_nmos, all_pmos)
@@ -587,8 +651,8 @@ class EulerPlacer(TransistorPlacer):
         best_cells_wiring = all_min(best_cells_gate_match, key=wiring_length_bbox)
 
         def io_ordering_cost(cell: Cell):
-            return _io_ordering_cost(cell.lower, input_nets, output_nets) + \
-                   _io_ordering_cost(cell.upper, input_nets, output_nets)
+            return _row_io_ordering_cost(cell.lower, input_nets, output_nets) + \
+                   _row_io_ordering_cost(cell.upper, input_nets, output_nets)
 
         best_cells_io_ordering = all_min(best_cells_wiring, key=io_ordering_cost)
         best_cells = best_cells_io_ordering

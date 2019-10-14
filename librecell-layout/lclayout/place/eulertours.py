@@ -24,6 +24,10 @@ from itertools import combinations, permutations, chain, product
 
 from typing import List, Set
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def construct_even_degree_graphs(G: nx.MultiGraph) -> List[nx.MultiGraph]:
     """ Construct all graphs of even degree by inserting a minimal number of virtual edges.
@@ -33,7 +37,10 @@ def construct_even_degree_graphs(G: nx.MultiGraph) -> List[nx.MultiGraph]:
     """
 
     assert isinstance(G, nx.MultiGraph), Exception("G must be a nx.MultiGraph.")
-    assert nx.is_connected(G), Exception("G must be a connected graph.")
+
+    if not nx.is_connected(G):
+        logger.debug("Graph is not connected. Assuming there is a transmission gate.")
+
     # Find nodes with odd degree.
     odd_degree_nodes = [n for n, deg in G.degree if deg % 2 == 1]
 
@@ -41,6 +48,7 @@ def construct_even_degree_graphs(G: nx.MultiGraph) -> List[nx.MultiGraph]:
 
     if len(odd_degree_nodes) == 0:
         # All node degrees are already even. Nothing to do.
+        assert nx.is_connected(G), Exception("G must be a connected graph.")
         return [G.copy()]
 
     """
@@ -74,7 +82,11 @@ def construct_even_degree_graphs(G: nx.MultiGraph) -> List[nx.MultiGraph]:
             for n, deg in G2.degree:
                 assert deg % 2 == 0
 
-            even_degree_graphs.append(G2)
+            if nx.is_connected(G2):
+                # In presence of transmission gates the resulting graph might not be connected.
+                # Only store the graphs that are connected.
+                # TODO: This might not scale if there are many transmission gates => Handle transmission gates more efficiently.
+                even_degree_graphs.append(G2)
 
     for g1, g2 in combinations(even_degree_graphs, 2):
         assert g1 != g2, "There should be no duplicates."

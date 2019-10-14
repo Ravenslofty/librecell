@@ -25,6 +25,7 @@ import numpy
 
 from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
+
 from .place.place import TransistorPlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer
@@ -34,6 +35,7 @@ from .graphrouter.pathfinder import PathFinderGraphRouter
 from .graphrouter.signal_router import DijkstraRouter
 
 from .layout.transistor import *
+from .layout import cell_template
 from .layout.notch_removal import fill_notches
 from .lef import types as lef
 
@@ -69,7 +71,8 @@ def _draw_label(shapes, layer, pos: Tuple[int, int], text: str) -> None:
     :return: None
     """
     x, y = pos
-    shapes[layer].insert(pya.Text.new(text, pya.Trans(x, y), 0.1, 2))
+    # shapes[layer].insert(pya.Text.new(text, pya.Trans(x, y), 0.1, 2))
+    shapes[layer].insert(pya.Text.new(text, x, y))
 
 
 def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
@@ -82,7 +85,7 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
     :param G: Full graph of routing grid
     :param rt: Graph representing the wires
     :param tech: module containing technology information
-    :param debug_routing_graph: Draw narrowser wires for easier visual inspection
+    :param debug_routing_graph: Draw narrower wires for easier visual inspection
     :return:
     """
 
@@ -199,6 +202,10 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     transistors_abstract, cell_pins = load_transistor_netlist(netlist_path, cell_name)
     io_pins = net_util.get_io_pins(cell_pins)
 
+    # Convert transistor dimensions into data base units.
+    for t in transistors_abstract:
+        t.channel_width = t.channel_width / tech.db_unit
+
     top = layout.create_cell(cell_name)
 
     # Setup layers.
@@ -223,7 +230,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         t.channel_width = t.channel_width * tech.transistor_channel_width_sizing
 
         min_size = tech.minimum_gate_width_nfet if t.channel_type == ChannelType.NMOS else tech.minimum_gate_width_pfet
-        min_size *= tech.db_unit
 
         if t.channel_width < min_size:
             logger.warning("Channel width too small changing it to minimal size: %.2e < %.2e", t.channel_width,
@@ -256,9 +262,14 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     # Create mapping from nets to {layer: region}
     net_regions = {}
 
+    # Load spacing rules in form of a graph.
+    spacing_graph = tech_util.spacing_graph(tech.min_spacing)
+
     # Draw cell template.
-    # Draw abutment box.
-    shapes[l_abutment_box].insert(pya.Box(0, 0, cell_width, cell_height))
+    cell_template.draw_cell_template(shapes,
+                                     cell_shape=(cell_width, cell_height),
+                                     nwell_pwell_spacing=spacing_graph[l_nwell][l_pwell]['min_spacing']
+                                     )
 
     # Draw power rails.
     vdd_rail = pya.Path([pya.Point(0, tech.unit_cell_height), pya.Point(cell_width, tech.unit_cell_height)],
@@ -285,11 +296,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     # Register power rails as net regions.
     for net, shape in [(SUPPLY_VOLTAGE_NET, vdd_rail), (GND_NET, vss_rail)]:
         net_regions.setdefault(net, {}).setdefault(tech.power_layer, pya.Region()).insert(shape)
-
-    # Register Pins/Ports for LEF file.
-    lef_ports = {}
-    lef_ports.setdefault(SUPPLY_VOLTAGE_NET, []).append((tech.power_layer, vdd_rail))
-    lef_ports.setdefault(GND_NET, []).append((tech.power_layer, vss_rail))
 
     # Pre-route vertical gate-gate connections
     for i in range(abstract_cell.width):
@@ -335,13 +341,13 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     G = create_routing_graph_base(grid, tech)
 
     # Remove illegal routing nodes from graph and get a dict of legal routing nodes per layer.
-    routing_nodes = prepare_routing_nodes(G, grid, shapes, tech)
+    remove_illegal_routing_edges(G, shapes, tech)
 
     # Remove pre-routed edges from G.
     remove_existing_routing_edges(G, shapes, tech)
 
     # Create a list of terminal areas: [(net, layer, [terminal, ...]), ...]
-    terminals_by_net = extract_terminal_nodes(routing_nodes, net_regions, tech)
+    terminals_by_net = extract_terminal_nodes(G, net_regions, tech)
 
     # Embed transistor terminal nodes in to routing graph.
     embed_transistor_terminal_nodes(G, terminals_by_net, transistor_layouts, tech)
@@ -364,7 +370,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         assert not error, "Nets without terminals. Check the routing graph (--debug-routing-graph)!"
 
     # Create virtual graph nodes for each net terminal.
-    virtual_terminal_nodes = create_virtual_terminal_nodes(G, routing_nodes, terminals_by_net, io_pins, tech)
+    virtual_terminal_nodes = create_virtual_terminal_nodes(G, terminals_by_net, io_pins, tech)
 
     if debug_routing_graph:
         # Display terminals on layout.
@@ -431,7 +437,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         """
         logger.debug("Find conflicting nodes.")
         conflicts = dict()
-        spacing_graph = tech_util.spacing_graph(tech.min_spacing)
         # Loop through all nodes in the routing graph G.
         for n in G:
             # Skip virtual nodes wich have no physical representation.
@@ -522,18 +527,15 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
             _merge_all_layers(shapes)
 
+
+    # Register Pins/Ports for LEF file.
+    lef_ports = {}
+    lef_ports.setdefault(SUPPLY_VOLTAGE_NET, []).append((tech.power_layer, vdd_rail))
+    lef_ports.setdefault(GND_NET, []).append((tech.power_layer, vss_rail))
+
     if not debug_routing_graph:
 
         # Clean DRC violations that are not handled above.
-
-        # Fill half of the cell with nwell.
-        # TODO: do this in the cell template or after placing the transistors.
-        nwell_box = pya.Box(
-            pya.Point(0, cell_height // 2),
-            pya.Point(cell_width, cell_height)
-        )
-
-        shapes[l_nwell].insert(nwell_box)
 
         # Fill notches that violate a notch rule.
         fill_all_notches()
@@ -574,13 +576,17 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
             logger.debug('Add pin label: %s, (%d, %d)', net_name, x, y)
             _draw_label(shapes, tech.pin_layer + '_label', (x, y), net_name)
 
+        # Add label for power rails
+        _draw_label(shapes, tech.power_layer + '_label', (cell_width // 2, 0), GND_NET)
+        _draw_label(shapes, tech.power_layer + '_label', (cell_width // 2, cell_height), SUPPLY_VOLTAGE_NET)
+
         # Add pin shapes.
         for net_name, pin_shapes in pin_shapes_by_net.items():
             shapes[tech.pin_layer + '_pin'].insert(pin_shapes)
 
-        # Add label for power rails
-        _draw_label(shapes, tech.power_layer + '_label', (cell_width // 2, 0), GND_NET)
-        _draw_label(shapes, tech.power_layer + '_label', (cell_width // 2, cell_height), SUPPLY_VOLTAGE_NET)
+        # Add pin shapes for power rails.
+        shapes[tech.pin_layer + '_pin'].insert(vdd_rail)
+        shapes[tech.pin_layer + '_pin'].insert(vss_rail)
 
     return top, lef_ports
 
@@ -674,13 +680,16 @@ def main():
             src_layer = (layer_info.layer, layer_info.datatype)
 
             if src_layer not in layermap_reverse:
-                logger.warning("Layer {} not defined in `layermap_reverse`.".format(src_layer))
+                msg = "Layer {} not defined in `layermap_reverse`.".format(src_layer)
+                logger.warning(msg)
                 dest_layers = src_layer
             else:
                 src_layer_name = layermap_reverse[src_layer]
 
                 if src_layer_name not in tech.output_map:
-                    logger.info("Layer not written to output: {}".format(src_layer_name))
+                    msg = "Layer '{}' will not be written to the output. This might be alright though.". \
+                        format(src_layer_name)
+                    logger.warning(msg)
                     continue
 
                 dest_layers = tech.output_map[src_layer_name]
@@ -697,6 +706,17 @@ def main():
 
     # Re-map layers
     layout = remap_layers(layout)
+
+    # Set database unit.
+    # klayout expects dbu to be in µm, the tech file takes it in meters.
+    layout.dbu = tech.db_unit * 1e6
+    logger.info("dbu = {} µm".format(layout.dbu))
+
+    # Possibly scale the layout.
+    scaling_factor = 1
+    if scaling_factor != 1:
+        logger.info("Scaling layout by factor {}".format(scaling_factor))
+        layout.transform(pya.DCplxTrans(scaling_factor))
 
     # Store result
     gds_file_name = '{}.gds'.format(cell_name)
