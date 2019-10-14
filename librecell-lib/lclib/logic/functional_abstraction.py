@@ -465,10 +465,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     # Add known values for VDD, GND
     constants = {sympy.Symbol(k): v for k, v in constant_input_pins.items()}
-    # # formulas[sympy.Symbol(vdd_pin)] = True
-    # # formulas[sympy.Symbol(gnd_pin)] = False
-    # constants[sympy.Symbol(vdd_pin)] = True
-    # constants[sympy.Symbol(gnd_pin)] = False
+
     # Simplify formulas by substituting VDD and GND with known values.
     formulas = {k: simplify_logic(f.subs(constants)) for k, f in formulas.items()}
     logger.debug('formulas = {}'.format(formulas))
