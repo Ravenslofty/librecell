@@ -644,7 +644,7 @@ def main():
 
     # Load netlist of cell
     cell_name = args.cell
-    path = args.netlist
+    netlist_path = args.netlist
 
     tech_file = args.tech
 
@@ -655,14 +655,27 @@ def main():
 
     # Run layout synthesis
     time_start = time.process_time()
-    cell, pin_geometries = create_cell_layout(tech, layout, cell_name, path,
+    cell, pin_geometries = create_cell_layout(tech, layout, cell_name, netlist_path,
                                               placer=placers[args.placer](),
                                               debug_routing_graph=args.debug_routing_graph,
                                               debug_smt_solver=args.debug_smt_solver)
 
     # LVS check
     logger.info("Running LVS check")
-    lvs.extract_netlist(layout, cell)
+    reference = pya.Netlist()
+    logger.debug("Loading reference netlist: {}".format(netlist_path))
+
+    reference.read(netlist_path, pya.NetlistSpiceReader())
+    circuit = reference.circuit_by_name(cell_name)
+
+    # Extract netlist from layout.
+    netlist = lvs.extract_netlist(layout, cell, reference)
+
+    sub_netlist = pya.Netlist()
+    sub_netlist.add(circuit)
+    compare_result = lvs.compare_netlist(netlist, sub_netlist)
+
+    logger.info("LVS result: {}".format(compare_result))
 
     def remap_layers(layout: pya.Layout) -> pya.Layout:
         """

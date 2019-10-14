@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
+def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist) -> db.Netlist:
     """
     Extract a device level netlist of 3-terminal MOSFETs from the cell `top_cell` of layout `layout`.
     :param layout: Layout object.
@@ -14,7 +14,11 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     :return: Netlist as a `klayout.db.Circuit` object.
     """
 
+    # Without netlist comparision capabilities.
     l2n = db.LayoutToNetlist(db.RecursiveShapeIterator(layout, top_cell, []))
+
+    # # With netlist comparision capabilities.
+    # lvs = db.LayoutVsSchematic(db.RecursiveShapeIterator(layout, top_cell, []))
 
     def make_layer(layer_name: str):
         return l2n.make_layer(layout.layer(*layermap[layer_name]), layer_name)
@@ -22,7 +26,7 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     rnwell = make_layer(l_nwell)
     ractive = make_layer(l_active)
     rpoly = make_layer(l_poly)
-    rpoly_lbl = make_layer(l_poly_label)
+    # rpoly_lbl = make_layer(l_poly_label)
     rdiff_cont = make_layer(l_diff_contact)
     rpoly_cont = make_layer(l_poly_contact)
     rmetal1 = make_layer(l_metal1)
@@ -76,7 +80,7 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     l2n.connect(rdiff_cont, rmetal1)
     l2n.connect(rmetal1, rvia1)
     l2n.connect(rvia1, rmetal2)
-    l2n.connect(rpoly, rpoly_lbl)  # attaches labels
+    # l2n.connect(rpoly, rpoly_lbl)  # attaches labels
     l2n.connect(rmetal1, rmetal1_lbl)  # attaches labels
     l2n.connect(rmetal2, rmetal2_lbl)  # attaches labels
 
@@ -91,5 +95,32 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
 
     assert netlist.top_circuit_count() == 1, "A well formed netlist should have exactly one top circuit."
 
-    return netlist
+    # # Compare against reference.
+    # cmp = db.NetlistComparer()
+    # compare_result = cmp.compare(netlist, reference)
+    # logger.info("Netlist comparision result: {}".format(compare_result))
+    #
+    # if not compare_result:
+    #     print(netlist)
+    #     print(reference)
 
+    return netlist.dup()
+
+
+def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
+    """
+    Check if two netlists are equal.
+    :param extracted:
+    :param reference:
+    :return:
+    """
+    cmp = db.NetlistComparer()
+    compare_result = cmp.compare(extracted, reference)
+    logger.info("Netlist comparision result: {}".format(compare_result))
+
+    if not compare_result:
+        logger.warning("Netlists don't match.")
+        print(extracted)
+        print(reference)
+
+    return compare_result
