@@ -194,6 +194,7 @@ def _get_conductivity_conditions(cmos_graph: nx.MultiGraph,
 
     return conductivity_conditions
 
+
 #
 # def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
 #                            vdd_node,
@@ -505,9 +506,19 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     # assert len(cycles) == 0, "Abstraction of feed-back loops is not yet supported."
 
+    # Collect all nets that belong to a memory cycle.
+    nets_of_memory_cycle = {n for c in cycles for n in c}
+
+    class Memory:
+        def __init__(self, data: boolalg.Boolean, write_condition: boolalg.Boolean,
+                     oscillation_condition: boolalg.Boolean):
+            self.data = data
+            self.write_condition = write_condition
+            self.oscillation_condition = oscillation_condition
+
     print('cycles = ', cycles)
 
-    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean], root: boolalg.Boolean):
+    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean], inputs: Set[sympy.Symbol], root: boolalg.Boolean):
         f = formulas[root]
         f = simplify_logic(f)
         # Remember previous results to be able to detect loops.
@@ -539,6 +550,19 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         print('calculate derivative: d/d{} ({})) = {}'.format(x, f, derivative))
         return derivative, positive_derivative, negative_derivative
 
+    def _analyze_cycle(cycle: List[sympy.Symbol], cycle_output: sympy.Symbol, formulas):
+
+        # Break the loop by treating cycle_start as an unknown.
+        # _formulas = {k: v for k, v in formulas.items() if k in cycle}
+        cycle_start_resolved = resolve_intermediate_variables(formulas, inputs, cycle_output)
+
+        d, dp, dn = boolean_derivatives(cycle_start_resolved, cycle_output)
+
+        write_condition = ~dp
+        oscillation_condition = dn
+        print('write_condition = ', write_condition)
+        print('oscillation_condition = ', oscillation_condition)
+
     # Analyze potential memory elements.
     for cycle in cycles:
         assert len(cycle) >= 2, "Cycle is expected to have a length longer than 1."
@@ -549,23 +573,14 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         #                   ]
         memory_output = cycle[0]
 
-        # Break the loop by treating cycle_start as an unknown.
-        # _formulas = {k: v for k, v in formulas.items() if k in cycle}
-        cycle_start_resolved = resolve_intermediate_variables(formulas, memory_output)
-
-        d, dp, dn = boolean_derivatives(cycle_start_resolved, memory_output)
-
-        write_condition = ~dp
-        oscillation_condition = dn
-        print('write_condition = ', write_condition)
-        print('oscillation_condition = ', oscillation_condition)
+        _analyze_cycle(cycle, memory_output, formulas)
 
     # Solve equation system for output.
     # TODO: stop resolving at memory elements.
     output_formulas = dict()
     for output_net in output_nodes:
         output_symbol = sympy.Symbol(output_net)
-        formula = resolve_intermediate_variables(formulas, output_symbol)
+        formula = resolve_intermediate_variables(formulas, inputs, output_symbol)
         formula = simplify_logic(formula)
         logger.info("Deduced formula: {} = {}".format(output_symbol, formula))
         output_formulas[output_symbol] = formula
