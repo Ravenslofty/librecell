@@ -627,3 +627,27 @@ def test_analyze_circuit_graph_transmission_gate_xor():
 
 def test_analyze_circuit_graph_latch():
     g = nx.MultiGraph()
+    # Network of a LATCH.
+    edges = [
+        # Command for converting a raw SPICE transistor netlist into this format:
+        # cat raw_netlist.sp | grep -v + | awk '{ print "(\"" $2 "\", \"" $4 "\", (\"" $3  "\", " $6 ")),"}' \
+        # | sed 's/pmos/ChannelType.PMOS/g' | sed 's/nmos/ChannelType.NMOS/g'
+        ("vdd", "a_2_6#", ("CLK", ChannelType.PMOS)),
+        ("a_18_74#", "vdd", ("D", ChannelType.PMOS)),
+        ("a_23_6#", "a_18_74#", ("a_2_6#", ChannelType.PMOS)),
+        ("a_35_84#", "a_23_6#", ("CLK", ChannelType.PMOS)),
+        ("vdd", "a_35_84#", ("Q", ChannelType.PMOS)),
+        ("gnd", "a_2_6#", ("CLK", ChannelType.NMOS)),
+        ("Q", "vdd", ("a_23_6#", ChannelType.PMOS)),
+        ("a_18_6#", "gnd", ("D", ChannelType.NMOS)),
+        ("a_23_6#", "a_18_6#", ("CLK", ChannelType.NMOS)),
+        ("a_35_6#", "a_23_6#", ("a_2_6#", ChannelType.NMOS)),
+        ("gnd", "a_35_6#", ("Q", ChannelType.NMOS)),
+        ("Q", "gnd", ("a_23_6#", ChannelType.NMOS)),
+    ]
+    for e in edges:
+        g.add_edge(*e)
+
+    pins_of_interest = {'CLK', 'D', 'Q'}
+    known_pins = {'vdd': True, 'gnd': False}
+    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
