@@ -42,6 +42,27 @@ def bool_equals(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
     return not satisfiable(f1 ^ f2)
 
 
+def boolean_derivatives(f: boolalg.Boolean, x: sympy.Symbol) \
+        -> Tuple[boolalg.Boolean, boolalg.Boolean, boolalg.Boolean]:
+    """
+    Calculate the boolean derivative, positive derivative and negative derivative.
+    :param f:
+    :param x:
+    :return: (derivative, positive derivative, negative derivative)
+    """
+    # TODO: Use this also for is_unate_in_xi in util.
+    assert isinstance(x, sympy.Symbol)
+
+    f0 = simplify_logic(f.subs({x: False}))
+    f1 = simplify_logic(f.subs({x: True}))
+    positive_derivative = simplify_logic(~f0 & f1)
+    negative_derivative = simplify_logic(f0 & ~f1)
+
+    derivative = simplify_logic(positive_derivative | negative_derivative)  # == f0 ^ f1
+    print('calculate derivative: d/d{} ({})) = {}'.format(x, f, derivative))
+    return derivative, positive_derivative, negative_derivative
+
+
 def _get_gate_nets(graph: nx.MultiGraph) -> Set:
     """
     Return a set of all net names that connect to a transistor gate.
@@ -507,7 +528,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     # assert len(cycles) == 0, "Abstraction of feed-back loops is not yet supported."
 
     # Collect all nets that belong to a memory cycle.
-    nets_of_memory_cycle = {n for c in cycles for n in c}
+    nets_of_memory_cycles = {n for c in cycles for n in c}
 
     class Memory:
         def __init__(self, data: boolalg.Boolean, write_condition: boolalg.Boolean,
@@ -516,9 +537,18 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             self.write_condition = write_condition
             self.oscillation_condition = oscillation_condition
 
+        def __str__(self):
+            return "Memory({}, write = {})".format(self.data, self.write_condition)
+
+        def __repr__(self):
+            return str(self)
+
     print('cycles = ', cycles)
 
-    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean], inputs: Set[sympy.Symbol], root: boolalg.Boolean):
+    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean],
+                                       inputs: Set[sympy.Symbol],
+                                       root: boolalg.Boolean,
+                                       break_on_loop: bool = False):
         f = formulas[root]
         f = simplify_logic(f)
         # Remember previous results to be able to detect loops.
@@ -528,33 +558,20 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             f = simplify_logic(f)
 
             if f in previous_formulas:
-                # Break the loop.
-                print('loop detected')
-                break
-
+                if break_on_loop:
+                    print('loop detected')
+                    break
+                else:
+                    assert False, "Equation system contains a loop!"
             previous_formulas.add(f)
-        print(f)
+
         return f
-
-    def boolean_derivatives(f: boolalg.Boolean, x: sympy.Symbol) \
-            -> Tuple[boolalg.Boolean, boolalg.Boolean, boolalg.Boolean]:
-        # TODO: Use this also for is_unate_in_xi in util.
-        assert isinstance(x, sympy.Symbol)
-
-        f0 = simplify_logic(f.subs({x: False}))
-        f1 = simplify_logic(f.subs({x: True}))
-        positive_derivative = simplify_logic(~f0 & f1)
-        negative_derivative = simplify_logic(f0 & ~f1)
-
-        derivative = simplify_logic(positive_derivative | negative_derivative)  # == f0 ^ f1
-        print('calculate derivative: d/d{} ({})) = {}'.format(x, f, derivative))
-        return derivative, positive_derivative, negative_derivative
 
     def _analyze_cycle(cycle: List[sympy.Symbol], cycle_output: sympy.Symbol, formulas):
 
         # Break the loop by treating cycle_start as an unknown.
         # _formulas = {k: v for k, v in formulas.items() if k in cycle}
-        cycle_start_resolved = resolve_intermediate_variables(formulas, inputs, cycle_output)
+        cycle_start_resolved = resolve_intermediate_variables(formulas, inputs, cycle_output, break_on_loop=True)
 
         d, dp, dn = boolean_derivatives(cycle_start_resolved, cycle_output)
 
@@ -563,29 +580,87 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         print('write_condition = ', write_condition)
         print('oscillation_condition = ', oscillation_condition)
 
-    # Analyze potential memory elements.
-    for cycle in cycles:
-        assert len(cycle) >= 2, "Cycle is expected to have a length longer than 1."
-        # TODO: cycle_end should be the output of the memory, cycle_start the input.
-        # TODO: 1. find memory cycles, 2. trace back output until input pins or memory, 3. resolve memory, ... (Use some sort of task queue.)
-        # memory_outputs = [c for c in cycle if
-        #
-        #                   ]
-        memory_output = cycle[0]
+    def derive_memory(memory_output_net: sympy.Symbol, inputs: Set[sympy.Symbol], formulas) -> Memory:
+        print("derive memory from: {}".format(memory_output_net))
+        memory_output_resolved = resolve_intermediate_variables(formulas, inputs, memory_output_net, break_on_loop=True)
+        d, dp, dn = boolean_derivatives(memory_output_resolved, memory_output_net)
+        write_condition = ~dp
+        oscillation_condition = dn
 
-        _analyze_cycle(cycle, memory_output, formulas)
+        # Find an expression for the memory output when the write condition is met.
+        write_condition_model = satisfiable(write_condition)
+        if not write_condition_model:
+            logger.warning("Detected a memory loop that is not possible to write to.")
+        data = simplify_logic(memory_output_resolved.subs(write_condition_model))
+
+        return Memory(data=data, write_condition=write_condition, oscillation_condition=oscillation_condition)
+
+    # # Analyze potential memory elements.
+    # for cycle in cycles:
+    #     assert len(cycle) >= 2, "Cycle is expected to have a length longer than 1."
+    #     # TODO: cycle_end should be the output of the memory, cycle_start the input.
+    #     # TODO: 1. find memory cycles, 2. trace back output until input pins or memory, 3. resolve memory, ... (Use some sort of task queue.)
+    #     # memory_outputs = [c for c in cycle if
+    #     #
+    #     #                   ]
+    #     memory_output = cycle[0]
+    #
+    #     _analyze_cycle(cycle, memory_output, formulas)
 
     # Solve equation system for output.
     # TODO: stop resolving at memory elements.
     output_formulas = dict()
-    for output_net in output_nodes:
-        output_symbol = sympy.Symbol(output_net)
-        formula = resolve_intermediate_variables(formulas, inputs, output_symbol)
-        formula = simplify_logic(formula)
-        logger.info("Deduced formula: {} = {}".format(output_symbol, formula))
-        output_formulas[output_symbol] = formula
+    memory_nets = dict()
 
-    print(output_formulas)
+    wavefront = {sympy.Symbol(o) for o in output_nodes}
+    while wavefront:
+
+        out = wavefront.pop()
+        assert out not in output_formulas
+        assert out not in memory_nets
+
+        new_wavefront = set()
+
+        if out not in nets_of_memory_cycles:
+            print("find formula for", out)
+            assert isinstance(out, sympy.Symbol)
+            formula = resolve_intermediate_variables(formulas, inputs | nets_of_memory_cycles, out)
+            output_formulas[out] = formula
+
+            # Find new wavefront.
+            atoms = formula.atoms()
+            new_wavefront.update(atoms)
+
+            # Find inputs into formula that come from a memory.
+            new_atoms = atoms - output_formulas.keys() - memory_nets.keys() - inputs
+            unknown_memory_nets = new_atoms & nets_of_memory_cycles
+            print("unknown inputs into", out, "from memory:", unknown_memory_nets)
+        else:
+            # Resolve memory.
+            memory_net = out
+            _this_memory_cycle = [c for c in cycles if memory_net in c]
+            assert len(_this_memory_cycle) == 1
+            _this_memory_cycle = set(_this_memory_cycle[0])
+
+            _inputs = inputs | nets_of_memory_cycles - _this_memory_cycle
+            memory = derive_memory(memory_net, _inputs, formulas)
+
+            memory_nets[memory_net] = memory
+
+            # Find new wavefront.
+            atoms = memory.write_condition.atoms() | memory.data.atoms()
+            new_wavefront.update(atoms)
+
+        wavefront.update(new_wavefront - output_formulas.keys() - memory_nets.keys() - inputs)
+
+    # Simplify formulas in memories.
+    for m in memory_nets.values():
+        m.data = simplify_logic(m.data.subs(output_formulas))
+        m.write_condition = simplify_logic(m.write_condition.subs(output_formulas))
+        m.oscillation_condition = simplify_logic(m.oscillation_condition.subs(output_formulas))
+
+    print("Formulas: {}".format(output_formulas))
+    print("Memories: {}".format(memory_nets))
     assert len(cycles) == 0, "Abstraction of feed-back loops is not yet supported."
     return output_formulas
 
