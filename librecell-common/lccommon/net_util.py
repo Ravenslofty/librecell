@@ -26,6 +26,7 @@ from copy import copy
 from lclayout.data_types import *
 import networkx as nx
 from typing import Tuple, List, Set, Iterable
+import klayout.db as db
 
 
 def get_subcircuit_ports(file: str, subckt_name: str) -> List[str]:
@@ -71,32 +72,64 @@ def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transisto
     (List[Transistors], pin_names)
     """
 
-    with open(path) as f:
-        source = f.read()
+    # Read netlist. TODO: take netlist object as argument.
+    netlist = db.Netlist()
+    netlist.read(path, db.NetlistSpiceReader())
+    circuit: db.Circuit = netlist.circuit_by_name(subckt_name)
 
-        ast = spice_parser.parse_spice(source)
+    pins = [p.name() for p in circuit.each_pin()]
 
-        def get_channel_type(s):
-            """Determine the channel type of transistor from the model name.
-            """
-            if s.lower().startswith('n'):
-                return ChannelType.NMOS
-            return ChannelType.PMOS
+    def get_channel_type(s: str):
+        """Determine the channel type of transistor from the model name.
+        """
+        if s.lower().startswith('n'):
+            return ChannelType.NMOS
+        return ChannelType.PMOS
 
-        match = [s for s in ast if s.name == subckt_name]
+    mos4 = db.DeviceClassMOS4Transistor()
+    id_gate_4 = mos4.terminal_id('G')
+    id_source_4 = mos4.terminal_id('S')
+    id_drain_4 = mos4.terminal_id('D')
 
-        if len(match) < 1:
-            raise Exception("No valid subcircuit found in file with name '%s'." % subckt_name)
+    transistors_klayout = [
+        Transistor(get_channel_type(d.device_class().name),
+                   d.net_for_terminal(id_source_4).name,
+                   d.net_for_terminal(id_gate_4).name,
+                   d.net_for_terminal(id_drain_4).name,
+                   channel_width=d.parameter('W') * 1e-6, # Convert into micrometers.
+                   name=d.name
+                   )
+        for d in circuit.each_device()
+        if isinstance(d.device_class(), db.DeviceClassMOS3Transistor)
+           or isinstance(d.device_class(), db.DeviceClassMOS4Transistor)]
 
-        circuit = match[0]
+    # with open(path) as f:
+    #     source = f.read()
+    #
+    #     ast = spice_parser.parse_spice(source)
+    #
+    #     match = [s for s in ast if s.name == subckt_name]
+    #
+    #     if len(match) < 1:
+    #         raise Exception("No valid subcircuit found in file with name '%s'." % subckt_name)
+    #
+    #     circuit = match[0]
+    #
+    #     # Get transistors
+    #     transistors = [
+    #         Transistor(get_channel_type(t.model_name), t.ns, t.ng, t.nd, channel_width=t.params['W'], name=t.name)
+    #         for t in circuit.content if type(t) is spice_parser.MOSFET
+    #     ]
+    #
+    #     for t in transistors_klayout:
+    #         print(t.channel_width)
+    #
+    #     for t in transistors:
+    #         print(t.channel_width)
+    #
+    #     return transistors, circuit.ports
 
-        # Get transistors
-        transistors = [
-            Transistor(get_channel_type(t.model_name), t.ns, t.ng, t.nd, channel_width=t.params['W'], name=t.name)
-            for t in circuit.content if type(t) is spice_parser.MOSFET
-        ]
-
-        return transistors, circuit.ports
+    return transistors_klayout, set(pins)
 
 
 def is_ground_net(net: str) -> bool:
