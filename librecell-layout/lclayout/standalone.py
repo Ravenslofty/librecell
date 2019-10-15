@@ -200,7 +200,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     # Load netlist of cell
     logger.info('Load netlist: %s', netlist_path)
     transistors_abstract, cell_pins = load_transistor_netlist(netlist_path, cell_name)
+    logger.info("Cell pins: {}".format(', '.join(cell_pins)))
     io_pins = net_util.get_io_pins(cell_pins)
+    logger.info("Data pins: {}".format(', '.join(io_pins)))
 
     # Convert transistor dimensions into data base units.
     for t in transistors_abstract:

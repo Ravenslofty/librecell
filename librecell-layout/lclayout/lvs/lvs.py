@@ -24,6 +24,7 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
         return l2n.make_layer(layout.layer(*layermap[layer_name]), layer_name)
 
     rnwell = make_layer(l_nwell)
+    rpwell = make_layer(l_pwell)
     ractive = make_layer(l_active)
     rpoly = make_layer(l_poly)
     # rpoly_lbl = make_layer(l_poly_label)
@@ -51,13 +52,21 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
     l2n.register(rngate, 'ngate')
     l2n.register(rnsd, 'nsd')
 
-    # PMOS transistor device extraction
+    # 3 terminal PMOS transistor device extraction
     pmos_ex = db.DeviceExtractorMOS3Transistor("PMOS")
-    l2n.extract_devices(pmos_ex, {"SD": rpsd, "G": rpgate, "P": rpoly})
+    l2n.extract_devices(pmos_ex, {"SD": rpsd, "G": rpgate, "W": rnwell, "tS": rpsd, "tD": rpsd, "tG": rpoly})
 
-    # NMOS transistor device extraction
+    # 3 terminal NMOS transistor device extraction
     nmos_ex = db.DeviceExtractorMOS3Transistor("NMOS")
-    l2n.extract_devices(nmos_ex, {"SD": rnsd, "G": rngate, "P": rpoly})
+    l2n.extract_devices(nmos_ex, {"SD": rnsd, "G": rngate, "W": rpwell, "tS": rnsd, "tD": rnsd, "tG": rpoly})
+
+    # # 4 terminal PMOS transistor device extraction
+    # pmos_ex = db.DeviceExtractorMOS4Transistor("PMOS")
+    # l2n.extract_devices(pmos_ex, {"SD": rpsd, "G": rpgate, "W": rnwell, "tS": rpsd, "tD": rpsd, "tG": rpoly, "tB": rnwell})
+    #
+    # # 4 terminal NMOS transistor device extraction
+    # nmos_ex = db.DeviceExtractorMOS4Transistor("NMOS")
+    # l2n.extract_devices(nmos_ex, {"SD": rnsd, "G": rngate, "W": rpwell, "tS": rnsd, "tD": rnsd, "tG": rpoly, "tB": rpwell})
 
     # Define connectivity for netlist extraction
 
@@ -84,6 +93,9 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
     l2n.connect(rmetal1, rmetal1_lbl)  # attaches labels
     l2n.connect(rmetal2, rmetal2_lbl)  # attaches labels
 
+    # l2n.connect_global(rnwell, 'VDD')
+    # l2n.connect_global(rpwell, 'GND')
+
     # Perform netlist extraction
     logger.debug("Extracting netlist from layout")
     l2n.extract_netlist()
@@ -92,17 +104,9 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
     netlist.make_top_level_pins()
     netlist.purge()
     netlist.purge_nets()
+    netlist.simplify()
 
     assert netlist.top_circuit_count() == 1, "A well formed netlist should have exactly one top circuit."
-
-    # # Compare against reference.
-    # cmp = db.NetlistComparer()
-    # compare_result = cmp.compare(netlist, reference)
-    # logger.info("Netlist comparision result: {}".format(compare_result))
-    #
-    # if not compare_result:
-    #     print(netlist)
-    #     print(reference)
 
     return netlist.dup()
 
@@ -115,6 +119,7 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     :return:
     """
     cmp = db.NetlistComparer()
+    cmp.same_device_classes(db.DeviceClassMOS3Transistor(), db.DeviceClassMOS4Transistor())
     compare_result = cmp.compare(extracted, reference)
     logger.info("Netlist comparision result: {}".format(compare_result))
 
