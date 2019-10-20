@@ -23,13 +23,31 @@ from typing import Any, Dict, List, Iterable, Tuple, Set
 from enum import Enum
 import collections
 import sympy
-from sympy.logic import simplify_logic, satisfiable
+from sympy.logic import satisfiable, simplify_logic as sympy_simplify_logic
 from sympy.logic import boolalg
 
 from lclayout.data_types import ChannelType
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def simplify_logic(f: boolalg.Boolean, force: bool = True) -> boolalg.Boolean:
+    return sympy_simplify_logic(f, force=force)
+
+
+class Memory:
+    def __init__(self, data: boolalg.Boolean, write_condition: boolalg.Boolean,
+                 oscillation_condition: boolalg.Boolean):
+        self.data = data
+        self.write_condition = write_condition
+        self.oscillation_condition = oscillation_condition
+
+    def __str__(self):
+        return "Memory({}, write = {})".format(self.data, self.write_condition)
+
+    def __repr__(self):
+        return str(self)
 
 
 def bool_equals(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
@@ -380,18 +398,18 @@ def test_complex_cmos_graph_to_formula():
     print('formulas: ', formulas)
     print('inputs = ', inputs)
 
-    # Detect loops in the circuit.
-    # Create a graph representing the dependencies of the variables/expressions.
-    dependency_graph = nx.DiGraph()
-    for atom, expression in formulas.items():
-        dependency_graph.add_edge(atom, expression)
-
-    # Check for cycles.
-    cycles = list(nx.simple_cycles(dependency_graph))
-
-    assert len(cycles) == 0, "Abstraction of feed-back loops not yet supported."
-
-    print('cycles = ', cycles)
+    # # Detect loops in the circuit.
+    # # Create a graph representing the dependencies of the variables/expressions.
+    # dependency_graph = nx.DiGraph()
+    # for atom, expression in formulas.items():
+    #     dependency_graph.add_edge(atom, expression)
+    #
+    # # Check for cycles.
+    # cycles = list(nx.simple_cycles(dependency_graph))
+    #
+    # assert len(cycles) == 0, "Abstraction of feed-back loops not yet supported."
+    #
+    # print('cycles = ', cycles)
 
     def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol],
                                        output: sympy.Symbol) -> boolalg.Boolean:
@@ -433,6 +451,12 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         This can happen for cells containing transmission gates.
     :return: Dict['output pin', ]
     """
+    #
+    # import matplotlib.pyplot as plt
+    # nx.draw_networkx(graph)
+    # plt.draw()
+    # plt.show()
+
     pins_of_interest = set(pins_of_interest)
 
     if constant_input_pins is None:
@@ -496,19 +520,23 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     inputs = {sympy.Symbol(i) for i in inputs} - set(constants.keys())
     logger.debug('inputs = {}'.format(inputs))
 
-    # Detect loops in the circuit.
-    # Create a graph representing the dependencies of the variables/expressions.
-    dependency_graph = nx.DiGraph()
-    for output, expression in formulas.items():
-        if isinstance(expression, boolalg.Boolean):
-            for atom in expression.atoms():
-                # Output depends on every variable (atom) in the expression.
-                dependency_graph.add_edge(output, atom)
-        elif isinstance(expression, bool):
-            # Handle True and False constants.
-            dependency_graph.add_edge(output, expression)
-        else:
-            assert False, "Type not supported: '{}'".format(type(expression))
+    def _formula_dependency_graph(formulas) -> nx.DiGraph:
+        # Detect loops in the circuit.
+        # Create a graph representing the dependencies of the variables/expressions.
+        dependency_graph = nx.DiGraph()
+        for output, expression in formulas.items():
+            if isinstance(expression, boolalg.Boolean):
+                for atom in expression.atoms():
+                    # Output depends on every variable (atom) in the expression.
+                    dependency_graph.add_edge(output, atom)
+            elif isinstance(expression, bool):
+                # Handle True and False constants.
+                dependency_graph.add_edge(output, expression)
+            else:
+                assert False, "Type not supported: '{}'".format(type(expression))
+        return dependency_graph
+
+    dependency_graph = _formula_dependency_graph(formulas)
 
     # import matplotlib.pyplot as plt
     # nx.draw_networkx(dependency_graph)
@@ -530,25 +558,16 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     # Collect all nets that belong to a memory cycle.
     nets_of_memory_cycles = {n for c in cycles for n in c}
 
-    class Memory:
-        def __init__(self, data: boolalg.Boolean, write_condition: boolalg.Boolean,
-                     oscillation_condition: boolalg.Boolean):
-            self.data = data
-            self.write_condition = write_condition
-            self.oscillation_condition = oscillation_condition
-
-        def __str__(self):
-            return "Memory({}, write = {})".format(self.data, self.write_condition)
-
-        def __repr__(self):
-            return str(self)
-
     print('cycles = ', cycles)
 
     def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean],
                                        inputs: Set[sympy.Symbol],
                                        root: boolalg.Boolean,
                                        break_on_loop: bool = False):
+
+        if root not in formulas:
+            return root
+
         f = formulas[root]
         f = simplify_logic(f)
         # Remember previous results to be able to detect loops.
@@ -567,19 +586,6 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
         return f
 
-    def _analyze_cycle(cycle: List[sympy.Symbol], cycle_output: sympy.Symbol, formulas):
-
-        # Break the loop by treating cycle_start as an unknown.
-        # _formulas = {k: v for k, v in formulas.items() if k in cycle}
-        cycle_start_resolved = resolve_intermediate_variables(formulas, inputs, cycle_output, break_on_loop=True)
-
-        d, dp, dn = boolean_derivatives(cycle_start_resolved, cycle_output)
-
-        write_condition = ~dp
-        oscillation_condition = dn
-        print('write_condition = ', write_condition)
-        print('oscillation_condition = ', oscillation_condition)
-
     def derive_memory(memory_output_net: sympy.Symbol, inputs: Set[sympy.Symbol], formulas) -> Memory:
         print("derive memory from: {}".format(memory_output_net))
         memory_output_resolved = resolve_intermediate_variables(formulas, inputs, memory_output_net, break_on_loop=True)
@@ -595,17 +601,15 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
         return Memory(data=data, write_condition=write_condition, oscillation_condition=oscillation_condition)
 
-    # # Analyze potential memory elements.
+    # # Derive memory for all cycles with each possible node as memory output.
     # for cycle in cycles:
-    #     assert len(cycle) >= 2, "Cycle is expected to have a length longer than 1."
-    #     # TODO: cycle_end should be the output of the memory, cycle_start the input.
-    #     # TODO: 1. find memory cycles, 2. trace back output until input pins or memory, 3. resolve memory, ... (Use some sort of task queue.)
-    #     # memory_outputs = [c for c in cycle if
-    #     #
-    #     #                   ]
-    #     memory_output = cycle[0]
+    #     nodes_in_cycle = set(cycle)
+    #     _inputs = inputs | nets_of_memory_cycles - nodes_in_cycle
+    #     for node in cycle:
+    #         memory = derive_memory(node, _inputs, formulas)
     #
-    #     _analyze_cycle(cycle, memory_output, formulas)
+    #         print(memory)
+    #         print()
 
     # Solve equation system for output.
     # TODO: stop resolving at memory elements.
