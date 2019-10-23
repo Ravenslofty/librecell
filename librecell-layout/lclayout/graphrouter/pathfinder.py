@@ -149,12 +149,13 @@ def _route(detail_router: SignalRouter,
                 b = node_base_cost.get(n, 0)
                 h = node_history_cost.get(n, 0)
                 p = node_present_sharing_cost.get(n, 0)
-                c = (b + h) * (p + 1)
+                c = (1 + b + h) * (p + 1)
                 return c * (1 - slack_ratio)
 
             def edge_cost_fn(e):
                 (m, n) = e
-                return edge_base_cost[(m, n)] * slack_ratio
+                b = edge_base_cost[(m, n)]
+                return b * slack_ratio
 
             st = multi_via_router.route(Gs.get(signal_name, graph), terminals, node_cost_fn, edge_cost_fn)
 
@@ -168,7 +169,7 @@ def _route(detail_router: SignalRouter,
                 for o in node_conflict.get(n, {n}):
                     if o not in node_present_sharing_cost:
                         node_present_sharing_cost[o] = 0
-                    node_present_sharing_cost[o] += 1
+                    node_present_sharing_cost[o] += 100
 
         # Detect node collisions
 
