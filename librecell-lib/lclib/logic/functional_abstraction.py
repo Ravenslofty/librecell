@@ -492,6 +492,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     # Convert keys into symbols.
     conductivity_conditions = {sympy.Symbol(k): v for k, v in conductivity_conditions.items()}
 
+    # Derive logic formulas from conductivity condition.
     formulas = dict()
     for output, cc in conductivity_conditions.items():
         or_terms = []
@@ -507,7 +508,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
         # Logic OR of all elements.
         or_formula = sympy.Or(*or_terms)
-        formulas[output] = or_formula
+        formulas[output] = simplify_logic(or_formula)
 
     # Add known values for VDD, GND
     constants = {sympy.Symbol(k): v for k, v in constant_input_pins.items()}
@@ -515,6 +516,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     # Simplify formulas by substituting VDD and GND with known values.
     formulas = {k: simplify_logic(f.subs(constants)) for k, f in formulas.items()}
     logger.debug('formulas = {}'.format(formulas))
+    print('formulas = {}'.format(formulas))
 
     # Convert from strings into sympy symbols.
     inputs = {sympy.Symbol(i) for i in inputs} - set(constants.keys())
@@ -536,6 +538,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 assert False, "Type not supported: '{}'".format(type(expression))
         return dependency_graph
 
+    # Create dependency graph to detect feedback loops.
     dependency_graph = _formula_dependency_graph(formulas)
 
     # import matplotlib.pyplot as plt
@@ -548,10 +551,12 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     logger.info("Number of feed-back loops: {}".format(len(cycles)))
 
     for cycle in cycles:
+        print()
         logger.info("cycle: {}".format(cycle))
         print('cycle = ', cycle)
         for el in cycle:
             print('--> {} = {}'.format(el, formulas[el]))
+        print()
 
     # assert len(cycles) == 0, "Abstraction of feed-back loops is not yet supported."
 
@@ -601,15 +606,16 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
         return Memory(data=data, write_condition=write_condition, oscillation_condition=oscillation_condition)
 
-    # # Derive memory for all cycles with each possible node as memory output.
-    # for cycle in cycles:
-    #     nodes_in_cycle = set(cycle)
-    #     _inputs = inputs | nets_of_memory_cycles - nodes_in_cycle
-    #     for node in cycle:
-    #         memory = derive_memory(node, _inputs, formulas)
-    #
-    #         print(memory)
-    #         print()
+    # Derive memory for all cycles with each possible node as memory output.
+    for cycle in cycles:
+        print('cycle = {}'.format(cycle))
+        nodes_in_cycle = set(cycle)
+        _inputs = inputs | nets_of_memory_cycles - nodes_in_cycle
+        for node in cycle:
+            memory = derive_memory(node, _inputs, formulas)
+
+            print(memory)
+            print()
 
     # Solve equation system for output.
     # TODO: stop resolving at memory elements.
