@@ -81,7 +81,7 @@ def _format_rect(box: db.Box) -> str:
 
 
 def store_layout_to_magic_file(tech_name: str,
-                               layer_mapping: Dict[str, Union[str, List[str]]],
+                               output_map: Dict[str, Union[str, List[str]]],
                                layout: db.Layout,
                                pin_geometries: Dict[str, List[Tuple[str, db.Shape]]],
                                top_cell: db.Cell,
@@ -101,7 +101,7 @@ def store_layout_to_magic_file(tech_name: str,
     """
 
     layer_config = []
-    for source_layer_name, destinations in layer_mapping.items():
+    for source_layer_name, destinations in output_map.items():
         assert isinstance(destinations, str) or isinstance(destinations, List), \
             'Destination layer must either be as string or a list of strings.'
 
@@ -183,15 +183,15 @@ def store_layout_to_magic_file(tech_name: str,
 
 class MagWriter(Writer):
 
-    def __init__(self, tech_name: str, layer_mapping: Dict[str, str], scale_factor: int = 1):
+    def __init__(self, tech_name: str, output_map: Dict[str, str], scale_factor: int = 1):
         """
 
         :param tech_name:
-        :param layer_mapping:
+        :param output_map:
         :param scale_factor: Scale all coordinates by this number (rounding down to next integer).
         """
         self.tech_name = tech_name
-        self.layer_mapping = layer_mapping
+        self.output_map = output_map
         self.scale_factor = scale_factor
 
     def write_layout(self,
@@ -205,7 +205,7 @@ class MagWriter(Writer):
 
         store_layout_to_magic_file(
             self.tech_name,
-            self.layer_mapping,
+            self.output_map,
             layout,
             pin_geometries,
             top_cell,
