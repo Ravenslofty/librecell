@@ -25,7 +25,7 @@ def remap_layers(layout: db.Layout, output_map: Dict[str, Union[Tuple[int, int],
     :param output_map: Output mapping from layer names to layer numbers.
     :return:
     """
-    logger.info("Remap layers.")
+    logger.debug("Remap layers.")
     layout2 = db.Layout()
 
     for top1 in layout.each_cell():

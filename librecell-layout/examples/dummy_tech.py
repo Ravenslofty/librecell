@@ -52,6 +52,7 @@ output_map = {
     l_abutment_box: my_abutment_box
 }
 
+# Define a list of output writers.
 output_writers = [
     MagWriter(
         tech_name='scmos',

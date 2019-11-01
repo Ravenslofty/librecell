@@ -33,7 +33,7 @@ class GdsWriter(Writer):
         # Set database unit.
         # klayout expects dbu to be in µm, the tech file takes it in meters.
         layout.dbu = self.db_unit * 1e6
-        logger.info("dbu = {} µm".format(layout.dbu))
+        logger.debug("dbu = {} µm".format(layout.dbu))
 
         # Possibly scale the layout.
         scaling_factor = 1

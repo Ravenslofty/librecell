@@ -659,46 +659,6 @@ def main():
                                               debug_routing_graph=args.debug_routing_graph,
                                               debug_smt_solver=args.debug_smt_solver)
 
-    def remap_layers(layout: pya.Layout) -> pya.Layout:
-        """
-        Rename layer to match the scheme defined in the technology file.
-        :param layout:
-        :return:
-        """
-        logger.info("Remap layers.")
-        layout2 = pya.Layout()
-        top1 = layout.top_cell()
-        top2 = layout2.create_cell(cell_name)
-        layer_infos1 = layout.layer_infos()
-        for layer_info in layer_infos1:
-
-            src_layer = (layer_info.layer, layer_info.datatype)
-
-            if src_layer not in layermap_reverse:
-                msg = "Layer {} not defined in `layermap_reverse`.".format(src_layer)
-                logger.warning(msg)
-                dest_layers = src_layer
-            else:
-                src_layer_name = layermap_reverse[src_layer]
-
-                if src_layer_name not in tech.output_map:
-                    msg = "Layer '{}' will not be written to the output. This might be alright though.". \
-                        format(src_layer_name)
-                    logger.warning(msg)
-                    continue
-
-                dest_layers = tech.output_map[src_layer_name]
-
-            if not isinstance(dest_layers, list):
-                dest_layers = [dest_layers]
-
-            src_idx = layout.layer(layer_info)
-            for dest_layer in dest_layers:
-                dest_idx = layout2.layer(*dest_layer)
-                top2.shapes(dest_idx).insert(top1.shapes(src_idx))
-
-        return layout2
-
     # Output using defined output writers.
     from .writer.writer import Writer
     for writer in tech.output_writers:
@@ -710,26 +670,6 @@ def main():
             top_cell=cell,
             output_dir=args.output_dir
         )
-
-    # Re-map layers
-    layout = remap_layers(layout)
-
-    # Set database unit.
-    # klayout expects dbu to be in µm, the tech file takes it in meters.
-    layout.dbu = tech.db_unit * 1e6
-    logger.info("dbu = {} µm".format(layout.dbu))
-
-    # Possibly scale the layout.
-    scaling_factor = 1
-    if scaling_factor != 1:
-        logger.info("Scaling layout by factor {}".format(scaling_factor))
-        layout.transform(pya.DCplxTrans(scaling_factor))
-
-    # Write GDS.
-    gds_file_name = '{}.gds'.format(cell_name)
-    gds_out_path = os.path.join(args.output_dir, gds_file_name)
-    logger.info("Write GDS: %s", gds_out_path)
-    layout.write(gds_out_path)
 
     time_end = time.process_time()
     duration = datetime.timedelta(seconds=time_end - time_start)
