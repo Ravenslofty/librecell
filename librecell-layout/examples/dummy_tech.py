@@ -56,7 +56,7 @@ output_map = {
 output_writers = [
     MagWriter(
         tech_name='scmos',
-        scale_factor=1000,
+        scale_factor=0.1,
         output_map={
             l_via1: 'm2contact',
             l_poly: 'polysilicon',

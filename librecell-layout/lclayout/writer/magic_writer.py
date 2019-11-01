@@ -2,6 +2,7 @@ import logging
 import time
 from typing import Dict, List, Tuple, Union
 from klayout import db
+import itertools
 import os
 
 from .writer import Writer
@@ -151,6 +152,7 @@ def store_layout_to_magic_file(tech_name: str,
         rect_lines = ["rect {}".format(_format_rect(box)) for box in boxes]
         mag_lines.extend(rect_lines)
 
+    port_counter = itertools.count(1)
     for pin_name, pins in pin_geometries.items():
         for layer_name, pin_shapes in pins:
             pin_region = db.Region()
@@ -168,6 +170,9 @@ def store_layout_to_magic_file(tech_name: str,
                                                                   text_orientation,
                                                                   pin_name))
 
+                    # TODO: is this correct?
+                    mag_labels.append("port {} se".format(next(port_counter)))
+
     # Appends 'labels' section if there are any.
     if len(mag_labels) > 0:
         mag_lines.append("<< labels >>")
@@ -183,7 +188,7 @@ def store_layout_to_magic_file(tech_name: str,
 
 class MagWriter(Writer):
 
-    def __init__(self, tech_name: str, output_map: Dict[str, str], scale_factor: int = 1):
+    def __init__(self, tech_name: str, output_map: Dict[str, str], scale_factor: float = 1):
         """
 
         :param tech_name:
