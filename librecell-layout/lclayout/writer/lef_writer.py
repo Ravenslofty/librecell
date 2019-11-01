@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple
 from klayout import db
 import os
 
