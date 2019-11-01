@@ -56,7 +56,7 @@ output_map = {
 output_writers = [
     MagWriter(
         tech_name='scmos',
-        scale_factor=0.1,
+        scale_factor=0.1, # Scale all coordinates by this factor (rounded down to next integer).
         output_map={
             l_via1: 'm2contact',
             l_poly: 'polysilicon',
