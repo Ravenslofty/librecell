@@ -1,4 +1,7 @@
 from lclayout.layout.layers import *
+from lclayout.writer.magic_writer import MagWriter
+from lclayout.writer.lef_writer import LefWriter
+from lclayout.writer.gds_writer import GdsWriter
 
 # Physical size of one data base unit in meters.
 # All dimensions in this file must be given in this unit.
@@ -48,6 +51,35 @@ output_map = {
     l_metal2_pin: my_metal2_pin,
     l_abutment_box: my_abutment_box
 }
+
+output_writers = [
+    MagWriter(
+        tech_name='scmos',
+        scale_factor=1000,
+        layer_mapping={
+            l_via1: 'm2contact',
+            l_poly: 'polysilicon',
+            l_abutment_box: ['border', 'fence'],
+            l_metal1: 'metal1',
+            l_metal1_label: 'metal1',
+            l_metal2_label: 'metal2',
+            l_active: 'ndiffusion',
+            l_metal2_pin: 'metal2',
+            l_poly_contact: 'polycontact',
+            l_diff_contact: 'pdcontact'
+        }
+    ),
+
+    LefWriter(
+        db_unit=db_unit,
+        output_map=output_map
+    ),
+
+    GdsWriter(
+        db_unit=db_unit,
+        output_map=output_map
+    )
+]
 
 # Define how layers can be used for routing.
 # Example for a layer that can be used for horizontal and vertical tracks: {'MyLayer1' : 'hv'}
