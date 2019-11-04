@@ -348,6 +348,7 @@ def test_lef():
 
     macro = Macro('AND2X8',
                   macro_class=MacroClass.CORE,
+                  foreign=Foreign('foreign_name', Point(0, 0)),
                   obstructions=[Obstruction(Layer('metal1'), [Rect((1, 2), (3, 4))])],
                   origin=Point(0, 0),
                   pins=[pin, pin],
