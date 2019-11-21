@@ -20,6 +20,7 @@
 ## 
 ##
 import networkx as nx
+import numpy as np
 from .graphrouter import GraphRouter
 from .signal_router import SignalRouter
 from .multi_via_router import MultiViaRouter
@@ -102,8 +103,24 @@ def _route(detail_router: SignalRouter,
     for a, b, data in graph.edges(data=True):
         assert 'weight' in data, Exception('Edge has no weight: ', (a, b))
         if 'weight' in data:
-            edge_base_cost[(a, b)] = data['weight']
-            edge_base_cost[(b, a)] = data['weight']
+            w = data['weight']
+            edge_base_cost[(a, b)] = w
+            edge_base_cost[(b, a)] = w
+
+            # if a not in node_base_cost:
+            #     node_base_cost[a] = 0
+            #
+            # if b not in node_base_cost:
+            #     node_base_cost[b] = 0
+            #
+            # node_base_cost[a] += w//2
+            # node_base_cost[b] += w//2
+
+    # Normalize edge costs
+    edge_costs = list(edge_base_cost.values())
+    median_edge_cost = np.median(edge_costs)
+
+    edge_base_cost = {k: v / median_edge_cost for k, v in edge_base_cost.items()}
 
     routing_trees = {name: nx.Graph() for name in signals.keys()}
     slack_ratios = {name: 1 for name in signals.keys()}
@@ -128,8 +145,13 @@ def _route(detail_router: SignalRouter,
 
     # TODO: just use detail_router and let caller decide whether to use MultiViaRouter or not.
     multi_via_router = MultiViaRouter(detail_router, node_conflict)
+    # multi_via_router = detail_router  # Don't use multi via router.
+
+    history_cost_weight = 5
+    node_present_sharing_cost_increment = 10
 
     max_iterations = 1000
+
     for j in count():
 
         if j >= max_iterations:
@@ -137,7 +159,7 @@ def _route(detail_router: SignalRouter,
 
         logger.info('Routing iteration %d' % j)
 
-        routing_order = sorted(signals.keys(), key=lambda i: slack_ratios[i], reverse=True)
+        routing_order = sorted(signals.keys(), key=lambda i: (slack_ratios[i], i), reverse=True)
         node_present_sharing_cost.clear()
 
         for signal_name in routing_order:
@@ -147,8 +169,8 @@ def _route(detail_router: SignalRouter,
 
             def node_cost_fn(n):
                 b = node_base_cost.get(n, 0)
-                h = node_history_cost.get(n, 0)
-                p = node_present_sharing_cost.get(n, 0)
+                h = node_history_cost.get(n, 0) * history_cost_weight
+                p = node_present_sharing_cost.get(n, 0) * node_present_sharing_cost_increment
                 c = (1 + b + h) * (p + 1)
                 return c * (1 - slack_ratio)
 
@@ -169,7 +191,7 @@ def _route(detail_router: SignalRouter,
                 for o in node_conflict.get(n, {n}):
                     if o not in node_present_sharing_cost:
                         node_present_sharing_cost[o] = 0
-                    node_present_sharing_cost[o] += 100
+                    node_present_sharing_cost[o] += 1
 
         # Detect node collisions
 
@@ -197,14 +219,16 @@ def _route(detail_router: SignalRouter,
 
         # Increment history cost
         for n in node_collisions:
-            node_history_cost[n] = node_history_cost.get(n, 1) + 100
+            node_history_cost[n] = node_history_cost.get(n, 0) + 1
 
         # Update slack_ratios
         tree_weights = {signal_name: sum(edge_base_cost[e] for e in rt.edges())
                         for signal_name, rt in routing_trees.items()}
+
         max_weight = max(tree_weights.values())
         slack_ratios = {n: t / max_weight for n, t in tree_weights.items()}
-        slack_ratios = {n: (s - 0.5) * 0.6 + 0.5 for n, s in slack_ratios.items()}
+        slack_ratio_scaling = 0.8
+        slack_ratios = {n: (s - 0.5) * slack_ratio_scaling + 0.5 for n, s in slack_ratios.items()}
 
     return routing_trees
 
@@ -229,11 +253,13 @@ def test():
         G.add_node((x, y))
         pos[(x, y)] = (x, y)
 
+        w = 1
+
         if x < num_x - 1 and not (1 <= y < 5 and x == 4):
-            G.add_edge((x, y), (x + 1, y), weight=1, orientation='h')
+            G.add_edge((x, y), (x + 1, y), weight=w, orientation='h')
 
         if y < num_y - 1:
-            G.add_edge((x, y), (x, y + 1), weight=1, orientation='v')
+            G.add_edge((x, y), (x, y + 1), weight=w, orientation='v')
 
     G.add_edge((8, 0), (9, 0), multi_via=2)
 
@@ -243,7 +269,7 @@ def test():
     signals = {  # [terminals, ...]
         'a': [(0, 0), (8, 5), (7, 7), (6, 3)],
         'b': [(1, 1), (9, 0)],
-        # [(3,3), (3,6)],
+        'c': [(3, 3), (3, 6)],
         # [(0,9), (9,0)],
         # [(0,1), (9,2)],
         # [(1,1), (8,9), (7,4)],

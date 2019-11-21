@@ -129,6 +129,7 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                 assert y1 == y2
                 # Draw via
                 via_layer = via_layers[l1][l2]['layer']
+                print(via_layer)
 
                 via_width = tech.via_size[via_layer]
 

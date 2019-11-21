@@ -347,7 +347,7 @@ def create_virtual_terminal_nodes(G: nx.Graph,
             x, y = p
             assert n in G.nodes, "Node not present in graph: %s" % str(n)
             # A huge weight assures that the virtual node is not used as a worm hole for routing.
-            weight = 100000 + (y - tech.unit_cell_height // 2) // tech.routing_grid_pitch_y
+            weight = 10000000 + (y - tech.unit_cell_height // 2) // tech.routing_grid_pitch_y
             G.add_edge(virtual_net_terminal, n, weight=weight)
 
     return virtual_terminal_nodes
