@@ -56,7 +56,7 @@ output_map = {
 output_writers = [
     MagWriter(
         tech_name='scmos',
-        scale_factor=0.1, # Scale all coordinates by this factor (rounded down to next integer).
+        scale_factor=0.1,  # Scale all coordinates by this factor (rounded down to next integer).
         output_map={
             l_via1: 'm2contact',
             l_poly: 'polysilicon',
@@ -128,6 +128,12 @@ gate_length = 50
 
 # Minimum length a polysilicon gate must overlap the silicon.
 gate_extension = 100
+
+# y-offset of the transistors (active) relative to the upper or lower boundary of the cell.
+# This showed to be too tricky to choose automatically because there are following trade offs:
+#   - Placing NMOS and PMOS rows closer to the center allows for shorter vertical wiring but makes the routing between the rows harder.
+#   - Also this offset must be chosen in a way such that the active region actually lies on at least one routing grid point.
+transistor_distance_to_boundary = 125
 
 # Routing pitch
 routing_grid_pitch_x = unit_cell_width // 2
