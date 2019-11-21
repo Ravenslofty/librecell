@@ -254,7 +254,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     transistors = abstract_cell.get_transistor_locations()
 
     # Create the layouts of the single transistors. Layouts are already translated to the absolute position.
-    transistor_layouts = {t: create_transistor_layout(t, (x, y), tech.transistor_distance_to_boundary, tech)
+    transistor_layouts = {t: create_transistor_layout(t, (x, y), tech.transistor_offset_y, tech)
                           for t, (x, y) in transistors}
 
     # Draw the transistors
