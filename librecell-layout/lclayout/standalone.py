@@ -178,6 +178,25 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                         shapes[l].insert(enc)
 
 
+def _is_virtual_node_fn(n) -> bool:
+    """
+    Check if the node is virtual and has no direct physical representation.
+    :param n:
+    :return:
+    """
+    return n[0].startswith('virtual')
+
+
+def _is_virtual_edge_fn(e) -> bool:
+    """
+    Check if the edge connects to at least one virtual node.
+    :param n:
+    :return:
+    """
+    a, b = e
+    return _is_virtual_node_fn(a) or _is_virtual_node_fn(b)
+
+
 def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: str,
                        placer: TransistorPlacer = None,
                        debug_routing_graph: bool = False,
@@ -394,7 +413,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         unused_nodes = set()
         for n in G:
             if nx.degree(G, n) <= 1:
-                if not n[0].startswith('virtual'):
+                if not _is_virtual_node_fn(n):
                     unused_nodes.add(n)
         if len(unused_nodes) == 0:
             break
@@ -446,7 +465,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         # Loop through all nodes in the routing graph G.
         for n in G:
             # Skip virtual nodes which have no physical representation.
-            if not n[0].startswith('virtual'):
+            if not _is_virtual_node_fn(n):
                 layer, point = n
                 wire_width1 = tech.wire_width.get(layer, 0) // 2
                 node_conflicts = set()
@@ -466,7 +485,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                             potential_conflicts = [x for x in G if x[0] == other_layer]
                             conflict_points = [p for (_, p) in potential_conflicts
                                                if numpy.linalg.norm(numpy.array(p) - numpy.array(point),
-                                                                    ord=1) <= margin
+                                                                    ord=1) < margin
                                                ]
                             # Construct the lookup table for conflicting nodes.
                             for p in conflict_points:
@@ -493,7 +512,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         # detail_router = ApproxSteinerTreeRouter()
         assert nx.is_connected(G)
 
-        router = PathFinderGraphRouter(detail_router)
+        router = PathFinderGraphRouter(
+            detail_router
+        )
         # router = LPGraphRouter()
         router = HVGraphRouter(router,
                                orientation_change_penalty=tech.orientation_change_penalty)
@@ -501,7 +522,8 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         routing_trees = router.route(G,
                                      signals=virtual_terminal_nodes,
                                      reserved_nodes=reserved_nodes,
-                                     node_conflict=conflicts
+                                     node_conflict=conflicts,
+                                     is_virtual_node_fn=_is_virtual_node_fn
                                      )
 
     # Draw the layout of the routes.

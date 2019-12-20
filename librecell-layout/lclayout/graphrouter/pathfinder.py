@@ -37,29 +37,35 @@ logger = logging.getLogger(__name__)
 
 class PathFinderGraphRouter(GraphRouter):
 
-    def __init__(self, detail_router: SignalRouter):
+    def __init__(self,
+                 detail_router: SignalRouter,
+                 is_virtual_edge_fn=None):
         self.detail_router = detail_router
 
     def route(self,
               graph: nx.Graph,
               signals: Dict[Any, List[Any]],
               reserved_nodes: Optional[Dict] = None,
-              node_conflict: Optional[Dict[Any, AbstractSet[Any]]] = None
-              # node_cost_fn,
-              # edge_cost_fn
+              node_conflict: Optional[Dict[Any, AbstractSet[Any]]] = None,
+              equivalent_nodes: Optional[Dict[Any, AbstractSet[Any]]] = None,
+              is_virtual_node_fn=None
               ) -> Dict[Any, nx.Graph]:
         return _route(self.detail_router,
                       graph,
                       signals=signals,
                       reserved_nodes=reserved_nodes,
-                      node_conflict=node_conflict)
+                      node_conflict=node_conflict,
+                      equivalent_nodes=equivalent_nodes,
+                      is_virtual_node_fn=is_virtual_node_fn)
 
 
 def _route(detail_router: SignalRouter,
            graph: nx.Graph,
            signals: Dict[Any, List[Any]],
            reserved_nodes: Optional[Dict] = None,
-           node_conflict: Optional[Dict[Any, AbstractSet[Any]]] = None) -> Dict[Any, nx.Graph]:
+           node_conflict: Optional[Dict[Any, AbstractSet[Any]]] = None,
+           equivalent_nodes: Optional[Dict[Any, AbstractSet[Any]]] = None,
+           is_virtual_node_fn=None) -> Dict[Any, nx.Graph]:
     """ Route multiple signals in the graph.
     Based on PathFinder algorithm.
 
@@ -115,9 +121,15 @@ def _route(detail_router: SignalRouter,
         # node_base_cost[a] += w//2
         # node_base_cost[b] += w//2
 
+    def is_virtual_edge(e) -> bool:
+        a, b = e
+        return is_virtual_node_fn(a) or is_virtual_node_fn(b)
+
     # Normalize edge costs
-    edge_costs = list(edge_base_cost.values())
-    median_edge_cost = np.median(edge_costs)
+    edge_costs = [cost for edge, cost in edge_base_cost.items() if not is_virtual_edge(edge)]
+    median_edge_cost = np.mean(edge_costs)
+
+    print('median_edge_cost: ', median_edge_cost)
 
     edge_base_cost = {k: v / median_edge_cost for k, v in edge_base_cost.items()}
 
@@ -146,7 +158,7 @@ def _route(detail_router: SignalRouter,
     multi_via_router = MultiViaRouter(detail_router, node_conflict)
     # multi_via_router = detail_router  # Don't use multi via router.
 
-    history_cost_weight = 5
+    history_cost_weight = 1
     node_present_sharing_cost_increment = 10
 
     max_iterations = 1000
@@ -159,6 +171,7 @@ def _route(detail_router: SignalRouter,
         logger.info('Routing iteration %d' % j)
 
         routing_order = sorted(signals.keys(), key=lambda i: (slack_ratios[i], i), reverse=True)
+        print(routing_order)
         node_present_sharing_cost.clear()
 
         for signal_name in routing_order:
@@ -208,7 +221,26 @@ def _route(detail_router: SignalRouter,
         # Find collisions
         node_collisions = [k for k, v in node_sharing.items() if v > 1 and k in all_routing_tree_nodes]
 
+        if equivalent_nodes:
+            # Also mark nodes that are equivalent.
+            node_collisions = set(chain(*(equivalent_nodes[n] for n in node_collisions)))
+
         has_collision = len(node_collisions) > 0
+
+        # Compute weights of all signal trees.
+        tree_weights = {signal_name: sum(edge_base_cost[e] for e in rt.edges() if not is_virtual_edge(e))
+                        for signal_name, rt in routing_trees.items()}
+
+        print('Node collisions:')
+        for n in node_collisions:
+            print(n)
+
+        if not has_collision:
+            print('No collisions')
+
+        # Print routing tree weights.
+        for signal_name, tree_weight in tree_weights.items():
+            print('weight of {:>20}: {:.4f}'.format(signal_name, tree_weight))
 
         if not has_collision:
             logger.info("Global routing done in %d iterations", j)
@@ -220,14 +252,11 @@ def _route(detail_router: SignalRouter,
         for n in node_collisions:
             node_history_cost[n] = node_history_cost.get(n, 0) + 1
 
-        # Update slack_ratios
-        tree_weights = {signal_name: sum(edge_base_cost[e] for e in rt.edges())
-                        for signal_name, rt in routing_trees.items()}
-
         max_weight = max(tree_weights.values())
         slack_ratios = {n: t / max_weight for n, t in tree_weights.items()}
-        slack_ratio_scaling = 0.8
+        slack_ratio_scaling = 0.1
         slack_ratios = {n: (s - 0.5) * slack_ratio_scaling + 0.5 for n, s in slack_ratios.items()}
+        print(slack_ratios)
 
     return routing_trees
 
