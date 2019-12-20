@@ -125,13 +125,14 @@ def _route(detail_router: SignalRouter,
         a, b = e
         return is_virtual_node_fn(a) or is_virtual_node_fn(b)
 
-    # Normalize edge costs
+    # Pre-scaling: Normalize edge costs.
     edge_costs = [cost for edge, cost in edge_base_cost.items() if not is_virtual_edge(edge)]
-    median_edge_cost = np.mean(edge_costs)
+    mean_edge_cost = np.mean(edge_costs)
 
-    print('median_edge_cost: ', median_edge_cost)
+    logger.debug('Mean edge cost (without virtual edges): {:.2f}'.format(mean_edge_cost))
+    logger.debug('Pre-scaling factor for edge costs: 1/{:.2f}'.format(mean_edge_cost))
 
-    edge_base_cost = {k: v / median_edge_cost for k, v in edge_base_cost.items()}
+    edge_base_cost = {k: v / mean_edge_cost for k, v in edge_base_cost.items()}
 
     routing_trees = {name: nx.Graph() for name in signals.keys()}
     slack_ratios = {name: 1 for name in signals.keys()}
@@ -171,7 +172,7 @@ def _route(detail_router: SignalRouter,
         logger.info('Routing iteration %d' % j)
 
         routing_order = sorted(signals.keys(), key=lambda i: (slack_ratios[i], i), reverse=True)
-        print(routing_order)
+        logger.debug('Routing order: {}'.format(routing_order))
         node_present_sharing_cost.clear()
 
         for signal_name in routing_order:
@@ -231,16 +232,10 @@ def _route(detail_router: SignalRouter,
         tree_weights = {signal_name: sum(edge_base_cost[e] for e in rt.edges() if not is_virtual_edge(e))
                         for signal_name, rt in routing_trees.items()}
 
-        print('Node collisions:')
-        for n in node_collisions:
-            print(n)
-
-        if not has_collision:
-            print('No collisions')
-
         # Print routing tree weights.
         for signal_name, tree_weight in tree_weights.items():
-            print('weight of {:>20}: {:.4f}'.format(signal_name, tree_weight))
+            original_tree_weight = tree_weight * mean_edge_cost # Invert pre-scaling.
+            logger.debug('weight of {:>16}: {:.2f}'.format(signal_name, original_tree_weight))
 
         if not has_collision:
             logger.info("Global routing done in %d iterations", j)
@@ -256,7 +251,6 @@ def _route(detail_router: SignalRouter,
         slack_ratios = {n: t / max_weight for n, t in tree_weights.items()}
         slack_ratio_scaling = 0.1
         slack_ratios = {n: (s - 0.5) * slack_ratio_scaling + 0.5 for n, s in slack_ratios.items()}
-        print(slack_ratios)
 
     return routing_trees
 
