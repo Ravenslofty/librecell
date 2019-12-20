@@ -29,9 +29,19 @@ class GraphRouter:
     def route(self,
               graph: nx.Graph,
               signals: Dict[Any, List[Any]],
-              reserved_nodes: Optional[Dict] = None,
-              node_conflict: Optional[Dict[Any, AbstractSet[Any]]] = None
-              # node_cost_fn,
-              # edge_cost_fn
+              reserved_nodes: Optional[Dict[Any, AbstractSet[Any]]] = None,
+              node_conflict: Optional[Dict[Any, AbstractSet[Any]]] = None,
+              equivalent_nodes: Optional[Dict[Any, AbstractSet[Any]]] = None,
+              is_virtual_node_fn=None
               ) -> Dict[Any, nx.Graph]:
+        """
+
+        :param graph: Routing graph.
+        :param signals: Mapping of signal names to terminal nodes in the graph.
+        :param reserved_nodes: Mapping of signal names to graph nodes that are reserved for this signal.
+        :param node_conflict: Mapping of a node to other nodes that can not be used for routing at the same time.
+        :param equivalent_nodes: For each node a set of nodes that are physically equivalent.
+        :param is_virtual_node_fn: Function that returns True iff the argument is a virtual node.
+        :return: Returns a dict mapping signal names to routing trees.
+        """
         pass
