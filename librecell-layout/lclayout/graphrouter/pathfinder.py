@@ -102,19 +102,18 @@ def _route(detail_router: SignalRouter,
     # Import edge costs from graph G
     for a, b, data in graph.edges(data=True):
         assert 'weight' in data, Exception('Edge has no weight: ', (a, b))
-        if 'weight' in data:
-            w = data['weight']
-            edge_base_cost[(a, b)] = w
-            edge_base_cost[(b, a)] = w
+        w = data['weight']
+        edge_base_cost[(a, b)] = w
+        edge_base_cost[(b, a)] = w
 
-            # if a not in node_base_cost:
-            #     node_base_cost[a] = 0
-            #
-            # if b not in node_base_cost:
-            #     node_base_cost[b] = 0
-            #
-            # node_base_cost[a] += w//2
-            # node_base_cost[b] += w//2
+        # if a not in node_base_cost:
+        #     node_base_cost[a] = 0
+        #
+        # if b not in node_base_cost:
+        #     node_base_cost[b] = 0
+        #
+        # node_base_cost[a] += w//2
+        # node_base_cost[b] += w//2
 
     # Normalize edge costs
     edge_costs = list(edge_base_cost.values())
