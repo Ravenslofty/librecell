@@ -380,8 +380,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Remove terminals of nets with only one terminal. They need not be routed.
     # This can happen if a net is already connected by abutment of two transistors.
-    # Count terminals of a net.
+    # 1) Count terminals of a net.
     num_appearance = Counter(chain((net for net, _, _ in terminals_by_net), io_pins))
+    # 2) Filter by number of appearance.
     terminals_by_net = [t for t in terminals_by_net if num_appearance[t[0]] > 1]
 
     # Check if each net really has a routing terminal.
