@@ -20,7 +20,7 @@
 ## 
 ##
 from itertools import chain
-from collections import Counter
+from collections import Counter, defaultdict
 import numpy
 import toml
 
@@ -283,7 +283,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         draw_transistor(l, shapes)
 
     # Create mapping from nets to {layer: region}
-    net_regions = {}
+    net_regions = defaultdict(lambda: defaultdict(pya.Region))
 
     # Load spacing rules in form of a graph.
     spacing_graph = tech_util.spacing_graph(tech.min_spacing)
@@ -318,7 +318,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Register power rails as net regions.
     for net, shape in [(SUPPLY_VOLTAGE_NET, vdd_rail), (GND_NET, vss_rail)]:
-        net_regions.setdefault(net, {}).setdefault(tech.power_layer, pya.Region()).insert(shape)
+        net_regions[net][tech.power_layer].insert(shape)
 
     # Pre-route vertical gate-gate connections
     for i in range(abstract_cell.width):
@@ -339,7 +339,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                     tech.gate_length)
 
                 shapes[l_poly].insert(gate_path)
-                net_regions.setdefault(u.gate, {}).setdefault(l_poly, pya.Region()).insert(gate_path)
+                net_regions[u.gate][l_poly].insert(gate_path)
                 # tu.terminals.clear()
                 # tl.terminals.clear()
 
@@ -352,7 +352,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         ]
 
         for layer, net, shape in net_shapes:
-            r = net_regions.setdefault(net, {}).setdefault(layer, pya.Region())
+            r = net_regions[net][layer]
             r.insert(shape)
             r.merge()
 
@@ -498,11 +498,11 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
         # Find routing nodes that are reserved for a net. They cannot be used to route other nets.
         # (For instance the ends of a gate stripe.)
-        reserved_nodes = dict()
+        reserved_nodes = defaultdict(set)
         for net, layer, terminals in terminals_by_net:
             for p in terminals:
                 n = layer, p
-                reserved = reserved_nodes.setdefault(net, set())
+                reserved = reserved_nodes[net]
                 reserved.add(n)
                 if n in conflicts:
                     for c in conflicts[n]:  # Also reserve nodes that would cause a spacing violation.
@@ -557,9 +557,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
             _merge_all_layers(shapes)
 
     # Register Pins/Ports for LEF file.
-    lef_ports = {}
-    lef_ports.setdefault(SUPPLY_VOLTAGE_NET, []).append((tech.power_layer, vdd_rail))
-    lef_ports.setdefault(GND_NET, []).append((tech.power_layer, vss_rail))
+    lef_ports = defaultdict(list)
+    lef_ports[SUPPLY_VOLTAGE_NET].append((tech.power_layer, vdd_rail))
+    lef_ports[GND_NET].append((tech.power_layer, vss_rail))
 
     if not debug_routing_graph:
 
@@ -597,7 +597,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                     pin_shapes_by_net[net_name] = pin_shapes
 
                     # Register pin shapes for LEF file.
-                    lef_ports.setdefault(net_name, []).append((layer, pin_shapes))
+                    lef_ports[net_name].append((layer, pin_shapes))
 
         # Add pin labels
         for net_name, (x, y) in pin_locations_by_net.items():
