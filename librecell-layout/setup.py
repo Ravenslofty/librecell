@@ -33,6 +33,7 @@ setup(name='librecell-layout',
       },
       install_requires=[
           'librecell-common',
+          'toml',
           'klayout',  # GPLv3
           'numpy',  # BSD
           'networkx',  # BSD
