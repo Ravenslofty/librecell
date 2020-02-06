@@ -657,6 +657,8 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true', help='show more information')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help="don't show any information except fatal events (overwrites --verbose)")
+    parser.add_argument('--log', required=False, metavar='LOG_FILE', type=str,
+                        help='write log to this file instead of stdout')
 
     # Parse arguments
     args = parser.parse_args()
@@ -670,7 +672,9 @@ def main():
     # Setup logging
     logging.basicConfig(format='%(asctime)s %(module)16s %(levelname)8s: %(message)s',
                         datefmt="%Y-%m-%d %H:%M:%S",
-                        level=log_level)
+                        level=log_level,
+                        filename=args.log)
+
 
     # Load netlist of cell
     cell_name = args.cell
