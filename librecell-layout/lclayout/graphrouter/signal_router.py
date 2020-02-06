@@ -19,6 +19,7 @@
 ## 
 ## 
 ##
+from collections import defaultdict
 import networkx as nx
 
 from itertools import product, tee, count
@@ -196,10 +197,10 @@ def absolute_1_center(
         )
         for t in terminals}
 
-    distances_by_node = dict()
+    distances_by_node = defaultdict(list)
     for t, dists in distances.items():
         for n, dist in dists.items():
-            distances_by_node.setdefault(n, []).append(dist)
+            distances_by_node[n].append(dist)
 
     max_distances = {n: max(dists) for n, dists in distances_by_node.items()}
     # Use sum of squared distances as metric.

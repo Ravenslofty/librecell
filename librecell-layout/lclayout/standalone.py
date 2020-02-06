@@ -20,7 +20,7 @@
 ## 
 ##
 from itertools import chain
-from collections import Counter
+from collections import Counter, defaultdict
 import numpy
 import toml
 
@@ -129,6 +129,7 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                 assert y1 == y2
                 # Draw via
                 via_layer = via_layers[l1][l2]['layer']
+                logger.debug('Draw via: {} ({}, {})'.format(via_layer, x1, y1))
 
                 via_width = tech.via_size[via_layer]
 
@@ -141,39 +142,59 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                 shapes[via_layer].insert(via)
 
                 # Ensure minimum via enclosure.
-                for l in (l1, l2):
-                    # TODO: Check on which sides minimum enclosure is not yet satisfied by some wire.
+                if not debug_routing_graph:
+                    for l in (l1, l2):
+                        # TODO: Check on which sides minimum enclosure is not yet satisfied by some wire.
 
-                    neighbors = rt.neighbors((l, (x1, y1)))
-                    neighbors = [n for n in neighbors if n[0] == l]
+                        neighbors = rt.neighbors((l, (x1, y1)))
+                        neighbors = [n for n in neighbors if n[0] == l]
 
-                    w_ext = via_width // 2 + tech.minimum_enclosure[(l, via_layer)]
-                    w_noext = via_width // 2
+                        w_ext = via_width // 2 + tech.minimum_enclosure[(l, via_layer)]
+                        w_noext = via_width // 2
 
-                    # Check on which sides the enclosure must be extended.
-                    # Some sides will already be covered by a routing wire.
-                    ext_right = w_ext
-                    ext_upper = w_ext
-                    ext_left = w_ext
-                    ext_lower = w_ext
-                    # TODO
-                    # for _, (n_x, n_y) in neighbors:
-                    #     if n_x == x1:
-                    #         if n_y < y1:
-                    #             ext_lower = w_noext
-                    #         if n_y > y1:
-                    #             ext_upper = w_noext
-                    #     if n_y == y1:
-                    #         if n_x < x1:
-                    #             ext_left = w_noext
-                    #         if n_x > x1:
-                    #             ext_right = w_noext
+                        # Check on which sides the enclosure must be extended.
+                        # Some sides will already be covered by a routing wire.
+                        ext_right = w_ext
+                        ext_upper = w_ext
+                        ext_left = w_ext
+                        ext_lower = w_ext
+                        # TODO
+                        # for _, (n_x, n_y) in neighbors:
+                        #     if n_x == x1:
+                        #         if n_y < y1:
+                        #             ext_lower = w_noext
+                        #         if n_y > y1:
+                        #             ext_upper = w_noext
+                        #     if n_y == y1:
+                        #         if n_x < x1:
+                        #             ext_left = w_noext
+                        #         if n_x > x1:
+                        #             ext_right = w_noext
 
-                    enc = pya.Box(
-                        pya.Point(x1 - ext_left, y1 - ext_lower),
-                        pya.Point(x1 + ext_right, y1 + ext_upper)
-                    )
-                    shapes[l].insert(enc)
+                        enc = pya.Box(
+                            pya.Point(x1 - ext_left, y1 - ext_lower),
+                            pya.Point(x1 + ext_right, y1 + ext_upper)
+                        )
+                        shapes[l].insert(enc)
+
+
+def _is_virtual_node_fn(n) -> bool:
+    """
+    Check if the node is virtual and has no direct physical representation.
+    :param n:
+    :return:
+    """
+    return n[0].startswith('virtual')
+
+
+def _is_virtual_edge_fn(e) -> bool:
+    """
+    Check if the edge connects to at least one virtual node.
+    :param n:
+    :return:
+    """
+    a, b = e
+    return _is_virtual_node_fn(a) or _is_virtual_node_fn(b)
 
 
 def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: str,
@@ -189,6 +210,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     :param cell_name: str
       The name of the cell to be drawn.
     :param netlist_path: Path to SPICE transistor netlist.
+    :param placer: `TransistorPlacer` object which is used for the placement. If not supplied, a default will be chosen.
     :param debug_routing_graph: bool
       If set to True, the full routing graph is written to the layout instead of the routing paths.
     :param debug_smt_solver: Tell DRC cleaner to show which assertions are not satisfiable.
@@ -230,10 +252,11 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
         min_size = tech.minimum_gate_width_nfet if t.channel_type == ChannelType.NMOS else tech.minimum_gate_width_pfet
 
-        if t.channel_width < min_size:
+        if t.channel_width + 1e-12 < min_size:
             logger.warning("Channel width too small changing it to minimal size: %.2e < %.2e", t.channel_width,
                            min_size)
-            t.channel_width = min_size
+
+        t.channel_width = max(min_size, t.channel_width)
 
     # Place transistors
     logging.info('Find transistor placement')
@@ -252,14 +275,15 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     transistors = abstract_cell.get_transistor_locations()
 
     # Create the layouts of the single transistors. Layouts are already translated to the absolute position.
-    transistor_layouts = {t: create_transistor_layout(t, (x, y), tech) for t, (x, y) in transistors}
+    transistor_layouts = {t: create_transistor_layout(t, (x, y), tech.transistor_offset_y, tech)
+                          for t, (x, y) in transistors}
 
     # Draw the transistors
     for l in transistor_layouts.values():
         draw_transistor(l, shapes)
 
     # Create mapping from nets to {layer: region}
-    net_regions = {}
+    net_regions = defaultdict(lambda: defaultdict(pya.Region))
 
     # Load spacing rules in form of a graph.
     spacing_graph = tech_util.spacing_graph(tech.min_spacing)
@@ -294,7 +318,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Register power rails as net regions.
     for net, shape in [(SUPPLY_VOLTAGE_NET, vdd_rail), (GND_NET, vss_rail)]:
-        net_regions.setdefault(net, {}).setdefault(tech.power_layer, pya.Region()).insert(shape)
+        net_regions[net][tech.power_layer].insert(shape)
 
     # Pre-route vertical gate-gate connections
     for i in range(abstract_cell.width):
@@ -315,7 +339,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                     tech.gate_length)
 
                 shapes[l_poly].insert(gate_path)
-                net_regions.setdefault(u.gate, {}).setdefault(l_poly, pya.Region()).insert(gate_path)
+                net_regions[u.gate][l_poly].insert(gate_path)
                 # tu.terminals.clear()
                 # tl.terminals.clear()
 
@@ -328,7 +352,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         ]
 
         for layer, net, shape in net_shapes:
-            r = net_regions.setdefault(net, {}).setdefault(layer, pya.Region())
+            r = net_regions[net][layer]
             r.insert(shape)
             r.merge()
 
@@ -342,6 +366,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     # Remove illegal routing nodes from graph and get a dict of legal routing nodes per layer.
     remove_illegal_routing_edges(G, shapes, tech)
 
+    # if not debug_routing_graph:
+    #     assert nx.is_connected(G)
+
     # Remove pre-routed edges from G.
     remove_existing_routing_edges(G, shapes, tech)
 
@@ -353,8 +380,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Remove terminals of nets with only one terminal. They need not be routed.
     # This can happen if a net is already connected by abutment of two transistors.
-    # Count terminals of a net.
+    # 1) Count terminals of a net.
     num_appearance = Counter(chain((net for net, _, _ in terminals_by_net), io_pins))
+    # 2) Filter by number of appearance.
     terminals_by_net = [t for t in terminals_by_net if num_appearance[t[0]] > 1]
 
     # Check if each net really has a routing terminal.
@@ -387,7 +415,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         unused_nodes = set()
         for n in G:
             if nx.degree(G, n) <= 1:
-                if not n[0].startswith('virtual'):
+                if not _is_virtual_node_fn(n):
                     unused_nodes.add(n)
         if len(unused_nodes) == 0:
             break
@@ -438,8 +466,8 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         conflicts = dict()
         # Loop through all nodes in the routing graph G.
         for n in G:
-            # Skip virtual nodes wich have no physical representation.
-            if not n[0].startswith('virtual'):
+            # Skip virtual nodes which have no physical representation.
+            if not _is_virtual_node_fn(n):
                 layer, point = n
                 wire_width1 = tech.wire_width.get(layer, 0) // 2
                 node_conflicts = set()
@@ -459,7 +487,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                             potential_conflicts = [x for x in G if x[0] == other_layer]
                             conflict_points = [p for (_, p) in potential_conflicts
                                                if numpy.linalg.norm(numpy.array(p) - numpy.array(point),
-                                                                    ord=1) <= margin
+                                                                    ord=1) < margin
                                                ]
                             # Construct the lookup table for conflicting nodes.
                             for p in conflict_points:
@@ -471,11 +499,11 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
         # Find routing nodes that are reserved for a net. They cannot be used to route other nets.
         # (For instance the ends of a gate stripe.)
-        reserved_nodes = dict()
+        reserved_nodes = defaultdict(set)
         for net, layer, terminals in terminals_by_net:
             for p in terminals:
                 n = layer, p
-                reserved = reserved_nodes.setdefault(net, set())
+                reserved = reserved_nodes[net]
                 reserved.add(n)
                 if n in conflicts:
                     for c in conflicts[n]:  # Also reserve nodes that would cause a spacing violation.
@@ -486,7 +514,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         # detail_router = ApproxSteinerTreeRouter()
         assert nx.is_connected(G)
 
-        router = PathFinderGraphRouter(detail_router)
+        router = PathFinderGraphRouter(
+            detail_router
+        )
         # router = LPGraphRouter()
         router = HVGraphRouter(router,
                                orientation_change_penalty=tech.orientation_change_penalty)
@@ -494,7 +524,8 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         routing_trees = router.route(G,
                                      signals=virtual_terminal_nodes,
                                      reserved_nodes=reserved_nodes,
-                                     node_conflict=conflicts
+                                     node_conflict=conflicts,
+                                     is_virtual_node_fn=_is_virtual_node_fn
                                      )
 
     # Draw the layout of the routes.
@@ -527,9 +558,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
             _merge_all_layers(shapes)
 
     # Register Pins/Ports for LEF file.
-    lef_ports = {}
-    lef_ports.setdefault(SUPPLY_VOLTAGE_NET, []).append((tech.power_layer, vdd_rail))
-    lef_ports.setdefault(GND_NET, []).append((tech.power_layer, vss_rail))
+    lef_ports = defaultdict(list)
+    lef_ports[SUPPLY_VOLTAGE_NET].append((tech.power_layer, vdd_rail))
+    lef_ports[GND_NET].append((tech.power_layer, vss_rail))
 
     if not debug_routing_graph:
 
@@ -567,7 +598,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                     pin_shapes_by_net[net_name] = pin_shapes
 
                     # Register pin shapes for LEF file.
-                    lef_ports.setdefault(net_name, []).append((layer, pin_shapes))
+                    lef_ports[net_name].append((layer, pin_shapes))
 
         # Add pin labels
         for net_name, (x, y) in pin_locations_by_net.items():
@@ -626,6 +657,8 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true', help='show more information')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help="don't show any information except fatal events (overwrites --verbose)")
+    parser.add_argument('--log', required=False, metavar='LOG_FILE', type=str,
+                        help='write log to this file instead of stdout')
 
     # Parse arguments
     args = parser.parse_args()
@@ -639,7 +672,9 @@ def main():
     # Setup logging
     logging.basicConfig(format='%(asctime)s %(module)16s %(levelname)8s: %(message)s',
                         datefmt="%Y-%m-%d %H:%M:%S",
-                        level=log_level)
+                        level=log_level,
+                        filename=args.log)
+
 
     # Load netlist of cell
     cell_name = args.cell

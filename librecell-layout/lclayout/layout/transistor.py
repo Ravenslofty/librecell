@@ -23,6 +23,7 @@ from ..place.place import Transistor, ChannelType
 
 from .grid_helpers import *
 from .layers import *
+from .. import tech_util
 from typing import Any, Dict, Tuple, Optional
 import sys
 
@@ -98,14 +99,24 @@ def draw_transistor(t: TransistorLayout, shapes: Dict[Any, pya.Region]):
     shapes[l_poly].insert(t.gate)
 
 
-def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> TransistorLayout:
+def create_transistor_layout(t: Transistor, loc: Tuple[int, int], distance_to_outline: int, tech) -> TransistorLayout:
     """ Given an abstract transistor create its layout.
     
     :param t: 
-    :param loc: 
+    :param loc: Transistor location on the grid. (0,0) is the transistor on the bottom left, (0,1) its upper neighbour, (1,0) its right neighbour.
+    :param distance_to_outline: Distance of active area to upper or lower boundary of the cell. Basically determines the y-offset of the transistors.
     :param tech: module containing technology information
     :return: 
     """
+
+    # Calculate minimal distance from active region to upper and lower cell boundaries.
+    poly_half_spacing = (tech.min_spacing[(l_poly, l_poly)] + 1) // 2
+    active_half_spacing = (tech.min_spacing[(l_active, l_active)] + 1) // 2
+    # Distance from active to active in neighbouring cell must be kept,
+    # as well as distance from poly to poly in neighbouring cell.
+    min_distance_to_outline = max(active_half_spacing, tech.gate_extension + poly_half_spacing)
+
+    assert distance_to_outline >= min_distance_to_outline, 'Chosen distance will violate minimum spacing rules. {} >= {}.'.format(distance_to_outline, min_distance_to_outline)
 
     # Bottom left of l_active.
     x, y = loc
@@ -119,16 +130,17 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
     y_eff = 0
     if y % 2 == 1:
         # Top aligned.
-        y_eff = y * tech.unit_cell_height - 2 * tech.routing_grid_pitch_y
-        y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) + tech.via_size[l_diff_contact] // 2 + \
-                tech.minimum_enclosure[(l_active, l_diff_contact)]
+        y_eff = y * tech.unit_cell_height - distance_to_outline
+        # y_eff = grid_floor(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) + tech.via_size[l_diff_contact] // 2 + \
+        #         tech.minimum_enclosure[(l_active, l_diff_contact)]
         y_eff = y_eff - h
     else:
         # Bottom aligned
-        y_eff = y * tech.unit_cell_height + 1 * tech.routing_grid_pitch_y
-        y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) - tech.via_size[l_diff_contact] // 2 - \
-                tech.minimum_enclosure[(l_active, l_diff_contact)]
+        y_eff = y * tech.unit_cell_height + distance_to_outline
+        # y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) - tech.via_size[l_diff_contact] // 2 - \
+        #         tech.minimum_enclosure[(l_active, l_diff_contact)]
 
+    # Create shape for active layer.
     active_box = pya.Box(
         x_eff,
         y_eff,

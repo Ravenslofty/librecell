@@ -40,7 +40,8 @@ class HVGraphRouter(GraphRouter):
               graph: nx.Graph,
               signals: Dict[Any, AbstractSet[Any]],
               reserved_nodes: Optional[Dict] = None,
-              node_conflict: Optional[Dict[Any, AbstractSet[Any]]] = None
+              node_conflict: Optional[Dict[Any, AbstractSet[Any]]] = None,
+              is_virtual_node_fn=None
               # node_cost_fn,
               # edge_cost_fn
               ) -> Dict[Any, nx.Graph]:
@@ -48,7 +49,8 @@ class HVGraphRouter(GraphRouter):
                          graph,
                          signals=signals,
                          reserved_nodes=reserved_nodes,
-                         node_conflict=node_conflict)
+                         node_conflict=node_conflict,
+                         is_virtual_node_fn=is_virtual_node_fn)
 
 
 def _build_hv_routing_graph(graph: nx.Graph, orientation_change_penalty=1) -> Tuple[nx.Graph, Dict, Dict]:
@@ -156,6 +158,7 @@ def _route_hv(router: GraphRouter,
               orientation_change_penalty: float = 1,
               node_conflict: Dict[Any, Set[Any]] = None,
               reserved_nodes: Optional[Dict[Any, AbstractSet[Any]]] = None,
+              is_virtual_node_fn=None,
               **kw) -> Dict[Any, nx.Graph]:
     """ Global routing with corner avoidance.
     Corners (changes between horizontal/vertical tracks) are avoided by transforming the routing graph `G`
@@ -188,10 +191,13 @@ def _route_hv(router: GraphRouter,
     if node_conflict is None:
         node_conflict = dict()
 
+    # For each node find other nodes that are equivalent when mapped back.
+    equivalent_nodes = {
+        n_h: set(node_mapping[n_g].values()) for n_h, n_g in node_mapping_reverse.items()
+    }
+
     # Some nodes in H will be mapped to the same node in G and therefore conflict with each other.
     node_conflict_h = dict()
-    # for n_h, n_g in node_mapping_reverse.items():
-    #     node_conflict_h[n_h] = node_mapping[n_g].values()
 
     for n_h in H:
         n_g = node_mapping_reverse[n_h]
@@ -208,9 +214,16 @@ def _route_hv(router: GraphRouter,
 
     signals_h = {net: [node_mapping[t][None] for t in terminals] for net, terminals in signals.items()}
 
+    def _is_virtual_node_fn(n) -> bool:
+        return is_virtual_node_fn(node_mapping_reverse[n])
+
     assert nx.is_connected(H)
-    routing_trees_h = router.route(H, signals_h, reserved_nodes=reserved_nodes_h,
-                                   node_conflict=node_conflict_h, **kw)
+    routing_trees_h = router.route(H, signals_h,
+                                   reserved_nodes=reserved_nodes_h,
+                                   node_conflict=node_conflict_h,
+                                   equivalent_nodes=equivalent_nodes,
+                                   is_virtual_node_fn=_is_virtual_node_fn,
+                                   **kw)
 
     # logger.info("Use pyo3 router.")
     # from . import pyo3_graphrouter
