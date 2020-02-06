@@ -59,6 +59,31 @@ class PathFinderGraphRouter(GraphRouter):
                       is_virtual_node_fn=is_virtual_node_fn)
 
 
+def _compute_tree_weight(routing_tree: nx.Graph, edge_cost_fn, is_virtual_edge_fn) -> float:
+    """
+    Compute the weight of a routing tree based on a edge cost function.
+    :param routing_tree: A tree graph.
+    :param edge_cost_fn: edge_cost((a,b)) = 'cost of edge from node a to node b'
+    :param is_virtual_edge_fn: Tells wether an edge is 'virtual'. Edges adjacent to virtual nodes are not accounted in the tree weight.
+    :return: The tree weight
+    """
+    tree_weights = sum(edge_cost_fn(e) for e in routing_tree.edges() if not is_virtual_edge_fn(e))
+    return tree_weights
+
+
+def _compute_tree_weights(routing_trees: Dict[Any, nx.Graph], edge_cost_fn, is_virtual_edge_fn) -> Dict[Any, float]:
+    """
+    Helper function which calls `_compute_tree_weight` for each element of a dictionary.
+    :param routing_trees:
+    :param edge_cost_fn:
+    :param is_virtual_edge_fn:
+    :return:
+    """
+    tree_weights = {signal_name: _compute_tree_weight(rt, edge_cost_fn, is_virtual_edge_fn)
+                    for signal_name, rt in routing_trees.items()}
+    return tree_weights
+
+
 def _route(detail_router: SignalRouter,
            graph: nx.Graph,
            signals: Dict[Any, List[Any]],
@@ -229,12 +254,11 @@ def _route(detail_router: SignalRouter,
         has_collision = len(node_collisions) > 0
 
         # Compute weights of all signal trees.
-        tree_weights = {signal_name: sum(edge_base_cost[e] for e in rt.edges() if not is_virtual_edge(e))
-                        for signal_name, rt in routing_trees.items()}
+        tree_weights = _compute_tree_weights(routing_trees, lambda e: edge_base_cost[e], is_virtual_edge)
 
         # Print routing tree weights.
         for signal_name, tree_weight in tree_weights.items():
-            original_tree_weight = tree_weight * mean_edge_cost # Invert pre-scaling.
+            original_tree_weight = tree_weight * mean_edge_cost  # Invert pre-scaling.
             logger.debug('weight of {:>16}: {:.2f}'.format(signal_name, original_tree_weight))
 
         if not has_collision:
@@ -251,6 +275,54 @@ def _route(detail_router: SignalRouter,
         slack_ratios = {n: t / max_weight for n, t in tree_weights.items()}
         slack_ratio_scaling = 0.1
         slack_ratios = {n: (s - 0.5) * slack_ratio_scaling + 0.5 for n, s in slack_ratios.items()}
+
+    # Perform single-net optimizations.
+    # For each net n: Rip up n while leaving the other nets untouched. Route n again.
+
+    logger.info('Run single-net optimizations.')
+    all_signal_names = signals.keys()
+    for current_signal in all_signal_names:
+        logger.debug('Single-net optimization: {}'.format(current_signal))
+        other_signal_names = all_signal_names = current_signal
+
+        other_routing_trees = {name: rt for name, rt in routing_trees.items() if name != current_signal}
+
+        # Get the set of nodes occupied by the other signals.
+        used_nodes = set(chain(*
+                               (
+                                   node_conflict.get(n, {n})
+                                   for tree in other_routing_trees.values()
+                                   for n in tree.nodes
+                               )
+                               )
+                         )
+
+        # Get the routing graph where all other signals are already routed.
+        current_graph = Gs.get(current_signal, graph).copy()
+        # Remove the nodes that are already in use by other signals.
+        current_graph.remove_nodes_from(used_nodes)
+
+        # Now the use the plain edge cost only (without history costs).
+        def edge_cost_fn(e):
+            (m, n) = e
+            return edge_base_cost[(m, n)]
+
+        # Find a route for the current signal.
+        terminals = signals[current_signal]
+        old_route = routing_trees[current_signal]
+        new_route = multi_via_router.route(current_graph,
+                                           terminals,
+                                           node_cost_fn=lambda x: 0,
+                                           edge_cost_fn=edge_cost_fn
+                                           )
+
+        old_weight = _compute_tree_weight(old_route, edge_cost_fn, is_virtual_edge)
+        new_weight = _compute_tree_weight(new_route, edge_cost_fn, is_virtual_edge)
+        logger.debug('Old weight for {}: {}'.format(current_signal, old_weight))
+        logger.debug('New weight for {}: {}'.format(current_signal, new_weight))
+
+        # Save the route.
+        routing_trees[current_signal] = new_route
 
     return routing_trees
 
