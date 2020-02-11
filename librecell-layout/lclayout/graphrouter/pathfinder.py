@@ -123,7 +123,7 @@ def _route(detail_router: SignalRouter,
 
     if is_virtual_node_fn is None:
         is_virtual_node_fn = lambda x: False
-        
+
     # Costs
     default_edge_cost = 1
     default_node_cost = 0.1

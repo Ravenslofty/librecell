@@ -722,7 +722,7 @@ def main():
     from .writer.writer import Writer
     for writer in tech.output_writers:
         assert isinstance(writer, Writer)
-        logger.info("Call output writer: {}".format(type(writer).__name__))
+        logger.debug("Call output writer: {}".format(type(writer).__name__))
         writer.write_layout(
             layout=layout,
             pin_geometries=pin_geometries,
