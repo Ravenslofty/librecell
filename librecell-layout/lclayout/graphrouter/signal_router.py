@@ -401,8 +401,6 @@ def shortest_path(
     ----------
     sources: Nodes to start the search from.
     terminals: Destinations.
-    slack_ration: Tradeoff between base cost and history/sharing cost. If set to 1, only the base cost is taken into account.
-    max_paths: Maximum number of paths to find. If set to 1 only the shortest path from a source to a terminal node will be returned.
     """
     sinks = None
     if terminals:
