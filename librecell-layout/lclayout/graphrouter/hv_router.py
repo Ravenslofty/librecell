@@ -22,7 +22,7 @@
 import networkx as nx
 from itertools import chain, combinations, product
 
-from typing import Any, Dict, Set, Tuple, AbstractSet, Optional
+from typing import Any, Dict, List, Set, Tuple, AbstractSet, Optional
 
 import logging
 from .graphrouter import GraphRouter
@@ -38,12 +38,11 @@ class HVGraphRouter(GraphRouter):
 
     def route(self,
               graph: nx.Graph,
-              signals: Dict[Any, AbstractSet[Any]],
-              reserved_nodes: Optional[Dict] = None,
+              signals: Dict[Any, List[Any]],
+              reserved_nodes: Optional[Dict[Any, AbstractSet[Any]]] = None,
               node_conflict: Optional[Dict[Any, AbstractSet[Any]]] = None,
+              equivalent_nodes: Optional[Dict[Any, AbstractSet[Any]]] = None,
               is_virtual_node_fn=None
-              # node_cost_fn,
-              # edge_cost_fn
               ) -> Dict[Any, nx.Graph]:
         return _route_hv(self.sub_graphrouter,
                          graph,
@@ -154,7 +153,7 @@ def _flatten_hv_graph(hv_graph: nx.Graph, reverse_mapping: Dict) -> nx.Graph:
 
 def _route_hv(router: GraphRouter,
               graph: nx.Graph,
-              signals: Dict[Any, AbstractSet[Any]],
+              signals: Dict[Any, List[Any]],
               orientation_change_penalty: float = 1,
               node_conflict: Dict[Any, Set[Any]] = None,
               reserved_nodes: Optional[Dict[Any, AbstractSet[Any]]] = None,
