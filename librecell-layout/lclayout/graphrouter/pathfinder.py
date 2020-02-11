@@ -122,7 +122,8 @@ def _route(detail_router: SignalRouter,
         node_conflict = dict()
 
     if is_virtual_node_fn is None:
-        is_virtual_node_fn = lambda x: False
+        def is_virtual_node_fn(_):
+            return False
 
     # Costs
     default_edge_cost = 1
