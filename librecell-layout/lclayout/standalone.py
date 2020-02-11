@@ -633,8 +633,8 @@ def main():
     }
 
     signal_routers = {
-        'dijkstra': DijkstraRouter,
-        'steiner': ApproxSteinerTreeRouter,
+        'dijkstra': DijkstraRouter,  # Fast but not stable.
+        'steiner': ApproxSteinerTreeRouter,  # Slow but best results.
         # 'lp': LPSignalRouter
     }
 
@@ -656,7 +656,8 @@ def main():
 
     parser.add_argument('--signal-router', default='dijkstra', metavar='SIGNAL_ROUTER', type=str,
                         choices=signal_routers.keys(),
-                        help='routing algorithm for single signals ({})'.format(', '.join(sorted(signal_routers.keys()))))
+                        help='routing algorithm for single signals ({})'.format(
+                            ', '.join(sorted(signal_routers.keys()))))
 
     # parser.add_argument('--profile', action='store_true', help='enable profiler')
     parser.add_argument('-v', '--verbose', action='store_true', help='show more information')
