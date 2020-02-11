@@ -31,9 +31,10 @@ from .place.place import TransistorPlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer
 
+from .graphrouter.graphrouter import GraphRouter
 from .graphrouter.hv_router import HVGraphRouter
 from .graphrouter.pathfinder import PathFinderGraphRouter
-from .graphrouter.signal_router import DijkstraRouter
+from .graphrouter.signal_router import DijkstraRouter, ApproxSteinerTreeRouter
 
 from .layout.transistor import *
 from .layout import cell_template
@@ -198,7 +199,8 @@ def _is_virtual_edge_fn(e) -> bool:
 
 
 def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: str,
-                       placer: TransistorPlacer = None,
+                       placer: TransistorPlacer,
+                       router: GraphRouter,
                        debug_routing_graph: bool = False,
                        debug_smt_solver: bool = False) -> Tuple[pya.Cell, Dict[str, List[Tuple[str, pya.Shape]]]]:
     """ Draw the layout of a cell.
@@ -217,6 +219,10 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     :return Returns the new pya.Cell and a Dict containing the pin shapes for each pin name.
         (cell, {net_name: [(layer_name, pya.Shape), ...]})
     """
+
+    assert isinstance(layout, pya.Layout)
+    assert isinstance(placer, TransistorPlacer)
+    assert isinstance(router, GraphRouter)
 
     # Load netlist of cell
     logger.info('Load netlist: %s', netlist_path)
@@ -260,9 +266,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Place transistors
     logging.info('Find transistor placement')
-    if placer is None:
-        logging.debug('No placer defined. Using `EulerPlacer`.')
-        placer = EulerPlacer()
+
     abstract_cell = placer.place(transistors_abstract)
     print(abstract_cell)
 
@@ -509,18 +513,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                     for c in conflicts[n]:  # Also reserve nodes that would cause a spacing violation.
                         reserved.add(c)
 
-        detail_router = DijkstraRouter()
-        # detail_router = LPSignalRouter()
-        # detail_router = ApproxSteinerTreeRouter()
         assert nx.is_connected(G)
 
-        router = PathFinderGraphRouter(
-            detail_router
-        )
-        # router = LPGraphRouter()
-        router = HVGraphRouter(router,
-                               orientation_change_penalty=tech.orientation_change_penalty)
-
+        # Invoke router.
         routing_trees = router.route(G,
                                      signals=virtual_terminal_nodes,
                                      reserved_nodes=reserved_nodes,
@@ -637,6 +632,12 @@ def main():
         'smt': SMTPlacer
     }
 
+    signal_routers = {
+        'dijkstra': DijkstraRouter,
+        'steiner': ApproxSteinerTreeRouter,
+        # 'lp': LPSignalRouter
+    }
+
     # Define commandline arguments.
     parser = argparse.ArgumentParser(description='Generate GDS layout from SPICE netlist.')
     parser.add_argument('--cell', required=True, metavar='NAME', type=str, help='cell name')
@@ -651,7 +652,11 @@ def main():
                         show unsatisfiable core if SMT DRC cleaning fails.')
 
     parser.add_argument('--placer', default='flat', metavar='PLACER', type=str, choices=placers.keys(),
-                        help='placement algorithm')
+                        help='placement algorithm ({})'.format(', '.join(sorted(placers.keys()))))
+
+    parser.add_argument('--signal-router', default='dijkstra', metavar='SIGNAL_ROUTER', type=str,
+                        choices=signal_routers.keys(),
+                        help='routing algorithm for single signals ({})'.format(', '.join(sorted(signal_routers.keys()))))
 
     # parser.add_argument('--profile', action='store_true', help='enable profiler')
     parser.add_argument('-v', '--verbose', action='store_true', help='show more information')
@@ -675,7 +680,6 @@ def main():
                         level=log_level,
                         filename=args.log)
 
-
     # Load netlist of cell
     cell_name = args.cell
     path = args.netlist
@@ -687,10 +691,29 @@ def main():
     # Create empty layout
     layout = pya.Layout()
 
+    # Setup placer algorithm
+
+    placer = placers[args.placer]()
+    logger.info("Placement algorithm: {}".format(type(placer).__name__))
+
+    # Setup routing algorithm
+
+    signal_router = signal_routers[args.signal_router]()
+    logger.info("Signal routing algorithm: {}".format(type(signal_router).__name__))
+
+    router = PathFinderGraphRouter(
+        signal_router
+    )
+    # router = LPGraphRouter()
+    router = HVGraphRouter(router,
+                           orientation_change_penalty=tech.orientation_change_penalty
+                           )
+
     # Run layout synthesis
     time_start = time.process_time()
     cell, pin_geometries = create_cell_layout(tech, layout, cell_name, path,
-                                              placer=placers[args.placer](),
+                                              router=router,
+                                              placer=placer,
                                               debug_routing_graph=args.debug_routing_graph,
                                               debug_smt_solver=args.debug_smt_solver)
 
