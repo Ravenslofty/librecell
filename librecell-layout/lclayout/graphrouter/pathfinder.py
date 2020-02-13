@@ -287,7 +287,7 @@ def _route(detail_router: SignalRouter,
     all_signal_names = signals.keys()
     for current_signal in all_signal_names:
         logger.debug('Single-net optimization: {}'.format(current_signal))
-        other_signal_names = all_signal_names = current_signal
+        other_signal_names = all_signal_names - current_signal
 
         other_routing_trees = {name: rt for name, rt in routing_trees.items() if name != current_signal}
 
