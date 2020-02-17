@@ -492,7 +492,6 @@ def test_dijkstra_router():
     :return:
     """
     import matplotlib.pyplot as plt
-    from .signal_router import DijkstraRouter
 
     # Construct the graph.
     G = nx.Graph()
