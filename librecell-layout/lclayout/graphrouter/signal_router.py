@@ -178,6 +178,7 @@ def spanning_subtree(
         end = path[-1]
         sinks.remove(end)
 
+    assert nx.is_tree(S)
     return S
 
 
@@ -483,3 +484,63 @@ def trace_back(G: nx.Graph, distance_map: Mapping[N, int], source: N, targets: A
     trace.reverse()
 
     return trace
+
+
+def test_dijkstra_router():
+    """
+    Create a routing tree for a single on a mesh graph signal and plot it.
+    :return:
+    """
+    import matplotlib.pyplot as plt
+    from .signal_router import DijkstraRouter
+
+    # Construct the graph.
+    G = nx.Graph()
+
+    num_x = 10
+    num_y = 10
+    x = range(0, num_x)
+    y = range(0, num_y)
+
+    # Store drawing positions of vertices. For plotting only.
+    pos = {}
+
+    # Construct mesh
+    for name, (x, y) in enumerate(product(x, y)):
+        G.add_node((x, y))
+        pos[(x, y)] = (x, y)
+
+        w = 1
+
+        if x < num_x - 1 and not (1 <= y < 5 and x == 4):
+            G.add_edge((x, y), (x + 1, y), weight=w, orientation='h')
+
+        if y < num_y - 1:
+            G.add_edge((x, y), (x, y + 1), weight=w, orientation='v')
+
+    G.add_edge((8, 0), (9, 0), multi_via=2)
+
+    # Plot the mesh.
+    nx.draw_networkx(G, pos=pos, node_color='gray', node_size=8, edge_color='lightgray', hold=True)
+
+    # This are the terminals to be connected.
+    terminals = [(0, 0), (8, 5), (7, 7), (6, 3), (8, 0), (1, 8), (3, 3), (8, 4)]
+
+    # Find the routing tree.
+    router = DijkstraRouter()
+    tree = router.route(G, terminals, node_cost_fn=lambda x: 1, edge_cost_fn=lambda x: 1)
+    assert nx.is_tree(tree), "Routing solution should be a tree!"
+    for n in terminals:
+        assert n in tree, "Terminal is not in routing tree!"
+
+    # Plot the result.
+
+    edges = list(tree.edges)
+    nx.draw_networkx_edges(G, pos, edgelist=edges, width=4, edge_color='red')
+
+    nx.draw_networkx_nodes(G, pos, nodelist=terminals, node_size=32, node_color='black')
+    # edge_labels = {(a, b): "%.2f" % data.get('weight', 0) for (a, b, data) in G.edges(data=True)}
+    # nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+
+    plt.draw()
+    plt.show()
