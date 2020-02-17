@@ -25,7 +25,7 @@ import networkx as nx
 from itertools import product, tee, count
 from heapq import heappush, heappop
 
-from typing import Iterable, Mapping, TypeVar, AbstractSet, Any, List
+from typing import Dict, Iterable, Mapping, TypeVar, AbstractSet, Any, List
 
 from .. import extrema
 
@@ -274,22 +274,24 @@ def dijkstra_traverse(
         edge_cost_fn,
         node_handler_fn,
         heuristic_fn=None
-):
+) -> Dict[Any, float]:
     """ Create a distance map from all nodes to the source.
     Nodes are visited in increasing distance order and passed to `node_handler_fn`. The search is continued
     as long as `node_handler_fn` returns `True` and there are unvisited nodes left.
 
     Parameters
     ----------
-    sources: Nodes to start the search from.
-    node_cost_fn: Node cost function. node -> cost
-    edge_cost_fn: Edge cost function. (node, node) -> cost
-    node_handler_fn: A function Node -> Bool
+    :param sources: Nodes to start the search from.
+    :param node_cost_fn: Node cost function. node -> cost
+    :param edge_cost_fn: Edge cost function. (node, node) -> cost
+    :param node_handler_fn: A function Node -> Bool
             Each node will be passed to this function in increasing distance order. The search will be aborted if the handler returns `False`.
 
-    heuristic_fn: Source -> Estimated cost to reach target.
+    :param heuristic_fn: Source -> Estimated cost to reach target.
             Heuristic function to estimate the cost from a node to a target.
             Shortest paths are found as long as the heuristic does not overestimate costs.
+
+    :return: Returns a dictionary like {node: distance to source, ...}.
     """
 
     if heuristic_fn is None:
