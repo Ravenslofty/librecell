@@ -125,7 +125,9 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
 
     if not compare_result:
         logger.warning("Netlists don't match.")
+        print('extracted netlist:')
         print(extracted)
+        print('reference netlist:')
         print(reference)
 
     return compare_result
