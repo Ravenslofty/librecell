@@ -20,8 +20,9 @@
 ## 
 ##
 from itertools import chain
-from collections import Counter
+from collections import Counter, defaultdict
 import numpy
+import toml
 
 from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
@@ -30,14 +31,14 @@ from .place.place import TransistorPlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer
 
+from .graphrouter.graphrouter import GraphRouter
 from .graphrouter.hv_router import HVGraphRouter
 from .graphrouter.pathfinder import PathFinderGraphRouter
-from .graphrouter.signal_router import DijkstraRouter
+from .graphrouter.signal_router import DijkstraRouter, ApproxSteinerTreeRouter
 
 from .layout.transistor import *
 from .layout import cell_template
 from .layout.notch_removal import fill_notches
-from .lef import types as lef
 
 from .routing_graph import *
 
@@ -130,6 +131,7 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                 assert y1 == y2
                 # Draw via
                 via_layer = via_layers[l1][l2]['layer']
+                logger.debug('Draw via: {} ({}, {})'.format(via_layer, x1, y1))
 
                 via_width = tech.via_size[via_layer]
 
@@ -142,45 +144,66 @@ def _draw_routing_tree(shapes: Dict[str, pya.Shapes],
                 shapes[via_layer].insert(via)
 
                 # Ensure minimum via enclosure.
-                for l in (l1, l2):
-                    # TODO: Check on which sides minimum enclosure is not yet satisfied by some wire.
+                if not debug_routing_graph:
+                    for l in (l1, l2):
+                        # TODO: Check on which sides minimum enclosure is not yet satisfied by some wire.
 
-                    neighbors = rt.neighbors((l, (x1, y1)))
-                    neighbors = [n for n in neighbors if n[0] == l]
+                        neighbors = rt.neighbors((l, (x1, y1)))
+                        neighbors = [n for n in neighbors if n[0] == l]
 
-                    w_ext = via_width // 2 + tech.minimum_enclosure[(l, via_layer)]
-                    w_noext = via_width // 2
+                        w_ext = via_width // 2 + tech.minimum_enclosure[(l, via_layer)]
+                        w_noext = via_width // 2
 
-                    # Check on which sides the enclosure must be extended.
-                    # Some sides will already be covered by a routing wire.
-                    ext_right = w_ext
-                    ext_upper = w_ext
-                    ext_left = w_ext
-                    ext_lower = w_ext
-                    # TODO
-                    # for _, (n_x, n_y) in neighbors:
-                    #     if n_x == x1:
-                    #         if n_y < y1:
-                    #             ext_lower = w_noext
-                    #         if n_y > y1:
-                    #             ext_upper = w_noext
-                    #     if n_y == y1:
-                    #         if n_x < x1:
-                    #             ext_left = w_noext
-                    #         if n_x > x1:
-                    #             ext_right = w_noext
+                        # Check on which sides the enclosure must be extended.
+                        # Some sides will already be covered by a routing wire.
+                        ext_right = w_ext
+                        ext_upper = w_ext
+                        ext_left = w_ext
+                        ext_lower = w_ext
+                        # TODO
+                        # for _, (n_x, n_y) in neighbors:
+                        #     if n_x == x1:
+                        #         if n_y < y1:
+                        #             ext_lower = w_noext
+                        #         if n_y > y1:
+                        #             ext_upper = w_noext
+                        #     if n_y == y1:
+                        #         if n_x < x1:
+                        #             ext_left = w_noext
+                        #         if n_x > x1:
+                        #             ext_right = w_noext
 
-                    enc = pya.Box(
-                        pya.Point(x1 - ext_left, y1 - ext_lower),
-                        pya.Point(x1 + ext_right, y1 + ext_upper)
-                    )
-                    shapes[l].insert(enc)
+                        enc = pya.Box(
+                            pya.Point(x1 - ext_left, y1 - ext_lower),
+                            pya.Point(x1 + ext_right, y1 + ext_upper)
+                        )
+                        shapes[l].insert(enc)
+
+
+def _is_virtual_node_fn(n) -> bool:
+    """
+    Check if the node is virtual and has no direct physical representation.
+    :param n:
+    :return:
+    """
+    return n[0].startswith('virtual')
+
+
+def _is_virtual_edge_fn(e) -> bool:
+    """
+    Check if the edge connects to at least one virtual node.
+    :param n:
+    :return:
+    """
+    a, b = e
+    return _is_virtual_node_fn(a) or _is_virtual_node_fn(b)
 
 
 def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: str,
-                       placer: TransistorPlacer = None,
+                       placer: TransistorPlacer,
+                       router: GraphRouter,
                        debug_routing_graph: bool = False,
-                       debug_smt_solver: bool = False) -> Tuple[pya.Cell, Dict[str, Tuple[str, pya.Shape]]]:
+                       debug_smt_solver: bool = False) -> Tuple[pya.Cell, Dict[str, List[Tuple[str, pya.Shape]]]]:
     """ Draw the layout of a cell.
 
     Parameters
@@ -190,19 +213,22 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     :param cell_name: str
       The name of the cell to be drawn.
     :param netlist_path: Path to SPICE transistor netlist.
+    :param placer: `TransistorPlacer` object which is used for the placement. If not supplied, a default will be chosen.
     :param debug_routing_graph: bool
       If set to True, the full routing graph is written to the layout instead of the routing paths.
     :param debug_smt_solver: Tell DRC cleaner to show which assertions are not satisfiable.
     :return Returns the new pya.Cell and a Dict containing the pin shapes for each pin name.
-        (cell, {net_name: (layer_name, pya.Shape)})
+        (cell, {net_name: [(layer_name, pya.Shape), ...]})
     """
+
+    assert isinstance(layout, pya.Layout)
+    assert isinstance(placer, TransistorPlacer)
+    assert isinstance(router, GraphRouter)
 
     # Load netlist of cell
     logger.info('Load netlist: %s', netlist_path)
     transistors_abstract, cell_pins = load_transistor_netlist(netlist_path, cell_name)
-    logger.info("Cell pins: {}".format(', '.join(cell_pins)))
     io_pins = net_util.get_io_pins(cell_pins)
-    logger.info("Data pins: {}".format(', '.join(io_pins)))
 
     # Convert transistor dimensions into data base units.
     for t in transistors_abstract:
@@ -233,16 +259,15 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
         min_size = tech.minimum_gate_width_nfet if t.channel_type == ChannelType.NMOS else tech.minimum_gate_width_pfet
 
-        if t.channel_width < min_size:
+        if t.channel_width + 1e-12 < min_size:
             logger.warning("Channel width too small changing it to minimal size: %.2e < %.2e", t.channel_width,
                            min_size)
-            t.channel_width = min_size
+
+        t.channel_width = max(min_size, t.channel_width)
 
     # Place transistors
     logging.info('Find transistor placement')
-    if placer is None:
-        logging.debug('No placer defined. Using `EulerPlacer`.')
-        placer = EulerPlacer()
+
     abstract_cell = placer.place(transistors_abstract)
     print(abstract_cell)
 
@@ -255,14 +280,15 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     transistors = abstract_cell.get_transistor_locations()
 
     # Create the layouts of the single transistors. Layouts are already translated to the absolute position.
-    transistor_layouts = {t: create_transistor_layout(t, (x, y), tech) for t, (x, y) in transistors}
+    transistor_layouts = {t: create_transistor_layout(t, (x, y), tech.transistor_offset_y, tech)
+                          for t, (x, y) in transistors}
 
     # Draw the transistors
     for l in transistor_layouts.values():
         draw_transistor(l, shapes)
 
     # Create mapping from nets to {layer: region}
-    net_regions = {}
+    net_regions = defaultdict(lambda: defaultdict(pya.Region))
 
     # Load spacing rules in form of a graph.
     spacing_graph = tech_util.spacing_graph(tech.min_spacing)
@@ -297,7 +323,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Register power rails as net regions.
     for net, shape in [(SUPPLY_VOLTAGE_NET, vdd_rail), (GND_NET, vss_rail)]:
-        net_regions.setdefault(net, {}).setdefault(tech.power_layer, pya.Region()).insert(shape)
+        net_regions[net][tech.power_layer].insert(shape)
 
     # Pre-route vertical gate-gate connections
     for i in range(abstract_cell.width):
@@ -318,7 +344,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                     tech.gate_length)
 
                 shapes[l_poly].insert(gate_path)
-                net_regions.setdefault(u.gate, {}).setdefault(l_poly, pya.Region()).insert(gate_path)
+                net_regions[u.gate][l_poly].insert(gate_path)
                 # tu.terminals.clear()
                 # tl.terminals.clear()
 
@@ -331,7 +357,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         ]
 
         for layer, net, shape in net_shapes:
-            r = net_regions.setdefault(net, {}).setdefault(layer, pya.Region())
+            r = net_regions[net][layer]
             r.insert(shape)
             r.merge()
 
@@ -344,6 +370,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Remove illegal routing nodes from graph and get a dict of legal routing nodes per layer.
     remove_illegal_routing_edges(G, shapes, tech)
+
+    # if not debug_routing_graph:
+    #     assert nx.is_connected(G)
 
     # Remove pre-routed edges from G.
     remove_existing_routing_edges(G, shapes, tech)
@@ -390,7 +419,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         unused_nodes = set()
         for n in G:
             if nx.degree(G, n) <= 1:
-                if not n[0].startswith('virtual'):
+                if not _is_virtual_node_fn(n):
                     unused_nodes.add(n)
         if len(unused_nodes) == 0:
             break
@@ -410,26 +439,26 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         # Setup heuristic for A-Star router
         weight_x = min((w for l,w in tech.weights_horizontal.items() if 'h' in tech.routing_layers[l]))
         weight_y = min((w for l,w in tech.weights_vertical.items() if 'v' in tech.routing_layers[l]))
-        
+
         def heuristic(a, b):
-          
+
           orientation1, a = a
           orientation2, b = b
-          
+
           if a[0].startswith('virtual') or b[0].startswith('virtual'):
             return 0
-            
-          
+
+
           l1, (x1,y1) = a
           l2, (x2,y2) = b
-          
+
           dx = abs(x2-x1)
           dy = abs(y2-y1)
-          
+
           dist = dx*weight_x + dy*weight_y
-          
+
           return dist
-        
+
         detail_router = AStarRouter(heuristic_fn=heuristic)
         '''
 
@@ -441,8 +470,8 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         conflicts = dict()
         # Loop through all nodes in the routing graph G.
         for n in G:
-            # Skip virtual nodes wich have no physical representation.
-            if not n[0].startswith('virtual'):
+            # Skip virtual nodes which have no physical representation.
+            if not _is_virtual_node_fn(n):
                 layer, point = n
                 wire_width1 = tech.wire_width.get(layer, 0) // 2
                 node_conflicts = set()
@@ -462,7 +491,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                             potential_conflicts = [x for x in G if x[0] == other_layer]
                             conflict_points = [p for (_, p) in potential_conflicts
                                                if numpy.linalg.norm(numpy.array(p) - numpy.array(point),
-                                                                    ord=1) <= margin
+                                                                    ord=1) < margin
                                                ]
                             # Construct the lookup table for conflicting nodes.
                             for p in conflict_points:
@@ -474,30 +503,24 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
         # Find routing nodes that are reserved for a net. They cannot be used to route other nets.
         # (For instance the ends of a gate stripe.)
-        reserved_nodes = dict()
+        reserved_nodes = defaultdict(set)
         for net, layer, terminals in terminals_by_net:
             for p in terminals:
                 n = layer, p
-                reserved = reserved_nodes.setdefault(net, set())
+                reserved = reserved_nodes[net]
                 reserved.add(n)
                 if n in conflicts:
                     for c in conflicts[n]:  # Also reserve nodes that would cause a spacing violation.
                         reserved.add(c)
 
-        detail_router = DijkstraRouter()
-        # detail_router = LPSignalRouter()
-        # detail_router = ApproxSteinerTreeRouter()
         assert nx.is_connected(G)
 
-        router = PathFinderGraphRouter(detail_router)
-        # router = LPGraphRouter()
-        router = HVGraphRouter(router,
-                               orientation_change_penalty=tech.orientation_change_penalty)
-
+        # Invoke router.
         routing_trees = router.route(G,
                                      signals=virtual_terminal_nodes,
                                      reserved_nodes=reserved_nodes,
-                                     node_conflict=conflicts
+                                     node_conflict=conflicts,
+                                     is_virtual_node_fn=_is_virtual_node_fn
                                      )
 
     # Draw the layout of the routes.
@@ -528,7 +551,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                     s.insert(s_filled)
 
             _merge_all_layers(shapes)
-
 
     # Register Pins/Ports for LEF file.
     lef_ports = {}
@@ -610,12 +632,19 @@ def main():
         'smt': SMTPlacer
     }
 
+    signal_routers = {
+        'dijkstra': DijkstraRouter,  # Fast but not stable.
+        'steiner': ApproxSteinerTreeRouter,  # Slow but best results.
+        # 'lp': LPSignalRouter
+    }
+
     # Define commandline arguments.
     parser = argparse.ArgumentParser(description='Generate GDS layout from SPICE netlist.')
     parser.add_argument('--cell', required=True, metavar='NAME', type=str, help='cell name')
     parser.add_argument('--netlist', required=True, metavar='FILE', type=str, help='path to SPICE netlist')
     parser.add_argument('--output-dir', default='.', metavar='DIR', type=str, help='output directory for layouts')
     parser.add_argument('--tech', required=True, metavar='FILE', type=str, help='technology file')
+
     parser.add_argument('--debug-routing-graph', action='store_true',
                         help='write full routing graph to the layout instead of wires')
     parser.add_argument('--debug-smt-solver', action='store_true',
@@ -623,12 +652,19 @@ def main():
                         show unsatisfiable core if SMT DRC cleaning fails.')
 
     parser.add_argument('--placer', default='flat', metavar='PLACER', type=str, choices=placers.keys(),
-                        help='placement algorithm')
+                        help='placement algorithm ({})'.format(', '.join(sorted(placers.keys()))))
+
+    parser.add_argument('--signal-router', default='dijkstra', metavar='SIGNAL_ROUTER', type=str,
+                        choices=signal_routers.keys(),
+                        help='routing algorithm for single signals ({})'.format(
+                            ', '.join(sorted(signal_routers.keys()))))
 
     # parser.add_argument('--profile', action='store_true', help='enable profiler')
     parser.add_argument('-v', '--verbose', action='store_true', help='show more information')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help="don't show any information except fatal events (overwrites --verbose)")
+    parser.add_argument('--log', required=False, metavar='LOG_FILE', type=str,
+                        help='write log to this file instead of stdout')
 
     # Parse arguments
     args = parser.parse_args()
@@ -642,7 +678,8 @@ def main():
     # Setup logging
     logging.basicConfig(format='%(asctime)s %(module)16s %(levelname)8s: %(message)s',
                         datefmt="%Y-%m-%d %H:%M:%S",
-                        level=log_level)
+                        level=log_level,
+                        filename=args.log)
 
     # Load netlist of cell
     cell_name = args.cell
@@ -655,10 +692,29 @@ def main():
     # Create empty layout
     layout = pya.Layout()
 
+    # Setup placer algorithm
+
+    placer = placers[args.placer]()
+    logger.info("Placement algorithm: {}".format(type(placer).__name__))
+
+    # Setup routing algorithm
+
+    signal_router = signal_routers[args.signal_router]()
+    logger.info("Signal routing algorithm: {}".format(type(signal_router).__name__))
+
+    router = PathFinderGraphRouter(
+        signal_router
+    )
+    # router = LPGraphRouter()
+    router = HVGraphRouter(router,
+                           orientation_change_penalty=tech.orientation_change_penalty
+                           )
+
     # Run layout synthesis
     time_start = time.process_time()
     cell, pin_geometries = create_cell_layout(tech, layout, cell_name, netlist_path,
-                                              placer=placers[args.placer](),
+                                              router=router,
+                                              placer=placer,
                                               debug_routing_graph=args.debug_routing_graph,
                                               debug_smt_solver=args.debug_smt_solver)
 
@@ -679,82 +735,17 @@ def main():
 
     logger.info("LVS result: {}".format(compare_result))
 
-    def remap_layers(layout: pya.Layout) -> pya.Layout:
-        """
-        Rename layer to match the scheme defined in the technology file.
-        :param layout:
-        :return:
-        """
-        logger.info("Remap layers.")
-        layout2 = pya.Layout()
-        top1 = layout.top_cell()
-        top2 = layout2.create_cell(cell_name)
-        layer_infos1 = layout.layer_infos()
-        for layer_info in layer_infos1:
-
-            src_layer = (layer_info.layer, layer_info.datatype)
-
-            if src_layer not in layermap_reverse:
-                msg = "Layer {} not defined in `layermap_reverse`.".format(src_layer)
-                logger.warning(msg)
-                dest_layers = src_layer
-            else:
-                src_layer_name = layermap_reverse[src_layer]
-
-                if src_layer_name not in tech.output_map:
-                    msg = "Layer '{}' will not be written to the output. This might be alright though.". \
-                        format(src_layer_name)
-                    logger.warning(msg)
-                    continue
-
-                dest_layers = tech.output_map[src_layer_name]
-
-            if not isinstance(dest_layers, list):
-                dest_layers = [dest_layers]
-
-            src_idx = layout.layer(layer_info)
-            for dest_layer in dest_layers:
-                dest_idx = layout2.layer(*dest_layer)
-                top2.shapes(dest_idx).insert(top1.shapes(src_idx))
-
-        return layout2
-
-    # Re-map layers
-    layout = remap_layers(layout)
-
-    # Set database unit.
-    # klayout expects dbu to be in µm, the tech file takes it in meters.
-    layout.dbu = tech.db_unit * 1e6
-    logger.info("dbu = {} µm".format(layout.dbu))
-
-    # Possibly scale the layout.
-    scaling_factor = 1
-    if scaling_factor != 1:
-        logger.info("Scaling layout by factor {}".format(scaling_factor))
-        layout.transform(pya.DCplxTrans(scaling_factor))
-
-    # Store result
-    gds_file_name = '{}.gds'.format(cell_name)
-    gds_out_path = os.path.join(args.output_dir, gds_file_name)
-    logger.info("Write GDS: %s", gds_out_path)
-    layout.write(gds_out_path)
-
-    # LEF output
-    if not args.debug_routing_graph:
-        # Create and populate LEF Macro data structure.
-        # TODO: pass correct USE and DIRECTION
-        lef_macro = generate_lef_macro(cell_name,
-                                       pin_geometries=pin_geometries,
-                                       pin_use=None,
-                                       pin_direction=None)
-
-        # Write LEF
-        lef_file_name = "{}.lef".format(cell_name)
-        lef_output_path = os.path.join(args.output_dir, lef_file_name)
-
-        with open(lef_output_path, "w") as f:
-            logger.info("Write LEF: {}".format(lef_output_path))
-            f.write(lef.lef_format(lef_macro))
+    # Output using defined output writers.
+    from .writer.writer import Writer
+    for writer in tech.output_writers:
+        assert isinstance(writer, Writer)
+        logger.debug("Call output writer: {}".format(type(writer).__name__))
+        writer.write_layout(
+            layout=layout,
+            pin_geometries=pin_geometries,
+            top_cell=cell,
+            output_dir=args.output_dir
+        )
 
     time_end = time.process_time()
     duration = datetime.timedelta(seconds=time_end - time_start)
@@ -793,87 +784,3 @@ def fix_min_area(tech, shapes: Dict[str, pya.Shapes], debug=False):
             logger.error("Minimum area fixing failed!")
     else:
         logger.info("No minimum area violations.")
-
-
-def generate_lef_macro(cell_name: str,
-                       pin_geometries: Dict[str, List[Tuple[str, pya.Shape]]],
-                       pin_direction: Dict[str, lef.Direction],
-                       pin_use: Dict[str, lef.Use]
-                       ) -> lef.Macro:
-    """
-    Assemble a LEF MACRO structure containing the pin shapes.
-    :param cell_name: Name of the cell as it will appear in the LEF file.
-    :param pin_geometries: A dictionary mapping pin names to geometries: Dict[pin name, List[(layer name, klayout Shape)]]
-    :param pin_direction:
-    :param pin_use:
-    :return: Returns a `lef.Macro` object containing the pin information of the cell.
-
-    # TODO: FOREIGN statement (reference to GDS)
-    """
-
-    logger.debug("Generate LEF MACRO structure for {}.".format(cell_name))
-    pins = []
-    # Create LEF Pin objects containing geometry information of the pins.
-    for pin_name, ports in pin_geometries.items():
-
-        layers = []
-
-        for layer_name, shape in ports:
-            # Convert all non-regions into a region
-            region = pya.Region()
-            region.insert(shape)
-            region.merge()
-
-            geometries = []
-            for p in region.each_merged():
-                polygon = p.to_simple_polygon()
-
-                box = polygon.bbox()
-                is_box = pya.SimplePolygon(box) == polygon
-
-                if is_box:
-                    rect = lef.Rect((box.p1.x, box.p1.y), (box.p2.x, box.p2.y))
-                    geometries.append(rect)
-                else:
-                    # Port is a polygon
-                    # Convert `pya.Point`s into LEF points.
-                    points = [(p.x, p.y) for p in polygon.each_point()]
-                    poly = lef.Polygon(points)
-                    geometries.append(poly)
-
-            layers.append((lef.Layer(layer_name), geometries))
-
-        port = lef.Port(CLASS=lef.Class.CORE,
-                        geometries=layers)
-
-        # if pin_name not in pin_direction:
-        #     msg = "I/O direction of pin '{}' is not defined.".format(pin_name)
-        #     logger.error(msg)
-        #     assert False, msg
-        #
-        # if pin_name not in pin_use:
-        #     msg = "Use of pin '{}' is not defined. Must be one of (CLK, SIGNAL, POWER, ...)".format(pin_name)
-        #     logger.error(msg)
-        #     assert False, msg
-
-        pin = lef.Pin(pin_name=pin_name,
-                      direction=lef.Direction.INOUT,  # TODO: find direction
-                      use=lef.Use.SIGNAL,  # TODO: correct use
-                      shape=lef.Shape.ABUTMENT,
-                      port=port,
-                      property={},
-                      )
-        pins.append(pin)
-
-    macro = lef.Macro(
-        name=cell_name,
-        macro_class=lef.MacroClass.CORE,
-        foreign=lef.Foreign(cell_name, lef.Point(0, 0)),
-        origin=lef.Point(0, 0),
-        symmetry={lef.Symmetry.X, lef.Symmetry.Y, lef.Symmetry.R90},
-        site="CORE",
-        pins=pins,
-        obstructions=[]
-    )
-
-    return macro

@@ -1,4 +1,7 @@
 from lclayout.layout.layers import *
+from lclayout.writer.magic_writer import MagWriter
+from lclayout.writer.lef_writer import LefWriter
+from lclayout.writer.gds_writer import GdsWriter
 
 # Physical size of one data base unit in meters.
 # All dimensions in this file must be given in this unit.
@@ -49,6 +52,37 @@ output_map = {
     l_abutment_box: my_abutment_box
 }
 
+# Define a list of output writers.
+output_writers = [
+    MagWriter(
+        tech_name='scmos',
+        scale_factor=0.1,  # Scale all coordinates by this factor (rounded down to next integer).
+        output_map={
+            l_via1: 'm2contact',
+            l_poly: 'polysilicon',
+            l_abutment_box: ['border', 'fence'],
+            l_metal1: 'metal1',
+            l_metal2: 'metal2',
+            l_metal1_label: 'metal1',
+            l_metal2_label: 'metal2',
+            l_active: 'ndiffusion',
+            l_metal2_pin: 'metal2',
+            l_poly_contact: 'polycontact',
+            l_diff_contact: 'pdcontact'
+        }
+    ),
+
+    LefWriter(
+        db_unit=db_unit,
+        output_map=output_map
+    ),
+
+    GdsWriter(
+        db_unit=db_unit,
+        output_map=output_map
+    )
+]
+
 # Define how layers can be used for routing.
 # Example for a layer that can be used for horizontal and vertical tracks: {'MyLayer1' : 'hv'}
 # Example for a layer that can be contacted but not used for routing: {'MyLayer2' : ''}
@@ -95,6 +129,13 @@ gate_length = 50
 
 # Minimum length a polysilicon gate must overlap the silicon.
 gate_extension = 100
+
+# y-offset of the transistors (active) relative to the upper or lower boundary of the cell.
+# (minimal distance in y-direction from 'active' to cell boundary)
+# This showed to be too tricky to choose automatically because there are following trade offs:
+#   - Placing NMOS and PMOS rows closer to the center allows for shorter vertical wiring but makes the routing between the rows harder.
+#   - Also this offset must be chosen in a way such that the active region actually lies on at least one routing grid point.
+transistor_offset_y = 125
 
 # Routing pitch
 routing_grid_pitch_x = unit_cell_width // 2

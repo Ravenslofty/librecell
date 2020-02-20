@@ -21,6 +21,130 @@
 ##
 import networkx as nx
 
+import operator
+import klayout.db as db
+
+
+class LayerOp:
+    def __init__(self, op, lhs, rhs):
+        self.op = op
+        self.lhs = lhs
+        self.rhs = rhs
+
+    def eval(self):
+        pass
+
+    def __add__(self, other):
+        return LayerOp(operator.add, self, other)
+
+    def __or__(self, other):
+        return LayerOp(operator.add, self, other)
+
+    def __and__(self, other):
+        return LayerOp(operator.iand, self, other)
+
+    def __sub__(self, other):
+        return LayerOp(operator.sub, self, other)
+
+    def __xor__(self, other):
+        return LayerOp(operator.xor, self, other)
+
+
+class Leaf(LayerOp):
+    def __init__(self, val):
+        self.val = val
+
+    def eval(self):
+        return self.val
+
+
+class AbstractLayer(Leaf):
+
+    def __init__(self, layer_num, layer_purpose):
+        self.layer_num = layer_num
+        self.layer_purpose = layer_purpose
+
+    def eval(self):
+        return self.layer_num, self.layer_purpose
+
+
+def layer(idx: int,
+          purpose: int = 0,
+          name: str = None) -> AbstractLayer:
+    """ Get a handle to a layer by layer number.
+    :param idx: GDS layer number or a string of the form '1/0'.
+    :param purpose: GDS layer purpose.
+    :param name: Name as a string.
+    :return: Handle to the layer.
+    """
+
+    if name is None:
+        name = '{}/{}'.format(idx, purpose)
+
+    # Allow idx to be a string like '1/0'.
+    if isinstance(idx, str):
+        s = idx.split('/', 2)
+        a, b = s
+        idx = int(a)
+        purpose = int(b)
+
+    return AbstractLayer(idx, purpose, material=material)
+
+
+class Mask:
+    """ Wrapper around db.Region.
+    """
+
+    def __init__(self, region: db.Region):
+        self.region = region
+
+    def __add__(self, other):
+        return Mask(self.region + other.region)
+
+    def __or__(self, other):
+        return self + other
+
+    def __and__(self, other):
+        return Mask(self.region & other.region)
+
+    def __sub__(self, other):
+        m = Mask(self.region - other.region)
+        m.material = self.material
+        return m
+
+    def __xor__(self, other):
+        return Mask(self.region ^ other.region)
+
+    def __hash__(self):
+        return hash(self.region)
+
+    def __equal__(self, other):
+        return self.region == other.region
+
+
+def eval_op_tree(cell: db.Cell, op_node: LayerOp) -> Mask:
+    """ Recursively evaluate the layer operation tree.
+    :param op_node: Operand node or leaf.
+    :return: Returns a `Mask` object containing a `pya.Region` of the layer.
+    """
+
+    if isinstance(op_node, AbstractLayer):
+        (idx, purpose) = op_node.eval()
+        layer_index = layout.layer(idx, purpose)
+
+        region = _flatten_cell(cell, layer_index, selection_box=selection_box)
+        result = Mask(region)
+    else:
+        assert isinstance(op_node, LayerOp)
+        op = op_node.op
+        lhs = eval_op_tree(cell, op_node.lhs)
+        rhs = eval_op_tree(cell, op_node.rhs)
+        result = op(lhs, rhs)
+    result.region.merge()
+
+    return result
+
+
 l_active = 'active'
 l_nwell = 'nwell'
 l_pwell = 'pwell'
