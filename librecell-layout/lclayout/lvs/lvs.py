@@ -1,9 +1,43 @@
 from klayout import db
 from ..layout.layers import *
-
+from typing import List
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class MOS4To3NetlistSpiceReader(db.NetlistSpiceReaderDelegate):
+    """
+    Read SPICE netlists and convert 4-terminal MOS into 3-terminal MOS by dropping the body net.
+    """
+
+    def element(self, circuit: db.Circuit, el: str, name: str, model: str, value, nets: List[db.Net], params):
+        if el != 'M' or len(nets) != 4:
+            # All other elements are left to the standard implementation.
+            return super().element(circuit, el, name, model, value, nets, params)
+        else:
+            # Provide a device class.
+            cls = circuit.netlist().device_class_by_name(model)
+            if not cls:
+                # Create MOS3Transistor device class if it does not yet exist.
+                cls = db.DeviceClassMOS3Transistor()
+                cls.name = model
+                circuit.netlist().add(cls)
+
+            # Create MOS3 device.
+            device: db.Device = circuit.create_device(cls, name)
+            # Configure the MOS3 device.
+            device.connect_terminal('S', nets[0])
+            device.connect_terminal('G', nets[1])
+            device.connect_terminal('D', nets[2])
+
+            # Parameters in the model are given in micrometer units, so
+            # we need to translate the parameter values from SI to um values.
+            device.set_parameter('W', params.get('W', 0) * 1e6)
+            device.set_parameter('L', params.get('L', 0) * 1e6)
+
+            return True
+
 
 
 def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist) -> db.Netlist:
@@ -52,21 +86,21 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
     l2n.register(rngate, 'ngate')
     l2n.register(rnsd, 'nsd')
 
-    # # 3 terminal PMOS transistor device extraction
-    # pmos_ex = db.DeviceExtractorMOS3Transistor("PMOS")
-    # l2n.extract_devices(pmos_ex, {"SD": rpsd, "G": rpgate, "W": rnwell, "tS": rpsd, "tD": rpsd, "tG": rpoly})
+    # 3 terminal PMOS transistor device extraction
+    pmos_ex = db.DeviceExtractorMOS3Transistor("PMOS")
+    l2n.extract_devices(pmos_ex, {"SD": rpsd, "G": rpgate, "W": rnwell, "tS": rpsd, "tD": rpsd, "tG": rpoly})
+
+    # 3 terminal NMOS transistor device extraction
+    nmos_ex = db.DeviceExtractorMOS3Transistor("NMOS")
+    l2n.extract_devices(nmos_ex, {"SD": rnsd, "G": rngate, "W": rpwell, "tS": rnsd, "tD": rnsd, "tG": rpoly})
+
+    # # 4 terminal PMOS transistor device extraction
+    # pmos_ex = db.DeviceExtractorMOS4Transistor("PMOS")
+    # l2n.extract_devices(pmos_ex, {"SD": rpsd, "G": rpgate, "W": rnwell, "tS": rpsd, "tD": rpsd, "tG": rpoly, "tB": rnwell})
     #
-    # # 3 terminal NMOS transistor device extraction
-    # nmos_ex = db.DeviceExtractorMOS3Transistor("NMOS")
-    # l2n.extract_devices(nmos_ex, {"SD": rnsd, "G": rngate, "W": rpwell, "tS": rnsd, "tD": rnsd, "tG": rpoly})
-
-    # 4 terminal PMOS transistor device extraction
-    pmos_ex = db.DeviceExtractorMOS4Transistor("PMOS")
-    l2n.extract_devices(pmos_ex, {"SD": rpsd, "G": rpgate, "W": rnwell, "tS": rpsd, "tD": rpsd, "tG": rpoly, "tB": rnwell})
-
-    # 4 terminal NMOS transistor device extraction
-    nmos_ex = db.DeviceExtractorMOS4Transistor("NMOS")
-    l2n.extract_devices(nmos_ex, {"SD": rnsd, "G": rngate, "W": rpwell, "tS": rnsd, "tD": rnsd, "tG": rpoly, "tB": rpwell})
+    # # 4 terminal NMOS transistor device extraction
+    # nmos_ex = db.DeviceExtractorMOS4Transistor("NMOS")
+    # l2n.extract_devices(nmos_ex, {"SD": rnsd, "G": rngate, "W": rpwell, "tS": rnsd, "tD": rnsd, "tG": rpoly, "tB": rpwell})
 
     # Define connectivity for netlist extraction
 
@@ -93,8 +127,8 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
     l2n.connect(rmetal1, rmetal1_lbl)  # attaches labels
     l2n.connect(rmetal2, rmetal2_lbl)  # attaches labels
 
-    l2n.connect_global(rnwell, 'NWELL') # VDD
-    l2n.connect_global(rpwell, 'PWELL') # GND
+    # l2n.connect_global(rnwell, 'NWELL') # VDD
+    # l2n.connect_global(rpwell, 'PWELL') # GND
 
     # Perform netlist extraction
     logger.debug("Extracting netlist from layout")
@@ -119,18 +153,17 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     :return: Returns True iff the two netlists are equivalent.
     """
     cmp = db.NetlistComparer()
-    cmp.same_device_classes(db.DeviceClassMOS3Transistor(), db.DeviceClassMOS4Transistor())
+    # cmp.same_device_classes(db.DeviceClassMOS3Transistor(), db.DeviceClassMOS4Transistor())
 
     assert extracted.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
     assert reference.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
 
-    # Get top level circuits.
-    top_extracted: db.Circuit = next(extracted.each_circuit_top_down())
-    top_reference: db.Circuit = next(reference.each_circuit_top_down())
-
-    net_nwell = top_extracted.net_by_name('NWELL')
-    net_vdd = top_reference.net_by_name('vdd')
-    cmp.same_nets(top_extracted.net_by_name('NWELL'), top_reference.net_by_name('vdd'))
+    # # Get top level circuits.
+    # top_extracted: db.Circuit = next(extracted.each_circuit_top_down())
+    # top_reference: db.Circuit = next(reference.each_circuit_top_down())
+    # net_nwell = top_extracted.net_by_name('NWELL')
+    # net_vdd = top_reference.net_by_name('vdd')
+    # cmp.same_nets(top_extracted.net_by_name('NWELL'), top_reference.net_by_name('vdd'))
 
     compare_result = cmp.compare(extracted, reference)
     logger.info("Netlist comparision result: {}".format(compare_result))

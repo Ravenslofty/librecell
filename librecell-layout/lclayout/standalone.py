@@ -723,7 +723,7 @@ def main():
     reference = pya.Netlist()
     logger.debug("Loading reference netlist: {}".format(netlist_path))
 
-    reference.read(netlist_path, pya.NetlistSpiceReader())
+    reference.read(netlist_path, pya.NetlistSpiceReader(lvs.MOS4To3NetlistSpiceReader()))
     circuit = reference.circuit_by_name(cell_name)
 
     # Extract netlist from layout.
