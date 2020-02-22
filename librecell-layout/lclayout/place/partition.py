@@ -31,12 +31,12 @@ logger = logging.getLogger(__name__)
 
 
 def partition(ciruit_graph: nx.MultiGraph) -> List[nx.MultiGraph]:
-    """ Find subgraphs that are connected when ignoring supply nets.
+    """ Find sub-graphs that are connected when ignoring supply nets.
     :param ciruit_graph: nx.MultiGraph
     :return:
     """
 
-    logger.debug('Partitioning into connected subgraphs.')
+    logger.debug('Partitioning into connected sub-graphs.')
 
     # Split supply nodes.
     g = nx.MultiGraph()
