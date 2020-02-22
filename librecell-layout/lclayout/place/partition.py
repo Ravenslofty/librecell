@@ -23,13 +23,14 @@ import networkx as nx
 import logging
 
 from itertools import count
+from typing import List
 
 from lccommon import net_util
 
 logger = logging.getLogger(__name__)
 
 
-def partition(ciruit_graph: nx.MultiGraph):
+def partition(ciruit_graph: nx.MultiGraph) -> List[nx.MultiGraph]:
     """ Find subgraphs that are connected when ignoring supply nets.
     :param ciruit_graph: nx.MultiGraph
     :return:
