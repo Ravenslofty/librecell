@@ -764,6 +764,7 @@ def fix_min_area(tech, shapes: Dict[str, pya.Shapes], debug=False):
     """
 
     # Find minimum area violations.
+    # And create a set of whitelisted shapes that are allowed to be changed for DRC cleaning.
     min_area_violations = set()
     for layer, _shapes in shapes.items():
         min_area = tech.min_area.get(layer, 0)
