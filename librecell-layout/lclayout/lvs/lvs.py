@@ -1,6 +1,6 @@
 from klayout import db
 from ..layout.layers import *
-from typing import List
+from typing import Dict, List
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,9 +9,16 @@ logger = logging.getLogger(__name__)
 class MOS4To3NetlistSpiceReader(db.NetlistSpiceReaderDelegate):
     """
     Read SPICE netlists and convert 4-terminal MOS into 3-terminal MOS by dropping the body net.
+    This is required for the LVS step when the standard cells are lacking well taps and therefore
+    the body terminal of the transistors is unconnected.
     """
 
-    def element(self, circuit: db.Circuit, el: str, name: str, model: str, value, nets: List[db.Net], params):
+    def element(self, circuit: db.Circuit, el: str, name: str, model: str, value, nets: List[db.Net],
+                params: Dict[str, float]):
+        """
+        Process a SPICE element. All elements except 4-terminal MOS transistors are left unchanged.
+        :return: True iff the device has not been ignored and put into the netlist.
+        """
         if el != 'M' or len(nets) != 4:
             # All other elements are left to the standard implementation.
             return super().element(circuit, el, name, model, value, nets, params)
@@ -27,9 +34,8 @@ class MOS4To3NetlistSpiceReader(db.NetlistSpiceReaderDelegate):
             # Create MOS3 device.
             device: db.Device = circuit.create_device(cls, name)
             # Configure the MOS3 device.
-            device.connect_terminal('S', nets[0])
-            device.connect_terminal('G', nets[1])
-            device.connect_terminal('D', nets[2])
+            for terminal_name, net in zip(['S', 'G', 'D'], nets):
+                device.connect_terminal(terminal_name, net)
 
             # Parameters in the model are given in micrometer units, so
             # we need to translate the parameter values from SI to um values.
@@ -37,7 +43,6 @@ class MOS4To3NetlistSpiceReader(db.NetlistSpiceReaderDelegate):
             device.set_parameter('L', params.get('L', 0) * 1e6)
 
             return True
-
 
 
 def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist) -> db.Netlist:
@@ -50,9 +55,6 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
 
     # Without netlist comparision capabilities.
     l2n = db.LayoutToNetlist(db.RecursiveShapeIterator(layout, top_cell, []))
-
-    # # With netlist comparision capabilities.
-    # lvs = db.LayoutVsSchematic(db.RecursiveShapeIterator(layout, top_cell, []))
 
     def make_layer(layer_name: str):
         return l2n.make_layer(layout.layer(*layermap[layer_name]), layer_name)
@@ -152,27 +154,30 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     :param reference:
     :return: Returns True iff the two netlists are equivalent.
     """
-    cmp = db.NetlistComparer()
-    # cmp.same_device_classes(db.DeviceClassMOS3Transistor(), db.DeviceClassMOS4Transistor())
-
     assert extracted.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
     assert reference.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
 
-    # # Get top level circuits.
-    # top_extracted: db.Circuit = next(extracted.each_circuit_top_down())
-    # top_reference: db.Circuit = next(reference.each_circuit_top_down())
-    # net_nwell = top_extracted.net_by_name('NWELL')
-    # net_vdd = top_reference.net_by_name('vdd')
-    # cmp.same_nets(top_extracted.net_by_name('NWELL'), top_reference.net_by_name('vdd'))
-
+    cmp = db.NetlistComparer()
     compare_result = cmp.compare(extracted, reference)
-    logger.info("Netlist comparision result: {}".format(compare_result))
+    logger.debug("Netlist comparision result: {}".format(compare_result))
 
     if not compare_result:
         logger.warning("Netlists don't match.")
-        print('extracted netlist:')
-        print(extracted)
-        print('reference netlist:')
-        print(reference)
+        # print('extracted netlist:')
+        # print(extracted)
+        # print('reference netlist:')
+        # print(reference)
 
     return compare_result
+
+
+def read_netlist_mos4_to_mos3(netlist_path: str) -> db.Netlist:
+    """
+    Read a SPICE netlist and convert all MOS4 transistors to MOS3 transistors.
+    :param netlist_path:
+    :return:
+    """
+    logger.debug("Loading netlist (convert MOS4 to MOS3): {}".format(netlist_path))
+    netlist = db.Netlist()
+    netlist.read(netlist_path, db.NetlistSpiceReader(MOS4To3NetlistSpiceReader()))
+    return netlist

@@ -720,10 +720,7 @@ def main():
 
     # LVS check
     logger.info("Running LVS check")
-    reference = pya.Netlist()
-    logger.debug("Loading reference netlist: {}".format(netlist_path))
-
-    reference.read(netlist_path, pya.NetlistSpiceReader(lvs.MOS4To3NetlistSpiceReader()))
+    reference = lvs.read_netlist_mos4_to_mos3(netlist_path)
     circuit = reference.circuit_by_name(cell_name)
 
     # Extract netlist from layout.
@@ -731,9 +728,13 @@ def main():
 
     sub_netlist = pya.Netlist()
     sub_netlist.add(circuit)
-    compare_result = lvs.compare_netlist(netlist, sub_netlist)
+    lvs_success = lvs.compare_netlist(netlist, sub_netlist)
 
-    logger.info("LVS result: {}".format(compare_result))
+    logger.info("LVS result: {}".format('SUCCESS' if lvs_success else 'FAILED'))
+
+    if not lvs_success:
+        logger.error("LVS check failed!")
+        exit(1)
 
     # Output using defined output writers.
     from .writer.writer import Writer
