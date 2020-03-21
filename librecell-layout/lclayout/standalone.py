@@ -349,11 +349,13 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                 # tl.terminals.clear()
 
     # Construct net regions of transistors.
-    for a, l in transistor_layouts.items():
+    for transistor, l in transistor_layouts.items():
+        assert isinstance(t, Transistor)
+        l_diffusion = l_ndiffusion if transistor.channel_type == ChannelType.NMOS else l_pdiffusion
         net_shapes = [
             # (l_poly, a.gate, l.gate),
-            (l_active, a.left, l.source_box),
-            (l_active, a.right, l.drain_box)
+            (l_diffusion, transistor.left, l.source_box),
+            (l_diffusion, transistor.right, l.drain_box)
         ]
 
         for layer, net, shape in net_shapes:
@@ -361,6 +363,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
             r.insert(shape)
             r.merge()
 
+    # Construct two dimensional grid which defines the routing graph on a single layer.
     grid = Grid2D((tech.grid_offset_x, tech.grid_offset_y),
                   (tech.grid_offset_x + cell_width - tech.grid_offset_x, tech.grid_offset_y + tech.unit_cell_height),
                   (tech.routing_grid_pitch_x, tech.routing_grid_pitch_y))

@@ -145,7 +145,8 @@ def eval_op_tree(cell: db.Cell, op_node: LayerOp) -> Mask:
     return result
 
 
-l_active = 'active'
+l_ndiffusion = 'ndiffusion'
+l_pdiffusion = 'pdiffusion'
 l_nwell = 'nwell'
 l_pwell = 'pwell'
 l_poly = 'poly'
@@ -164,23 +165,25 @@ l_abutment_box = 'abutment_box'
 layermap = {
     l_nwell: (1, 0),
     l_pwell: (2, 0),
-    l_active: (3, 0),
-    l_poly: (4, 0),
-    l_diff_contact: (5, 0),
-    l_poly_contact: (6, 0),
-    l_metal1: (7, 0),
-    l_metal1_label: (7, 1),
-    l_metal1_pin: (7, 2),
-    l_via1: (8, 0),
-    l_metal2: (9, 0),
-    l_metal2_label: (9, 1),
-    l_metal2_pin: (9, 2),
+    l_ndiffusion: (3, 0),
+    l_pdiffusion: (4, 0),
+    l_poly: (5, 0),
+    l_diff_contact: (6, 0),
+    l_poly_contact: (7, 0),
+    l_metal1: (8, 0),
+    l_metal1_label: (8, 1),
+    l_metal1_pin: (8, 2),
+    l_via1: (9, 0),
+    l_metal2: (10, 0),
+    l_metal2_label: (10, 1),
+    l_metal2_pin: (10, 2),
     l_abutment_box: (100, 0)
 }
 
 layermap_reverse = {v: k for k, v in layermap.items()}
 
 via_layers = nx.Graph()
-via_layers.add_edge(l_active, l_metal1, layer=l_diff_contact)
+via_layers.add_edge(l_ndiffusion, l_metal1, layer=l_diff_contact)
+via_layers.add_edge(l_pdiffusion, l_metal1, layer=l_diff_contact)
 via_layers.add_edge(l_poly, l_metal1, layer=l_poly_contact)
 via_layers.add_edge(l_metal1, l_metal2, layer=l_via1)

@@ -318,24 +318,24 @@ def create_virtual_terminal_nodes(G: nx.Graph,
     for net, layer, terminals in terminals_by_net:
         weight = 1000
         if len(terminals) > 0:
-            if layer == 'l_active' and False:  # TODO: make tech independet
-                for p in terminals:
-                    # Force router to connect to all contacts to a l_active shape.
-                    virtual_net_terminal = ('virtual', net, layer, next(cnt))
-                    virtual_terminal_nodes[net].append(virtual_net_terminal)
-                    n = layer, p
-                    assert n in G.nodes, "Node not present in graph: %s" % str(n)
-                    G.add_edge(virtual_net_terminal, n, weight=weight)
-            else:
-                virtual_net_terminal = ('virtual', net, layer, next(cnt))
-                virtual_terminal_nodes[net].append(virtual_net_terminal)
+            # if layer in (l_ndiffusion, l_pdiffusion) and False:  # TODO: make tech independet
+            #     for p in terminals:
+            #         # Force router to connect to all contacts to a l_active shape.
+            #         virtual_net_terminal = ('virtual', net, layer, next(cnt))
+            #         virtual_terminal_nodes[net].append(virtual_net_terminal)
+            #         n = layer, p
+            #         assert n in G.nodes, "Node not present in graph: %s" % str(n)
+            #         G.add_edge(virtual_net_terminal, n, weight=weight)
+            # else:
+            virtual_net_terminal = ('virtual', net, layer, next(cnt))
+            virtual_terminal_nodes[net].append(virtual_net_terminal)
 
-                for p in terminals:
-                    n = layer, p
-                    assert n in G.nodes, "Node not present in graph: %s" % str(n)
-                    # High weight for virtual edge
-                    # TODO: High weight only for low-resistance layers.
-                    G.add_edge(virtual_net_terminal, n, weight=weight)
+            for p in terminals:
+                n = layer, p
+                assert n in G.nodes, "Node not present in graph: %s" % str(n)
+                # High weight for virtual edge
+                # TODO: High weight only for low-resistance layers.
+                G.add_edge(virtual_net_terminal, n, weight=weight)
 
     cnt = count()
     # Create virtual nodes for I/O pins.

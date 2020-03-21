@@ -61,7 +61,8 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
 
     rnwell = make_layer(l_nwell)
     rpwell = make_layer(l_pwell)
-    ractive = make_layer(l_active)
+    rndiff = make_layer(l_ndiffusion)
+    rpdiff = make_layer(l_pdiffusion)
     rpoly = make_layer(l_poly)
     # rpoly_lbl = make_layer(l_poly_label)
     rdiff_cont = make_layer(l_diff_contact)
@@ -72,11 +73,11 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
     rmetal2 = make_layer(l_metal2)
     rmetal2_lbl = make_layer(l_metal2_label)
 
-    rpactive = ractive & rnwell
+    rpactive = rpdiff & rnwell
     rpgate = rpactive & rpoly
     rpsd = rpactive - rpgate
 
-    rnactive = ractive - rnwell
+    rnactive = rndiff - rnwell
     rngate = rnactive & rpoly
     rnsd = rnactive - rngate
 
