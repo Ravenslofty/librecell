@@ -240,8 +240,8 @@ class HierarchicalPlacer(TransistorPlacer):
 
     def place(self, transistors: Iterable[Transistor]) -> Cell:
         """ Place transistors by a hierarchical approach.
-        The full circuit is split into subcircuits, each containing only nmos or pmos transistors.
-        The subcircuits are placed independent of their internal placement.
+        The full circuit is split into sub-circuits, each containing only nmos or pmos transistors.
+        The sub-circuits are placed independent of their internal placement.
         :param transistors:
         :return:
         """
@@ -279,7 +279,7 @@ class HierarchicalPlacer(TransistorPlacer):
                 """
 
                 :param width: Width of sub cell
-                :param nets: Set of net names inside the subcell (without power nets)
+                :param nets: Set of net names inside the sub-cell (without power nets)
                 :param row: Row index as a placement constraint. (e.g. 0 for a NMOS sub cell and 1 for a PMOS sub cell)
                 :param id: Some identifier or reference to the transistors in this sub cell.
                 """
@@ -318,9 +318,9 @@ class HierarchicalPlacer(TransistorPlacer):
 
         def get_subcell_net_position(subcells: Iterable[SubCell]) -> List[Tuple[Any, float]]:
             """
-            Get approximate net positions given a row of subcells.
+            Get approximate net positions given a row of sub-cells.
             Each net is treated as it would be localized in the center of the sub cell.
-            :param subcells: A row of subcells
+            :param subcells: A row of sub-cells
             :return: List[(net name, x coordinate)]
             """
             offset = 0
@@ -341,7 +341,7 @@ class HierarchicalPlacer(TransistorPlacer):
 
         # Extract input nets.
         input_nets = net_util.get_cell_inputs(transistors)
-        output_nets = {} # TODO: extract output nets.
+        output_nets = set()  # TODO: extract output nets.
 
         for ps, ns in subcell_placements:
             ppos = get_subcell_net_position(ps)

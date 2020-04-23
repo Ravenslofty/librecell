@@ -23,6 +23,7 @@ from ..place.place import Transistor, ChannelType
 
 from .grid_helpers import *
 from .layers import *
+from .. import tech_util
 from typing import Any, Dict, Tuple, Optional
 import sys
 
@@ -50,7 +51,7 @@ class TransistorLayout:
           Layout of PC gate.
 
         :param active: pya.Box
-          Layout of l_active.
+          Layout of the diffusion region.
 
         :param source_box: pya.Box
           Marks possible locations for contacts to source.
@@ -59,6 +60,9 @@ class TransistorLayout:
           Marks possible locations for contacts to drain.
 
         """
+
+        assert (nwell is None) ^ (pwell is None), "Exactly one of {nwell, pwell} must be defined."
+
         # Transistor polygons/paths
         self.gate = gate
         self.active = active
@@ -85,33 +89,51 @@ def draw_transistor(t: TransistorLayout, shapes: Dict[Any, pya.Region]):
     :param shapes: Dict[layer name, pya.Shapes]
       A dict mapping layer names to pya.Shapes.
     """
-    shapes[l_active].insert(t.active)
 
     if t.nwell:
-        # For PMOS only.
+        # For PMOS.
+        shapes[l_pdiffusion].insert(t.active)
         shapes[l_nwell].insert(t.nwell)
 
     if t.pwell:
-        # For NMOS only.
+        # For NMOS.
+        shapes[l_ndiffusion].insert(t.active)
         shapes[l_pwell].insert(t.pwell)
 
     shapes[l_poly].insert(t.gate)
 
 
-def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> TransistorLayout:
+def create_transistor_layout(t: Transistor, loc: Tuple[int, int], distance_to_outline: int, tech) -> TransistorLayout:
     """ Given an abstract transistor create its layout.
     
     :param t: 
-    :param loc: 
+    :param loc: Transistor location on the grid. (0,0) is the transistor on the bottom left, (0,1) its upper neighbour, (1,0) its right neighbour.
+    :param distance_to_outline: Distance of active area to upper or lower boundary of the cell. Basically determines the y-offset of the transistors.
     :param tech: module containing technology information
     :return: 
     """
 
-    # Bottom left of l_active.
+    # Get either the ndiffusion or pdiffusion layer.
+    if t.channel_type == ChannelType.NMOS:
+        l_diffusion = l_ndiffusion
+    else:
+        l_diffusion = l_pdiffusion
+
+    # Calculate minimal distance from active region to upper and lower cell boundaries.
+    poly_half_spacing = (tech.min_spacing[(l_poly, l_poly)] + 1) // 2
+    active_half_spacing = (tech.min_spacing[(l_diffusion, l_diffusion)] + 1) // 2
+    # Distance from active to active in neighbouring cell must be kept,
+    # as well as distance from poly to poly in neighbouring cell.
+    min_distance_to_outline = max(active_half_spacing, tech.gate_extension + poly_half_spacing)
+
+    assert distance_to_outline >= min_distance_to_outline, 'Chosen distance will violate minimum spacing rules. {} >= {}.'.format(
+        distance_to_outline, min_distance_to_outline)
+
+    # Bottom left of l_diffusion.
     x, y = loc
 
-    # Choose l_active width such that at least one contact can be placed on each side of the transistor.
-    w = tech.unit_cell_width + tech.via_size[l_diff_contact] + 2 * tech.minimum_enclosure[(l_active, l_diff_contact)]
+    # Choose l_diffusion width such that at least one contact can be placed on each side of the transistor.
+    w = tech.unit_cell_width + tech.via_size[l_diff_contact] + 2 * tech.minimum_enclosure[(l_diffusion, l_diff_contact)]
 
     h = t.channel_width
 
@@ -119,16 +141,17 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
     y_eff = 0
     if y % 2 == 1:
         # Top aligned.
-        y_eff = y * tech.unit_cell_height - 2 * tech.routing_grid_pitch_y
-        y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) + tech.via_size[l_diff_contact] // 2 + \
-                tech.minimum_enclosure[(l_active, l_diff_contact)]
+        y_eff = y * tech.unit_cell_height - distance_to_outline
+        # y_eff = grid_floor(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) + tech.via_size[l_diff_contact] // 2 + \
+        #         tech.minimum_enclosure[(l_diffusion, l_diff_contact)]
         y_eff = y_eff - h
     else:
         # Bottom aligned
-        y_eff = y * tech.unit_cell_height + 1 * tech.routing_grid_pitch_y
-        y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) - tech.via_size[l_diff_contact] // 2 - \
-                tech.minimum_enclosure[(l_active, l_diff_contact)]
+        y_eff = y * tech.unit_cell_height + distance_to_outline
+        # y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) - tech.via_size[l_diff_contact] // 2 - \
+        #         tech.minimum_enclosure[(l_diffusion, l_diff_contact)]
 
+    # Create shape for active layer.
     active_box = pya.Box(
         x_eff,
         y_eff,
@@ -145,7 +168,7 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], tech) -> Trans
     l_well = l_nwell if t.channel_type == ChannelType.PMOS else l_pwell
 
     # Get minimum overlap from tech file.
-    well2active_overlap = tech.minimum_enclosure.get((l_well, l_active), 0)
+    well2active_overlap = tech.minimum_enclosure.get((l_well, l_diffusion), 0)
     if not isinstance(well2active_overlap, tuple):
         well2active_overlap = (well2active_overlap, well2active_overlap)
     well2active_overlap_x, well2active_overlap_y = well2active_overlap

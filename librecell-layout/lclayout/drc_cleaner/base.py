@@ -49,7 +49,7 @@ def argmin(l: Iterable, key=lambda x: x) -> int:
     """
     Get index (position) of the minimal element.
     :param l: Iterable containing the elements.
-    :param key: A lambda function to be applyied to the elements before.
+    :param key: A lambda function to be applied to the elements before.
     :return: Index to the minimal element.
     """
     m, i = min(zip(map(key, l), count()))
