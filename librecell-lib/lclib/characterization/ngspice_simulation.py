@@ -94,6 +94,7 @@ def piece_wise_linear_voltage_source(circuit: Circuit, name: str, plus, minus, w
                                      repeat=None, time_delay=None):
     """ Create a piece wise linear voltage source.
     This is a helper function needed because PWL sources are not properly handled by PySpice at time of this writing.
+
     :param circuit: The netlist to add the source.
     :param name: Name of the voltage source.
     :param plus: Positive terminal.
