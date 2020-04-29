@@ -238,8 +238,9 @@ def measure_comb_cell(circuit: Circuit,
             output_a = output_voltage[0] > v_thresh
             output_b = output_voltage[-1] > v_thresh
 
-            if output_function is not None:
-                assert output_a != output_b, "Supplied boolean function and simulation are inconsistent."
+            # There should be an edge in the output signal.
+            # Because the input signals have been chosen that way.
+            assert output_a != output_b, "Supplied boolean function and simulation are inconsistent."
 
             # Check if output signal toggles.
             if output_a != output_b:
@@ -317,7 +318,7 @@ def characterize_comb_cell(cell_name: str,
                            spice_include_files: List[str] = None,
                            time_resolution=50 @ u_ps,
                            temperature=27,
-                           ):
+                           ) -> Dict[str, np.ndarray]:
     """
     Calculate the NDLM timing table of a cell for a given timing arc.
     :param cell_name: The name of the cell in the SPICE model. Required to find it in the spice netlist.
@@ -379,6 +380,12 @@ def characterize_comb_cell(cell_name: str,
     # TODO: Spice ABSTOL, RELTOL, CHARGETOL...
 
     def f(input_transition_time, output_cap):
+        """
+        Evaluate cell timing at a single input-transition-time/output-capacitance point.
+        :param input_transition_time:
+        :param output_cap:
+        :return:
+        """
         # TODO: handle multiple output pins in one run.
         r = measure_comb_cell(circuit,
                               inputs_nets=input_pins,

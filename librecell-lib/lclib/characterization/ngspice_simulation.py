@@ -82,6 +82,7 @@ def simulate_circuit(circuit: Circuit,
     # Run transient analysis.
     # Set use_initial_condition (uic) to False to enable DC bias computation. See ngspice manual 15.2.2 2)
     logger.info("Run transient analysis. step_time = {}, end_time = {}".format(step_time, end_time))
+
     analysis = simulator.transient(step_time=step_time,
                                    end_time=end_time,
                                    use_initial_condition=False
