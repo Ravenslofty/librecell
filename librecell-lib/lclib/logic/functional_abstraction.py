@@ -30,7 +30,7 @@ from lclayout.data_types import ChannelType
 import logging
 import sys
 
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+# logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 
@@ -43,14 +43,16 @@ class Memory:
     Data structure for a memory loop.
     """
 
-    def __init__(self, data: boolalg.Boolean, write_condition: boolalg.Boolean,
+    def __init__(self,
+                 data: boolalg.Boolean,
+                 write_condition: boolalg.Boolean,
                  oscillation_condition: boolalg.Boolean):
         self.data = data
         self.write_condition = write_condition
         self.oscillation_condition = oscillation_condition
 
     def __str__(self):
-        return "Memory({}, write = {})".format(self.data, self.write_condition)
+        return "Memory(data = {}, write = {})".format(self.data, self.write_condition)
 
     def __repr__(self):
         return str(self)
@@ -84,6 +86,8 @@ def boolean_derivatives(f: boolalg.Boolean, x: sympy.Symbol) \
 
     derivative = simplify_logic(positive_derivative | negative_derivative)  # == f0 ^ f1
     print('calculate derivative: d/d{} ({})) = {}'.format(x, f, derivative))
+    print('calculate pos. derivative: d+/d{} ({})) = {}'.format(x, f, positive_derivative))
+    print('calculate neg. derivative: d-/d{} ({})) = {}'.format(x, f, negative_derivative))
     return derivative, positive_derivative, negative_derivative
 
 
@@ -365,6 +369,94 @@ class CellInfo:
         self.conductivity_conditions: Dict[Any, Dict[Any, boolalg.Boolean]] = dict()
 
 
+def _resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean],
+                                       inputs: Set[sympy.Symbol],
+                                       formula: boolalg.Boolean) -> boolalg.Boolean:
+    """
+    Simplify the formula `formula` by iterative substitution with the `formulas`.
+    :param formulas: Formulas used for substitution as a dict.
+    :param inputs: Define input atoms.
+    :param formula: The start.
+    :return: Return the formula with all substitutions applied.
+    """
+    stop_atoms = set(inputs)
+
+    while formula.atoms() - stop_atoms:
+
+        for a in formula.atoms() - stop_atoms:
+            stop_atoms.update(formula.atoms())
+            print(a)
+            if a in formulas:
+                formula = formula.subs({a: formulas[a]})
+                formula = simplify_logic(formula)
+
+    return formula
+
+
+def test_resolve_intermediate_variables():
+    a, b, c = sympy.symbols('a b c')
+    formulas = {a: b ^ c, c: ~a}
+    inputs = {b}
+    r = _resolve_intermediate_variables(formulas, inputs, a)
+    assert bool_equals(r, b ^ ~a)
+
+
+# def _resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean],
+#                                     inputs: Set[sympy.Symbol],
+#                                     formula: boolalg.Boolean,
+#                                     break_on_loop: bool = False):
+#     """
+#     Simplify the formula `formula` by iterative substitution with the `formulas`.
+#     :param formulas: Formulas used for substitution as a dict.
+#     :param inputs: Define input atoms.
+#     :param formula: The start.
+#     :param break_on_loop: Break when detecting an infinite loop.
+#     :return: Return the formula with all substitutions applied.
+#     """
+#
+#     if formula in inputs:
+#         return formula
+#
+#     f = formula
+#     f = simplify_logic(f)
+#     # Remember previous results to be able to detect loops.
+#     previous_formulas = {f}
+#     while f.atoms() - inputs:
+#         f = f.subs(formulas)
+#         f = simplify_logic(f)
+#
+#         if f in previous_formulas:
+#             if break_on_loop:
+#                 logger.info('Loop detected.')
+#                 break
+#             else:
+#                 assert False, "Equation system contains a loop!"
+#         previous_formulas.add(f)
+#
+#     return f
+
+
+def _formula_dependency_graph(formulas: Dict[sympy.Symbol, boolalg.Boolean]) -> nx.DiGraph:
+    """
+    Create a graph representing the dependencies of the variables/expressions.
+    Used to detect feedback loop.
+    :param formulas:
+    :return:
+    """
+    dependency_graph = nx.DiGraph()
+    for output, expression in formulas.items():
+        if isinstance(expression, boolalg.Boolean):
+            for atom in expression.atoms():
+                # Output depends on every variable (atom) in the expression.
+                dependency_graph.add_edge(output, atom)
+        elif isinstance(expression, bool):
+            # Handle True and False constants.
+            dependency_graph.add_edge(output, expression)
+        else:
+            assert False, "Type not supported: '{}'".format(type(expression))
+    return dependency_graph
+
+
 def analyze_circuit_graph(graph: nx.MultiGraph,
                           pins_of_interest: Set,
                           constant_input_pins: Dict[Any, bool] = None,
@@ -419,6 +511,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     logger.info("Detected input nets: {}".format(input_nets))
     logger.info("Detected output nets: {}".format(output_nodes))
 
+    # Find conductivity conditions for all pull-up/pull-down paths.
     conductivity_conditions, inputs = complex_cmos_graph_to_formula(graph,
                                                                     input_pins=input_nets,
                                                                     output_nodes=output_nodes,
@@ -462,6 +555,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     # Simplify formulas by substituting VDD and GND with known values.
     formulas_high = {k: simplify_logic(f.subs(constants)) for k, f in formulas_high.items()}
     formulas_low = {k: simplify_logic(f.subs(constants)) for k, f in formulas_low.items()}
+
     logger.debug('formulas_high = {}'.format(formulas_high))
     print('formulas_high = {}'.format(formulas_high))
     print('formulas_low = {}'.format(formulas_low))
@@ -470,24 +564,19 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     inputs = {sympy.Symbol(i) for i in inputs} - set(constants.keys())
     logger.debug('inputs = {}'.format(inputs))
 
-    def _formula_dependency_graph(formulas) -> nx.DiGraph:
-        # Detect loops in the circuit.
-        # Create a graph representing the dependencies of the variables/expressions.
-        dependency_graph = nx.DiGraph()
-        for output, expression in formulas.items():
-            if isinstance(expression, boolalg.Boolean):
-                for atom in expression.atoms():
-                    # Output depends on every variable (atom) in the expression.
-                    dependency_graph.add_edge(output, atom)
-            elif isinstance(expression, bool):
-                # Handle True and False constants.
-                dependency_graph.add_edge(output, expression)
-            else:
-                assert False, "Type not supported: '{}'".format(type(expression))
-        return dependency_graph
-
     # Create dependency graph to detect feedback loops.
     dependency_graph = _formula_dependency_graph(formulas_high)
+
+    # # Simplify formulas by substitution.
+    # formulas_high = {k: _resolve_intermediate_variables(formulas_high, inputs, f, break_on_loop=True)
+    #                  for k, f in formulas_high.items()}
+    #
+    # formulas_low = {k: _resolve_intermediate_variables(formulas_low, inputs, f, break_on_loop=True)
+    #                 for k, f in formulas_low.items()}
+    #
+    #
+    # print('simplified formulas_high = {}'.format(formulas_high))
+    # print('simplified formulas_low = {}'.format(formulas_low))
 
     # import matplotlib.pyplot as plt
     # nx.draw_networkx(dependency_graph)
@@ -500,8 +589,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     for cycle in cycles:
         print()
-        logger.info("cycle: {}".format(cycle))
-        print('cycle = ', cycle)
+        print("cycle: {}".format(cycle))
         for el in cycle:
             print(' --> {} = {}'.format(el, formulas_high[el]))
         print()
@@ -510,40 +598,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     # Collect all nets that belong to a memory cycle.
     nets_of_memory_cycles = {n for c in cycles for n in c}
-
-    def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean],
-                                       inputs: Set[sympy.Symbol],
-                                       root: boolalg.Boolean,
-                                       break_on_loop: bool = False):
-        """
-        Simplify the formula `root` by iterative substitution with the `formulas`.
-        :param formulas: Formulas used for substitution as a dict.
-        :param inputs: Define input atoms.
-        :param root: The start.
-        :param break_on_loop: Break when detecting an infinite loop.
-        :return: Return the formula with all substitutions applied.
-        """
-
-        if root not in formulas:
-            return root
-
-        f = formulas[root]
-        f = simplify_logic(f)
-        # Remember previous results to be able to detect loops.
-        previous_formulas = {f}
-        while f.atoms() - inputs:
-            f = f.subs(formulas)
-            f = simplify_logic(f)
-
-            if f in previous_formulas:
-                if break_on_loop:
-                    logger.info('Loop detected.')
-                    break
-                else:
-                    assert False, "Equation system contains a loop!"
-            previous_formulas.add(f)
-
-        return f
+    print("Nets of memory cycles: ", nets_of_memory_cycles)
 
     def derive_memory(memory_output_net: sympy.Symbol,
                       inputs: Set[sympy.Symbol],
@@ -555,8 +610,9 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         :param formulas:
         :return:
         """
-        logger.info("Derive memory from: {}".format(memory_output_net))
-        memory_output_resolved = resolve_intermediate_variables(formulas, inputs, memory_output_net, break_on_loop=True)
+        logger.info("Derive memory from output net: {}".format(memory_output_net))
+        memory_output_resolved = _resolve_intermediate_variables(formulas, inputs, memory_output_net)
+        print("Memory output net {}  = {}".format(memory_output_net, memory_output_resolved))
         d, dp, dn = boolean_derivatives(memory_output_resolved, memory_output_net)
         write_condition = ~dp
         oscillation_condition = dn
@@ -594,23 +650,24 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     # Solve equation system for output.
     # TODO: stop resolving at memory elements.
-    def solve_output_net():
+    def solve_output_nets():
         output_formulas = dict()
-        memory_nets = dict()
+        latches = dict()
 
         wavefront = {sympy.Symbol(o) for o in output_nodes}
+
         while wavefront:
 
             out = wavefront.pop()
             assert out not in output_formulas
-            assert out not in memory_nets
+            assert out not in latches
 
             new_wavefront = set()
 
             if out not in nets_of_memory_cycles:
                 print("Find formula for", out)
                 assert isinstance(out, sympy.Symbol)
-                formula = resolve_intermediate_variables(formulas_high, inputs | nets_of_memory_cycles, out)
+                formula = _resolve_intermediate_variables(formulas_high, inputs | nets_of_memory_cycles, out)
                 output_formulas[out] = formula
 
                 # Find new wavefront.
@@ -618,11 +675,12 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 new_wavefront.update(atoms)
 
                 # Find inputs into formula that come from a memory.
-                new_atoms = atoms - output_formulas.keys() - memory_nets.keys() - inputs
+                new_atoms = atoms - output_formulas.keys() - latches.keys() - inputs
                 unknown_memory_nets = new_atoms & nets_of_memory_cycles
                 print("Unknown inputs into", out, "from memory:", unknown_memory_nets)
             else:
                 # Resolve memory.
+                assert out in nets_of_memory_cycles
                 memory_net = out
                 _this_memory_cycle = [c for c in cycles if memory_net in c]
                 assert len(_this_memory_cycle) == 1
@@ -632,26 +690,32 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 _inputs = inputs | nets_of_memory_cycles - _this_memory_cycle
                 memory = derive_memory(memory_net, _inputs, formulas_high)
 
-                memory_nets[memory_net] = memory
+                latches[memory_net] = memory
 
                 # Find new wavefront.
                 atoms = memory.write_condition.atoms() | memory.data.atoms()
                 new_wavefront.update(atoms)
 
-            wavefront.update(new_wavefront - output_formulas.keys() - memory_nets.keys() - inputs)
+            wavefront.update(new_wavefront - output_formulas.keys() - latches.keys() - inputs)
 
-            return output_formulas, memory_nets
+        return output_formulas, latches
 
-    output_formulas, memory_nets = solve_output_net()
+    output_formulas, latches = solve_output_nets()
 
     # Simplify formulas in memories.
-    for m in memory_nets.values():
+    for m in latches.values():
         m.data = simplify_logic(m.data.subs(output_formulas))
         m.write_condition = simplify_logic(m.write_condition.subs(output_formulas))
         m.oscillation_condition = simplify_logic(m.oscillation_condition.subs(output_formulas))
 
-    print("Formulas: {}".format(output_formulas))
-    print("Memories: {}".format(memory_nets))
+    print("Formulas ({}):".format(len(output_formulas)))
+    for net, formula in output_formulas.items():
+        print(" ", net, "=", formula)
+
+    print("Latches ({}):".format(len(latches)))
+    for output_net, latch in latches.items():
+        print(" ", output_net, "=", latch)
+
     assert len(cycles) == 0, "Abstraction of feed-back loops is not yet supported."
     return output_formulas
 
