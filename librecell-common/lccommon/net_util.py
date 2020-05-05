@@ -77,6 +77,9 @@ def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transisto
     netlist.read(path, db.NetlistSpiceReader())
     circuit: db.Circuit = netlist.circuit_by_name(subckt_name)
 
+    if circuit is None:
+        raise Exception("No such circuit: {}".format(subckt_name))
+
     pins = [p.name() for p in circuit.each_pin()]
 
     def get_channel_type(s: str):

@@ -30,7 +30,8 @@ setup(name='librecell-lib',
               'libertyviz = lclib.liberty.visualize:main_plot_timing',
               'libertymerge = lclib.liberty.merge:main',
               'lcsize = lclib.transistor_sizing.width_opt:main',
-              'lctime = lclib.characterization.standalone:main'
+              'lctime = lclib.characterization.main_lctime:main',
+              'sp2bool = lclib.characterization.main_sp2bool:main'
           ]
       },
       install_requires=[

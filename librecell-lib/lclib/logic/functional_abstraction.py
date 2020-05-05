@@ -28,7 +28,9 @@ from sympy.logic import boolalg
 
 from lclayout.data_types import ChannelType
 import logging
+import sys
 
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 
@@ -37,6 +39,10 @@ def simplify_logic(f: boolalg.Boolean, force: bool = True) -> boolalg.Boolean:
 
 
 class Memory:
+    """
+    Data structure for a memory loop.
+    """
+
     def __init__(self, data: boolalg.Boolean, write_condition: boolalg.Boolean,
                  oscillation_condition: boolalg.Boolean):
         self.data = data
@@ -234,69 +240,6 @@ def _get_conductivity_conditions(cmos_graph: nx.MultiGraph,
     return conductivity_conditions
 
 
-#
-# def _cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
-#                            vdd_node,
-#                            gnd_node,
-#                            output_node,
-#                            input_pins: Set = None) -> boolalg.Boolean:
-#     """
-#     Find the boolean formula implemented by the push-pull network `cmos_graph`.
-#     :param cmos_graph:
-#     :param vdd_node: Name of VDD supply node.
-#     :param gnd_node: Name of GND supply node.
-#     :param input_pins: Set of all input pins including power pins.
-#     :param output_node:
-#     :return: sympy.Symbol
-#     """
-#
-#     if input_pins is None:
-#         input_pins = set()
-#     else:
-#         input_pins = input_pins.copy()
-#
-#     input_pins.add(vdd_node)
-#     input_pins.add(gnd_node)
-#
-#     logger.debug("Input nets: {}".format(input_pins))
-#     logger.debug("Output net: {}".format(output_node))
-#
-#     # Calculate conductivity conditions from each input-pin to output.
-#     conductivity_conditions = _get_conductivity_conditions(cmos_graph, input_pins, output_node)
-#
-#     # Find condition that output is connected to VDD.
-#     output_at_vdd = conductivity_conditions[sympy.Symbol(vdd_node)]
-#     # # Find condition that output is connected to GND.
-#     # output_at_gnd = conductivity_conditions[gnd_node]
-#     #
-#     # # Check if the two conditions are complementary.
-#     # is_complementary = _bool_equals(output_at_gnd, ~output_at_vdd)
-#     #
-#     # # Check if it is possible to create a path connecting VDD and GND.
-#     # short_condition = output_at_vdd & output_at_gnd
-#     # has_short = satisfiable(short_condition)
-#     #
-#     # # Check if it is possible to disconnect the output from both VDD and GND (high-impedance).
-#     # tri_state_condition = simplify_logic((~output_at_vdd) & (~output_at_gnd))
-#     # has_tri_state = satisfiable(tri_state_condition)
-#
-#     # TODO: This only works if the circuit is complementary.
-#     f_out = simplify_logic(output_at_vdd)
-#     # logger.info("Deduced formula: {} = {}".format(output_node, f_out))
-#     # logger.info("Is complementary circuit: {}".format(is_complementary))
-#     # assert is_complementary, "Non-complementary circuits not supported yet."
-#     #
-#     # logger.info("Has tri-state: {}".format(has_tri_state))
-#     # if has_tri_state:
-#     #     logger.info("High impedance output when: {}".format(tri_state_condition))
-#     #
-#     # logger.info("Has short circuit: {}".format(has_short))
-#     # if has_short:
-#     #     logger.warning("Short circuit when: {}".format(short_condition))
-#
-#     return f_out
-
-
 def _high_impedance_condition(conductivity_conditions: Dict[sympy.Symbol, boolalg.Boolean]) -> boolalg.Boolean:
     pass
 
@@ -309,22 +252,6 @@ def _is_complementary(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
     :return:
     """
     return bool_equals(f1, ~f2)
-
-
-def test_cmos_graph_to_formula():
-    # Create CMOS network of a nand gate and check if `evaluate_cmos_graph` behaves like the nand function.
-    g = nx.MultiGraph()
-    g.add_edge('vdd', 'output', ('a', ChannelType.PMOS))
-    g.add_edge('vdd', 'output', ('b', ChannelType.PMOS))
-    g.add_edge('gnd', '1', ('a', ChannelType.NMOS))
-    g.add_edge('1', 'output', ('b', ChannelType.NMOS))
-
-    formula = _cmos_graph_to_formula(g, 'vdd', 'gnd', 'output')
-
-    # Verify that the deduced formula equals a NAND.
-    a, b = sympy.symbols('a b')
-    nand = ~(a & b)
-    assert formula.equals(nand), "Transformation of CMOS graph into formula failed."
 
 
 def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
@@ -432,6 +359,12 @@ def test_complex_cmos_graph_to_formula():
     assert f.equals(AND), "Transformation of CMOS graph into formula failed."
 
 
+class CellInfo:
+
+    def __init__(self):
+        self.conductivity_conditions: Dict[Any, Dict[Any, boolalg.Boolean]] = dict()
+
+
 def analyze_circuit_graph(graph: nx.MultiGraph,
                           pins_of_interest: Set,
                           constant_input_pins: Dict[Any, bool] = None,
@@ -478,7 +411,10 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     else:
         user_input_nets = set(user_input_nets)
 
-    input_nets = user_input_nets | _find_input_gates(graph) | constant_input_pins.keys()
+    logger.info("User supplied input nets: {}".format(user_input_nets))
+    deduced_input_nets = _find_input_gates(graph)
+    logger.info("Additional detected input nets: {}".format(deduced_input_nets))
+    input_nets = user_input_nets | deduced_input_nets | constant_input_pins.keys()
     output_nodes = pins_of_interest - input_nets
     logger.info("Detected input nets: {}".format(input_nets))
     logger.info("Detected output nets: {}".format(output_nodes))
@@ -487,36 +423,48 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                                                                     input_pins=input_nets,
                                                                     output_nodes=output_nodes,
                                                                     )
-    print('conductivity_conditions = ', conductivity_conditions)
+    # print('conductivity_conditions = ', conductivity_conditions)
+
+    # Pretty-print the conductivity conditions.
+    print()
+    print('Conductivity conditions')
+    for pin_a, conditions in conductivity_conditions.items():
+        print(' ', pin_a)
+        for pin_b, condition in conditions.items():
+            print('  |-', pin_b, 'when', condition)
+    print()
 
     # Convert keys into symbols.
     conductivity_conditions = {sympy.Symbol(k): v for k, v in conductivity_conditions.items()}
 
     # Derive logic formulas from conductivity condition.
-    formulas = dict()
+    formulas_high = dict()
+    formulas_low = dict()
     for output, cc in conductivity_conditions.items():
-        or_terms = []
+        or_terms_high = []
+        or_terms_low = []
         for input_pin, condition in cc.items():
             assert isinstance(input_pin, sympy.Symbol)
             assert isinstance(condition, boolalg.Boolean)
             # if `condition` then output is `connected` to `input_pin`.
-            connected_to_input = condition & input_pin
-            connected_to_input = simplify_logic(connected_to_input)
-            or_terms.append(connected_to_input)
-
-        # TODO: if more than one of the OR terms evaluates to True, then there could be a short circuit.
+            connected_to_high = simplify_logic(condition & input_pin)  # Is there a path to HIGH?
+            connected_to_low = simplify_logic(condition & ~input_pin)  # Is there a path to LOW?
+            or_terms_high.append(connected_to_high)
+            or_terms_low.append(connected_to_low)
 
         # Logic OR of all elements.
-        or_formula = sympy.Or(*or_terms)
-        formulas[output] = simplify_logic(or_formula)
+        formulas_high[output] = simplify_logic(sympy.Or(*or_terms_high))
+        formulas_low[output] = simplify_logic(sympy.Or(*or_terms_low))
 
     # Add known values for VDD, GND
     constants = {sympy.Symbol(k): v for k, v in constant_input_pins.items()}
 
     # Simplify formulas by substituting VDD and GND with known values.
-    formulas = {k: simplify_logic(f.subs(constants)) for k, f in formulas.items()}
-    logger.debug('formulas = {}'.format(formulas))
-    print('formulas = {}'.format(formulas))
+    formulas_high = {k: simplify_logic(f.subs(constants)) for k, f in formulas_high.items()}
+    formulas_low = {k: simplify_logic(f.subs(constants)) for k, f in formulas_low.items()}
+    logger.debug('formulas_high = {}'.format(formulas_high))
+    print('formulas_high = {}'.format(formulas_high))
+    print('formulas_low = {}'.format(formulas_low))
 
     # Convert from strings into sympy symbols.
     inputs = {sympy.Symbol(i) for i in inputs} - set(constants.keys())
@@ -539,7 +487,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         return dependency_graph
 
     # Create dependency graph to detect feedback loops.
-    dependency_graph = _formula_dependency_graph(formulas)
+    dependency_graph = _formula_dependency_graph(formulas_high)
 
     # import matplotlib.pyplot as plt
     # nx.draw_networkx(dependency_graph)
@@ -555,7 +503,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         logger.info("cycle: {}".format(cycle))
         print('cycle = ', cycle)
         for el in cycle:
-            print('--> {} = {}'.format(el, formulas[el]))
+            print(' --> {} = {}'.format(el, formulas_high[el]))
         print()
 
     # assert len(cycles) == 0, "Abstraction of feed-back loops is not yet supported."
@@ -563,12 +511,18 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     # Collect all nets that belong to a memory cycle.
     nets_of_memory_cycles = {n for c in cycles for n in c}
 
-    print('cycles = ', cycles)
-
     def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean],
                                        inputs: Set[sympy.Symbol],
                                        root: boolalg.Boolean,
                                        break_on_loop: bool = False):
+        """
+        Simplify the formula `root` by iterative substitution with the `formulas`.
+        :param formulas: Formulas used for substitution as a dict.
+        :param inputs: Define input atoms.
+        :param root: The start.
+        :param break_on_loop: Break when detecting an infinite loop.
+        :return: Return the formula with all substitutions applied.
+        """
 
         if root not in formulas:
             return root
@@ -583,7 +537,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
             if f in previous_formulas:
                 if break_on_loop:
-                    print('loop detected')
+                    logger.info('Loop detected.')
                     break
                 else:
                     assert False, "Equation system contains a loop!"
@@ -591,77 +545,104 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
         return f
 
-    def derive_memory(memory_output_net: sympy.Symbol, inputs: Set[sympy.Symbol], formulas) -> Memory:
-        print("derive memory from: {}".format(memory_output_net))
+    def derive_memory(memory_output_net: sympy.Symbol,
+                      inputs: Set[sympy.Symbol],
+                      formulas: Dict[sympy.Symbol, boolalg.Boolean]) -> Memory:
+        """
+        Detect a memory loop given the output net of the memory.
+        :param memory_output_net:
+        :param inputs: Input atoms (the input nets to the loop).
+        :param formulas:
+        :return:
+        """
+        logger.info("Derive memory from: {}".format(memory_output_net))
         memory_output_resolved = resolve_intermediate_variables(formulas, inputs, memory_output_net, break_on_loop=True)
         d, dp, dn = boolean_derivatives(memory_output_resolved, memory_output_net)
         write_condition = ~dp
         oscillation_condition = dn
 
         # Find an expression for the memory output when the write condition is met.
+        # Find some variable assignment such that the write condition is met.
         write_condition_model = satisfiable(write_condition)
         if not write_condition_model:
             logger.warning("Detected a memory loop that is not possible to write to.")
+        # Now find the memory output once the write condition is met.
         data = simplify_logic(memory_output_resolved.subs(write_condition_model))
+
+        if not sympy.satisfiable(~write_condition):
+            logger.warning("This is not a true memory, it will never store anything.")
 
         return Memory(data=data, write_condition=write_condition, oscillation_condition=oscillation_condition)
 
     # Derive memory for all cycles with each possible node as memory output.
+    memory_output_nets = set()
     for cycle in cycles:
         print('cycle = {}'.format(cycle))
         nodes_in_cycle = set(cycle)
         _inputs = inputs | nets_of_memory_cycles - nodes_in_cycle
         for node in cycle:
-            memory = derive_memory(node, _inputs, formulas)
+            memory = derive_memory(node, _inputs, formulas_high)
 
             print(memory)
             print()
 
+            if sympy.satisfiable(~memory.write_condition):
+                # Store condition can be met -> this is a potential memory.
+                memory_output_nets.add(node)
+
+    print("Memory output nets: {}".format(memory_output_nets))
+
     # Solve equation system for output.
     # TODO: stop resolving at memory elements.
-    output_formulas = dict()
-    memory_nets = dict()
+    def solve_output_net():
+        output_formulas = dict()
+        memory_nets = dict()
 
-    wavefront = {sympy.Symbol(o) for o in output_nodes}
-    while wavefront:
+        wavefront = {sympy.Symbol(o) for o in output_nodes}
+        while wavefront:
 
-        out = wavefront.pop()
-        assert out not in output_formulas
-        assert out not in memory_nets
+            out = wavefront.pop()
+            assert out not in output_formulas
+            assert out not in memory_nets
 
-        new_wavefront = set()
+            new_wavefront = set()
 
-        if out not in nets_of_memory_cycles:
-            print("find formula for", out)
-            assert isinstance(out, sympy.Symbol)
-            formula = resolve_intermediate_variables(formulas, inputs | nets_of_memory_cycles, out)
-            output_formulas[out] = formula
+            if out not in nets_of_memory_cycles:
+                print("Find formula for", out)
+                assert isinstance(out, sympy.Symbol)
+                formula = resolve_intermediate_variables(formulas_high, inputs | nets_of_memory_cycles, out)
+                output_formulas[out] = formula
 
-            # Find new wavefront.
-            atoms = formula.atoms()
-            new_wavefront.update(atoms)
+                # Find new wavefront.
+                atoms = formula.atoms()
+                new_wavefront.update(atoms)
 
-            # Find inputs into formula that come from a memory.
-            new_atoms = atoms - output_formulas.keys() - memory_nets.keys() - inputs
-            unknown_memory_nets = new_atoms & nets_of_memory_cycles
-            print("unknown inputs into", out, "from memory:", unknown_memory_nets)
-        else:
-            # Resolve memory.
-            memory_net = out
-            _this_memory_cycle = [c for c in cycles if memory_net in c]
-            assert len(_this_memory_cycle) == 1
-            _this_memory_cycle = set(_this_memory_cycle[0])
+                # Find inputs into formula that come from a memory.
+                new_atoms = atoms - output_formulas.keys() - memory_nets.keys() - inputs
+                unknown_memory_nets = new_atoms & nets_of_memory_cycles
+                print("Unknown inputs into", out, "from memory:", unknown_memory_nets)
+            else:
+                # Resolve memory.
+                memory_net = out
+                _this_memory_cycle = [c for c in cycles if memory_net in c]
+                assert len(_this_memory_cycle) == 1
+                _this_memory_cycle = set(_this_memory_cycle[0])
 
-            _inputs = inputs | nets_of_memory_cycles - _this_memory_cycle
-            memory = derive_memory(memory_net, _inputs, formulas)
+                # Find inputs into the memory cycle.
+                _inputs = inputs | nets_of_memory_cycles - _this_memory_cycle
+                memory = derive_memory(memory_net, _inputs, formulas_high)
 
-            memory_nets[memory_net] = memory
+                memory_nets[memory_net] = memory
 
-            # Find new wavefront.
-            atoms = memory.write_condition.atoms() | memory.data.atoms()
-            new_wavefront.update(atoms)
+                # Find new wavefront.
+                atoms = memory.write_condition.atoms() | memory.data.atoms()
+                new_wavefront.update(atoms)
 
-        wavefront.update(new_wavefront - output_formulas.keys() - memory_nets.keys() - inputs)
+            wavefront.update(new_wavefront - output_formulas.keys() - memory_nets.keys() - inputs)
+
+            return output_formulas, memory_nets
+
+    output_formulas, memory_nets = solve_output_net()
 
     # Simplify formulas in memories.
     for m in memory_nets.values():
@@ -719,6 +700,8 @@ def test_analyze_circuit_graph_transmission_gate_xor():
     known_pins = {'vdd': True, 'gnd': False}
     result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins,
                                    user_input_nets={'a', 'b'})
+
+    print(result)
 
     # Verify that the deduced boolean function is equal to the XOR function.
     a, b = sympy.symbols('a, b')
