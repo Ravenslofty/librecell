@@ -60,6 +60,10 @@ def main():
     parser.add_argument('-I', '--include', required=False, action='append', metavar='SPICE_INCLUDE', type=str,
                         help='SPICE files to include such as transistor models.')
 
+    parser.add_argument('--calc-mode', metavar='CALC_MODE', type=str, choices=['worst', 'typical', 'best'],
+                        default='typical',
+                        help='Calculation mode for computing the default timing arc based on the conditional timing arcs. "worst", "typical" (average) or "best".')
+
     parser.add_argument('-o', '--output', required=True, metavar='LIBERTY_OUT', type=str, help='Output liberty file.')
 
     parser.add_argument('--debug', action='store_true', help='Enable debug mode.')
@@ -137,19 +141,42 @@ def main():
         assert False, msg
 
     # Get timing corner from liberty file.
+
+    # Find definitions of operating conditions and sort them by name.
+    operating_conditions_list = library.get_groups('operating_conditions')
+    # Put into a dict by name.
+    operating_conditions: Dict[str, Group] = {g.args[0]: g for g in operating_conditions_list}
+
+    logger.info("Operating conditions: {}".format(set(operating_conditions.keys())))
+
+    """
+    TODO: Use the information from the operating conditions.
+    Example:
+    operating_conditions (MPSS) {
+        calc_mode : worst ;
+        process : 1.5 ;
+        process_label : "ss" ;
+        temperature : 70 ;
+        voltage : 4.75 ;
+        tree_type : worse_case_tree ;
+    }
+    """
+
     # TODO: let user overwrite it.
-    default_operating_conditions = library['default_operating_conditions']
-    timing_corners = {
-        'typical': TimingCorner.TYPICAL,
-        'worst': TimingCorner.WORST,
-        'best': TimingCorner.BEST,
+    calc_modes = {
+        'typical': CalcMode.TYPICAL,
+        'worst': CalcMode.WORST,
+        'best': CalcMode.BEST,
     }
 
-    assert default_operating_conditions in timing_corners, "Unknown operating condition corner: {}".format(
-        default_operating_conditions)
+    # TODO: Make use of this.
+    default_operating_conditions = library['default_operating_conditions']
+    logger.info("Default operating conditions: {}".format(default_operating_conditions))
 
-    timing_corner = timing_corners[default_operating_conditions]
-    logger.info("Timing corner: {}".format(timing_corner.name))
+    assert args.calc_mode in calc_modes, "Unknown calculation mode: {}".format(args.calc_mode)
+
+    calc_mode = calc_modes[args.calc_mode]
+    logger.info("calc_mode: {}".format(calc_mode.name))
 
     # Read trip points from liberty file.
     trip_points = read_trip_points_from_liberty(library)
@@ -178,7 +205,7 @@ def main():
             output_pins=output_pins,
             supply_voltage=supply_voltage,
             trip_points=trip_points,
-            timing_corner=timing_corner,
+            timing_corner=calc_mode,
             spice_netlist_file=args.spice,
             spice_include_files=spice_includes,
 
@@ -209,7 +236,7 @@ def main():
                 output_functions=output_functions,
                 supply_voltage=supply_voltage,
                 trip_points=trip_points,
-                timing_corner=timing_corner,
+                timing_corner=calc_mode,
                 spice_netlist_file=args.spice,
                 spice_include_files=spice_includes,
 

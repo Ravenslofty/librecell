@@ -312,7 +312,7 @@ def characterize_comb_cell(cell_name: str,
                            output_functions: Dict[str, Callable],
                            supply_voltage: float,
                            trip_points: TripPoints,
-                           timing_corner: TimingCorner,
+                           timing_corner: CalcMode,
 
                            spice_netlist_file: str,
                            spice_include_files: List[str] = None,
@@ -372,9 +372,9 @@ def characterize_comb_cell(cell_name: str,
 
     # Find function to summarize different timing arcs.
     reduction_function = {
-        TimingCorner.WORST: max,
-        TimingCorner.BEST: min,
-        TimingCorner.TYPICAL: np.mean
+        CalcMode.WORST: max,
+        CalcMode.BEST: min,
+        CalcMode.TYPICAL: np.mean
     }[timing_corner]
 
     # TODO: Spice ABSTOL, RELTOL, CHARGETOL...
