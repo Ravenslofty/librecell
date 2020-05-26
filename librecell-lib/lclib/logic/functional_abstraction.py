@@ -38,6 +38,19 @@ def simplify_logic(f: boolalg.Boolean, force: bool = True) -> boolalg.Boolean:
     return sympy_simplify_logic(f, force=force)
 
 
+class CombinationalOutput:
+
+    def __init__(self, function: boolalg.Boolean, high_impedance: boolalg.Boolean):
+        self.function = function
+        self.high_impedance = high_impedance
+
+    def __str__(self):
+        return "CombinationalOutput(f = {}, Z = {})".format(self.function, self.high_impedance)
+
+    def __repr__(self):
+        return str(self)
+
+
 class Memory:
     """
     Data structure for a memory loop.
@@ -370,8 +383,8 @@ class CellInfo:
 
 
 def _resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean],
-                                       inputs: Set[sympy.Symbol],
-                                       formula: boolalg.Boolean) -> boolalg.Boolean:
+                                    inputs: Set[sympy.Symbol],
+                                    formula: boolalg.Boolean) -> boolalg.Boolean:
     """
     Simplify the formula `formula` by iterative substitution with the `formulas`.
     :param formulas: Formulas used for substitution as a dict.
@@ -564,19 +577,39 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     inputs = {sympy.Symbol(i) for i in inputs} - set(constants.keys())
     logger.debug('inputs = {}'.format(inputs))
 
+    # Simplify formulas by substitution.
+    formulas_high_simplified = {k: _resolve_intermediate_variables(formulas_high, inputs, f)
+                                for k, f in formulas_high.items()}
+
+    formulas_low_simplified = {k: _resolve_intermediate_variables(formulas_low, inputs, f)
+                               for k, f in formulas_low.items()}
+
+    print('simplified formulas_high = {}'.format(formulas_high_simplified))
+    print('simplified formulas_low = {}'.format(formulas_low_simplified))
+
+    # Find formulas for nets that are complementary and can never be in a high-impedance nor short-circuit state.
+    complementary_formulas = {k: formulas_high[k]
+                              for k in formulas_high.keys()
+                              if _is_complementary(formulas_high[k], formulas_low[k])}
+
+    # Use the complementary nets to simplify the other formulas.
+    formulas_high = {n: f.subs(complementary_formulas) for n, f in formulas_high.items()}
+    formulas_low = {n: f.subs(complementary_formulas) for n, f in formulas_low.items()}
+
+    # Find high-Z conditions.
+    high_impedance_conditions = {k: simplify_logic(~formulas_high[k] & ~formulas_low[k])
+                                 for k in formulas_high.keys()}
+
+    print("Complementary nets:")
+    for net, f in complementary_formulas.items():
+        print(' ', net, ':', f)
+
+    print("High impedance conditions:")
+    for net, condition in high_impedance_conditions.items():
+        print(' ', net, ':', condition)
+
     # Create dependency graph to detect feedback loops.
     dependency_graph = _formula_dependency_graph(formulas_high)
-
-    # # Simplify formulas by substitution.
-    # formulas_high = {k: _resolve_intermediate_variables(formulas_high, inputs, f, break_on_loop=True)
-    #                  for k, f in formulas_high.items()}
-    #
-    # formulas_low = {k: _resolve_intermediate_variables(formulas_low, inputs, f, break_on_loop=True)
-    #                 for k, f in formulas_low.items()}
-    #
-    #
-    # print('simplified formulas_high = {}'.format(formulas_high))
-    # print('simplified formulas_low = {}'.format(formulas_low))
 
     # import matplotlib.pyplot as plt
     # nx.draw_networkx(dependency_graph)
@@ -708,9 +741,11 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         m.write_condition = simplify_logic(m.write_condition.subs(output_formulas))
         m.oscillation_condition = simplify_logic(m.oscillation_condition.subs(output_formulas))
 
-    print("Formulas ({}):".format(len(output_formulas)))
+    print("Output functions ({}):".format(len(output_formulas)))
     for net, formula in output_formulas.items():
-        print(" ", net, "=", formula)
+        z = high_impedance_conditions[net]
+        function = formula.subs({~z: True})
+        print(" ", net, "=", function, ', Z: ', z)
 
     print("Latches ({}):".format(len(latches)))
     for output_net, latch in latches.items():
