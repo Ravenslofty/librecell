@@ -160,6 +160,7 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     assert reference.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
 
     # TODO: Make sure that combined/fingered transistors are compared correctly.
+    # As a temporary fix, devices are now not combined in both netlists.
     # reference.simplify()
     # extracted.simplify()
 
