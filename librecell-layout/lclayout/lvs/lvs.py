@@ -140,8 +140,9 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     netlist = l2n.netlist()
     netlist.make_top_level_pins()
     netlist.purge()
+    # netlist.combine_devices()
     netlist.purge_nets()
-    netlist.simplify()
+    # netlist.simplify()
 
     assert netlist.top_circuit_count() == 1, "A well formed netlist should have exactly one top circuit."
 
@@ -157,6 +158,10 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     """
     assert extracted.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
     assert reference.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
+
+    # TODO: Make sure that combined/fingered transistors are compared correctly.
+    # reference.simplify()
+    # extracted.simplify()
 
     cmp = db.NetlistComparer()
     compare_result = cmp.compare(extracted, reference)

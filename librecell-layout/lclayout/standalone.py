@@ -664,6 +664,7 @@ def main():
 
     # parser.add_argument('--profile', action='store_true', help='enable profiler')
     parser.add_argument('-v', '--verbose', action='store_true', help='show more information')
+    parser.add_argument('--ignore-lvs', action='store_true', help='Write the layout file even if the LVS check failed.')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help="don't show any information except fatal events (overwrites --verbose)")
     parser.add_argument('--log', required=False, metavar='LOG_FILE', type=str,
@@ -737,7 +738,8 @@ def main():
 
     if not lvs_success:
         logger.error("LVS check failed!")
-        exit(1)
+        if not args.ignore_lvs:
+            exit(1)
 
     # Output using defined output writers.
     from .writer.writer import Writer
