@@ -727,7 +727,7 @@ def main():
     circuit = reference.circuit_by_name(cell_name)
 
     # Extract netlist from layout.
-    netlist = lvs.extract_netlist(layout, cell, reference)
+    netlist = lvs.extract_netlist(layout, cell)
 
     sub_netlist = pya.Netlist()
     sub_netlist.add(circuit)

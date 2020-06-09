@@ -45,7 +45,7 @@ class MOS4To3NetlistSpiceReader(db.NetlistSpiceReaderDelegate):
             return True
 
 
-def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist) -> db.Netlist:
+def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     """
     Extract a device level netlist of 3-terminal MOSFETs from the cell `top_cell` of layout `layout`.
     :param layout: Layout object.
