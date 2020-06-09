@@ -163,11 +163,17 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     logger.debug("Netlist comparision result: {}".format(compare_result))
 
     if not compare_result:
-        logger.warning("Netlists don't match.")
-        # print('extracted netlist:')
-        # print(extracted)
-        # print('reference netlist:')
-        # print(reference)
+        logger.warning("Netlists don't match (use --verbose to display the netlists).")
+
+        # Print the both netlists.
+        logger.debug(f'''LVS netlists
+
+LVS extracted netlist:
+{extracted}
+
+LVS reference netlist:
+{reference}
+''')
 
     return compare_result
 
