@@ -134,14 +134,6 @@ def main():
     # Strip all cell groups.
     new_library.groups = [g for g in new_library.groups if g.group_name != 'cell']
 
-    # Add groups for the cells to be characterized.
-    for cell_name in cell_names:
-        new_cell_group = deepcopy(select_cell(library, cell_name))
-        # Strip away timing groups.
-        for pin_group in new_cell_group.get_groups('pin'):
-            pin_group.groups = [g for g in pin_group.groups if g.group_name != 'timing']
-        new_library.groups.append(new_cell_group)
-
     # Load operation voltage and temperature.
     # TODO: load voltage/temperature from operating_conditions group
     supply_voltage = library['nom_voltage']
@@ -154,6 +146,53 @@ def main():
     capacitance_unit_scale_factor = 1e12
     # TODO: get correct unit from liberty file.
     time_unit_scale_factor = 1e9
+
+    # Get timing corner from liberty file.
+
+    # Find definitions of operating conditions and sort them by name.
+    operating_conditions_list = library.get_groups('operating_conditions')
+    # Put into a dict by name.
+    operating_conditions: Dict[str, Group] = {g.args[0]: g for g in operating_conditions_list}
+
+    logger.info("Operating conditions: {}".format(set(operating_conditions.keys())))
+
+    """
+    TODO: Use the information from the operating conditions.
+    Example:
+    operating_conditions (MPSS) {
+        calc_mode : worst ;
+        process : 1.5 ;
+        process_label : "ss" ;
+        temperature : 70 ;
+        voltage : 4.75 ;
+        tree_type : worse_case_tree ;
+    }
+    """
+
+    # TODO: let user overwrite it.
+    calc_modes = {
+        'typical': CalcMode.TYPICAL,
+        'worst': CalcMode.WORST,
+        'best': CalcMode.BEST,
+    }
+
+    # TODO: Make use of this.
+    default_operating_conditions = library['default_operating_conditions']
+    logger.info("Default operating conditions: {}".format(default_operating_conditions))
+
+    assert args.calc_mode in calc_modes, "Unknown calculation mode: {}".format(args.calc_mode)
+
+    calc_mode = calc_modes[args.calc_mode]
+    logger.info("calc_mode: {}".format(calc_mode.name))
+
+    # Read trip points from liberty file.
+    trip_points = read_trip_points_from_liberty(library)
+
+    logger.debug(trip_points)
+
+    spice_includes = args.include if args.include else []
+    if len(spice_includes) == 0:
+        logger.warning("No transistor model supplied. Use --include or -I.")
 
     # Characterize all cells in the list.
     for cell_name in cell_names:
@@ -176,52 +215,12 @@ def main():
             logger.error(msg)
             assert False, msg
 
-        # Get timing corner from liberty file.
-
-        # Find definitions of operating conditions and sort them by name.
-        operating_conditions_list = library.get_groups('operating_conditions')
-        # Put into a dict by name.
-        operating_conditions: Dict[str, Group] = {g.args[0]: g for g in operating_conditions_list}
-
-        logger.info("Operating conditions: {}".format(set(operating_conditions.keys())))
-
-        """
-        TODO: Use the information from the operating conditions.
-        Example:
-        operating_conditions (MPSS) {
-            calc_mode : worst ;
-            process : 1.5 ;
-            process_label : "ss" ;
-            temperature : 70 ;
-            voltage : 4.75 ;
-            tree_type : worse_case_tree ;
-        }
-        """
-
-        # TODO: let user overwrite it.
-        calc_modes = {
-            'typical': CalcMode.TYPICAL,
-            'worst': CalcMode.WORST,
-            'best': CalcMode.BEST,
-        }
-
-        # TODO: Make use of this.
-        default_operating_conditions = library['default_operating_conditions']
-        logger.info("Default operating conditions: {}".format(default_operating_conditions))
-
-        assert args.calc_mode in calc_modes, "Unknown calculation mode: {}".format(args.calc_mode)
-
-        calc_mode = calc_modes[args.calc_mode]
-        logger.info("calc_mode: {}".format(calc_mode.name))
-
-        # Read trip points from liberty file.
-        trip_points = read_trip_points_from_liberty(library)
-
-        logger.debug(trip_points)
-
-        spice_includes = args.include if args.include else []
-        if len(spice_includes) == 0:
-            logger.warning("No transistor model supplied. Use --include or -I.")
+        # Add groups for the cell to be characterized.
+        new_cell_group = deepcopy(select_cell(library, cell_name))
+        # Strip away timing groups.
+        for pin_group in new_cell_group.get_groups('pin'):
+            pin_group.groups = [g for g in pin_group.groups if g.group_name != 'timing']
+        new_library.groups.append(new_cell_group)
 
         logger.info("Run characterization")
 
