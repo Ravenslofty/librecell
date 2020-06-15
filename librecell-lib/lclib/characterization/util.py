@@ -27,7 +27,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class TimingCorner(Enum):
+class CalcMode(Enum):
     WORST = 1
     TYPICAL = 2
     BEST = 3

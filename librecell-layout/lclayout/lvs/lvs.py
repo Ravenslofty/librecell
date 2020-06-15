@@ -45,7 +45,7 @@ class MOS4To3NetlistSpiceReader(db.NetlistSpiceReaderDelegate):
             return True
 
 
-def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist) -> db.Netlist:
+def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     """
     Extract a device level netlist of 3-terminal MOSFETs from the cell `top_cell` of layout `layout`.
     :param layout: Layout object.
@@ -140,8 +140,9 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell, reference: db.Netlist)
     netlist = l2n.netlist()
     netlist.make_top_level_pins()
     netlist.purge()
+    # netlist.combine_devices()
     netlist.purge_nets()
-    netlist.simplify()
+    # netlist.simplify()
 
     assert netlist.top_circuit_count() == 1, "A well formed netlist should have exactly one top circuit."
 
@@ -158,16 +159,29 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     assert extracted.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
     assert reference.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
 
+    # TODO: Make sure that combined/fingered transistors are compared correctly.
+    # As a temporary fix, devices are now not combined in both netlists.
+    # reference.simplify()
+    # extracted.simplify()
+    reference.combine_devices() # Seems to have no effect.
+    # extracted.combine_devices()
+
     cmp = db.NetlistComparer()
     compare_result = cmp.compare(extracted, reference)
     logger.debug("Netlist comparision result: {}".format(compare_result))
 
     if not compare_result:
-        logger.warning("Netlists don't match.")
-        # print('extracted netlist:')
-        # print(extracted)
-        # print('reference netlist:')
-        # print(reference)
+        logger.warning("Netlists don't match (use --verbose to display the netlists).")
+
+        # Print the both netlists.
+        logger.debug(f'''LVS netlists
+
+LVS extracted netlist:
+{extracted}
+
+LVS reference netlist:
+{reference}
+''')
 
     return compare_result
 

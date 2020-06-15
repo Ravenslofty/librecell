@@ -35,7 +35,8 @@ def simulate_circuit(circuit: Circuit,
                      step_time: Second,
                      end_time: Second,
                      temperature: float = 25,
-                     initial_voltages: Optional[Dict[str, Volt]] = None):
+                     initial_voltages: Optional[Dict[str, Volt]] = None,
+                     simulator='ngspice-shared'):
     """
     Simulate a circuit with given input voltages.
     :param circuit:
@@ -47,6 +48,8 @@ def simulate_circuit(circuit: Circuit,
     :param temperature: Simulation temperature.
     :param initial_voltages: Dict[node name, voltage].
         Initial voltages for nodes. Default = None.
+    :param simulator: Choose the simulator.
+        One of {'ngspice-shared', 'ngspice-subprocess', 'xyce-serial', 'xyce-parallel'}
     :return: PySpice Analysis object.
     """
     circuit = circuit.clone()
@@ -60,7 +63,8 @@ def simulate_circuit(circuit: Circuit,
     #                               )
 
     simulator = circuit.simulator(temperature=temperature,
-                                  nominal_temperature=temperature
+                                  nominal_temperature=temperature,
+                                  simulator=simulator
                                   )
 
     # Create input drivers.
