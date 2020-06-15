@@ -163,6 +163,8 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     # As a temporary fix, devices are now not combined in both netlists.
     # reference.simplify()
     # extracted.simplify()
+    reference.combine_devices() # Seems to have no effect.
+    # extracted.combine_devices()
 
     cmp = db.NetlistComparer()
     compare_result = cmp.compare(extracted, reference)
