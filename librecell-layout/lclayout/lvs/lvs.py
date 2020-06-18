@@ -164,7 +164,6 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     # reference.simplify()
     # extracted.simplify()
     reference.combine_devices() # Seems to have no effect.
-    print(reference)
     # extracted.combine_devices()
 
     cmp = db.NetlistComparer()
