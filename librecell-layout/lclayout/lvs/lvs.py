@@ -140,7 +140,7 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     netlist = l2n.netlist()
     netlist.make_top_level_pins()
     netlist.purge()
-    # netlist.combine_devices()
+    netlist.combine_devices()
     netlist.purge_nets()
     # netlist.simplify()
 
@@ -164,6 +164,7 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     # reference.simplify()
     # extracted.simplify()
     reference.combine_devices() # Seems to have no effect.
+    print(reference)
     # extracted.combine_devices()
 
     cmp = db.NetlistComparer()

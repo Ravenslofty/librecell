@@ -725,6 +725,12 @@ def main():
     # LVS check
     logger.info("Running LVS check")
     reference = lvs.read_netlist_mos4_to_mos3(netlist_path)
+    # Combine parallel transistors.
+    # This is currently a 'hack' to make sure that in the extracted as well as in the reference netlist the
+    # transistors are merged.
+    reference.make_top_level_pins()
+    reference.purge()
+    reference.combine_devices()
     circuit = reference.circuit_by_name(cell_name)
 
     # Extract netlist from layout.
