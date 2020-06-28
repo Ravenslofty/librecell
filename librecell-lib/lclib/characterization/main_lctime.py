@@ -224,9 +224,8 @@ def main():
 
         logger.info("Run characterization")
 
-        time_resolution = 50 @ u_ps
-        time_resolution_seconds = float(time_resolution)
-        logger.info("Time resolution = {}".format(time_resolution))
+        time_resolution_seconds = 50e-12
+        logger.info("Time resolution = {}s".format(time_resolution_seconds))
 
         # Measure input pin capacitances.
         logger.debug("Measuring input pin capacitances.")
@@ -276,7 +275,7 @@ def main():
                     spice_netlist_file=netlist_file_table[cell_name],
                     spice_include_files=spice_includes,
 
-                    time_resolution=time_resolution,
+                    time_resolution=time_resolution_seconds,
                     temperature=temperature
                 )
 

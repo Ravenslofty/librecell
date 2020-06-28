@@ -42,7 +42,6 @@ def characterize_input_capacitances(cell_name: str,
                                     supply_voltage: float,
                                     trip_points: TripPoints,
                                     timing_corner: CalcMode,
-
                                     spice_netlist_file: str,
                                     spice_include_files: List[str] = None,
                                     time_resolution: float=1e-12,
@@ -113,8 +112,6 @@ def characterize_input_capacitances(cell_name: str,
 
             # Get initial voltage of active pin.
             initial_voltage = 0 if input_rising else vdd
-            # Get the target voltage of the active pin.
-            target_voltage = vdd - initial_voltage
 
             # Get the breakpoint condition.
             if input_rising:
@@ -164,11 +161,12 @@ exit
 .end
 """
 
-            print(sim_netlist)
+            logger.debug(sim_netlist)
             # Dump simulation script to the file.
             logger.info(f"Write simulation netlist: {sim_file}")
             open(sim_file, "w").write(sim_netlist)
 
+            logger.info("Run simulation.")
             run_simulation(sim_file)
 
             logger.debug("Load simulation output.")
@@ -176,8 +174,9 @@ exit
             time = sim_data[:, 0]
             input_voltage = sim_data[:, 1]
 
-            plt.plot(time, input_voltage)
-            plt.show()
+            # plt.title(f"Measure input capacitance of pin {active_pin}.")
+            # plt.plot(time, input_voltage, active_pin)
+            # plt.show()
 
             # Calculate average derivative of voltage by finding the slope of the line
             # through the crossing point of the voltage with the two thresholds.
