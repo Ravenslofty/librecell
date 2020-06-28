@@ -72,44 +72,83 @@ import matplotlib.pyplot as plt
 #     # plt.show()
 
 
-def test_simulate_circuit_lowlevel_control():
-    """
-    Use `NgSpiceShared` to get finer grained control over the simulation.
-    Especially needed for breakpoints.
-    """
-    circuit = Circuit(title='test2')
+# def test_simulate_circuit_lowlevel_control():
+#     """
+#     Use `NgSpiceShared` to get finer grained control over the simulation.
+#     Especially needed for breakpoints.
+#     """
+#     circuit = Circuit(title='test2')
+#
+#     circuit.R('1', 'input', 'a', 1 @ u_kOhm)
+#     circuit.C('1', circuit.gnd, 'a', 1000 @ u_uF)
+#
+#     # piece_wise_linear_voltage_source(circuit, 'src', 'input', circuit.gnd,
+#     #                                  PieceWiseLinear([0, 1, 2, 10], [0, 1, 1, 0]))
+#     circuit.V('src', 'input', circuit.gnd, 0)
+#
+#     ngs = NgSpiceShared.new_instance(send_data=False)
+#
+#     ngs.destroy()
+#     ngs.remove_circuit()
+#
+#     netlist = "{}\n.end".format(str(circuit))
+#     print(netlist)
+#     ngs.load_circuit(netlist)
+#     # Change capacitance.
+#     # ngs.alter_device('C1', C="1000uF")
+#     # Change signal of piece wise linar voltage source..
+#     wave = PieceWiseLinear([0, 1, 10], [0, 1, 1])
+#     pwl_string = ' '.join((
+#         '%es %eV' % (float(time), float(voltage))
+#         for time, voltage in zip(wave.x, wave.y)
+#     ))
+#     ngs.alter_device('Vsrc', PWL="({})".format(pwl_string))
+#
+#     # Set temperature.
+#     ngs.option(temp=25)
+#     ngs.option(nomtemp=25)
+#     # Set breakpoint.
+#     ngs.stop('v(a) > 0.9')
+#     # Run simulation.
+#     ngs.exec_command("tran 100ms 60s")
+#     ngs.run(background=False)
+#
+#     # Retreive signals.
+#     plot_name = ngs.last_plot
+#     print(plot_name)
+#     if plot_name == 'const':
+#         raise Exception("Simulation failed.")
+#     plot = ngs.plot(None, plot_name)
+#     analysis = plot.to_analysis()
+#
+#     print(np.array(analysis['a']))
+#     plt.plot(analysis.time, analysis['input'], 'x-')
+#     plt.plot(analysis.time, np.array(analysis['a']), 'x-')
+#     plt.show()
 
-    circuit.R('1', 'input', 'a', 1 @ u_kOhm)
-    circuit.C('1', circuit.gnd, 'a', 1000 @ u_uF)
 
-    # piece_wise_linear_voltage_source(circuit, 'src', 'input', circuit.gnd,
-    #                                  PieceWiseLinear([0, 1, 2, 10], [0, 1, 1, 0]))
-    circuit.V('src', 'input', circuit.gnd, 0)
+def test3():
 
+    netlist = r""".title Input capacitance measurement for pin "A"
+.include /home/kramert/unison/local/blackbird/git/librecell-examples/librecell_invx1_example/gpdk45nm.m
+.include /home/kramert/unison/local/blackbird/git/librecell-examples/librecell_invx1_example/INVX1.pex.netlist
+Xcircuit_unter_test A GND VDD Y INVX1
+Vpower_vdd VDD GND 1.1V
+Isrc_A GND A 10000nA
+
+.end
+
+"""
     ngs = NgSpiceShared.new_instance(send_data=False)
 
-
     ngs.destroy()
+    ngs.remove_circuit()
 
-    print(str(circuit))
-    ngs.load_circuit(str(circuit) + "\n .end")
-    # Change capacitance.
-    # ngs.alter_device('C1', C="1000uF")
-    # Change signal of piece wise linar voltage source..
-    wave = PieceWiseLinear([0, 1, 10], [0, 1, 1])
-    pwl_string = ' '.join((
-        '%es %eV' % (float(time), float(voltage))
-        for time, voltage in zip(wave.x, wave.y)
-    ))
-    ngs.alter_device('Vsrc', PWL="({})".format(pwl_string))
+    print(netlist)
+    ngs.load_circuit(netlist)
 
-    # Set temperature.
-    ngs.option(temp=25)
-    ngs.option(nomtemp=25)
-    # Set breakpoint.
-    ngs.stop('v(a) > 0.9')
     # Run simulation.
-    ngs.exec_command("tran 1ms 60s")
+    ngs.exec_command("tran 1ns 100ns")
     ngs.run(background=False)
 
     # Retreive signals.
@@ -120,7 +159,6 @@ def test_simulate_circuit_lowlevel_control():
     plot = ngs.plot(None, plot_name)
     analysis = plot.to_analysis()
 
-    print(np.array(analysis['a']))
-    plt.plot(analysis['input'])
-    plt.plot(np.array(analysis['a']))
+    plt.plot(analysis.time, analysis['y'], 'x-')
+    plt.plot(analysis.time, np.array(analysis['a']), 'x-')
     plt.show()

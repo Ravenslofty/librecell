@@ -18,6 +18,7 @@
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 ##
 from PySpice.Probe.Plot import plot
+from PySpice.Probe.WaveForm import TransientAnalysis
 from PySpice.Spice.Netlist import Circuit
 from PySpice.Spice.NgSpice.Shared import NgSpiceShared
 from PySpice.Spice.Parser import SpiceParser
@@ -94,6 +95,69 @@ def simulate_circuit(circuit: Circuit,
     logger.info("Transient analysis done.")
     return analysis
 
+
+# def simulate_circuit_ngshared_experiment(circuit: Circuit,
+#                      input_voltages: Dict[Any, Union[float, PieceWiseLinear]],
+#                      step_time: Second,
+#                      end_time: Second,
+#                      temperature: float = 25,
+#                      initial_voltages: Optional[Dict[str, Volt]] = None) -> TransientAnalysis:
+#
+#     # Make an independent copy.
+#     circuit = circuit.clone()
+#
+#     # Create input drivers.
+#     # This will be either constant voltages for static input signals or piece-wise linear sources for dynamic inputs.
+#     logger.debug("Create input drivers.")
+#     for name, voltage in input_voltages.items():
+#         if isinstance(voltage, PieceWiseLinear):
+#             piece_wise_linear_voltage_source(circuit, 'in_{}'.format(name), name, circuit.gnd,
+#                                              voltage
+#                                              )
+#             # simulator.initial_condition(**{name: voltage(0) @ u_V})
+#         else:
+#             # simulator.initial_condition(**{name: voltage @ u_V})
+#             circuit.V('in_{}'.format(name), name, circuit.gnd, voltage @ u_V)
+#
+#
+#     # Get wrapper to shared ngspice library.
+#     ngs = NgSpiceShared.new_instance(send_data=False)
+#
+#     # Reset the simulator.
+#     # TODO: Is this done right?
+#     ngs.destroy()
+#     ngs.remove_circuit()
+#
+#     # Dump the circuit to a SPICE netlist.
+#     netlist = "{}\n.end\n".format(str(circuit))
+#     logger.info("netlist = " + netlist)
+#     print(netlist)
+#
+#     # Feed the netlist to the simulator.
+#     ngs.load_circuit(netlist)
+#
+#     # Set temperature.
+#     ngs.option(temp=temperature)
+#     ngs.option(nomtemp=temperature)
+#
+#     # Set breakpoint.
+#     # ngs.stop('v(a) > 0.9')
+#
+#     # Run simulation.
+#     cmd = f"tran {step_time} {end_time}"
+#     logger.info("Run transient simulation: " + cmd)
+#     ngs.exec_command(cmd)
+#     ngs.run(background=False)
+#
+#     # Retreive signals.
+#     plot_name = ngs.last_plot
+#     logger.debug(f"ngspice plot name: {plot_name}")
+#     if plot_name == 'const':
+#         raise Exception("Simulation failed.")
+#     plot = ngs.plot(None, plot_name)
+#     analysis = plot.to_analysis()
+#
+#     return analysis
 
 def piece_wise_linear_voltage_source(circuit: Circuit, name: str, plus, minus, wave: PieceWiseLinear,
                                      repeat=None, time_delay=None):
