@@ -17,7 +17,8 @@
 ## You should have received a copy of the GNU General Public License
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 ##
-from typing import List, Dict, Callable
+import os
+from typing import List, Dict, Callable, Optional
 import tempfile
 from itertools import product
 import matplotlib.pyplot as plt
@@ -45,6 +46,7 @@ def characterize_comb_cell(cell_name: str,
                            spice_include_files: List[str] = None,
                            time_resolution=1e-12,
                            temperature=27,
+                           workingdir: Optional[str] = None
                            ) -> Dict[str, np.ndarray]:
     """
     Calculate the NDLM timing table of a cell for a given timing arc.
@@ -67,6 +69,10 @@ def characterize_comb_cell(cell_name: str,
     :return: Returns the NDLM timing tables wrapped in a dict:
     {'cell_rise': 2d-np.ndarray, 'cell_fall': 2d-np.ndarray, ... }
     """
+
+    if workingdir is None:
+        workingdir = tempfile.mkdtemp("lctime-")
+
     # Find ports of the SPICE netlist.
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
     logger.info("Subcircuit ports: {}".format(", ".join(ports)))
@@ -151,18 +157,22 @@ def characterize_comb_cell(cell_name: str,
                 logger.debug("Simulation skipped for conditional arc (output does not toggle): {}".format(bool_inputs))
                 continue
 
-            # Simulation script file path.
-            sim_file = tempfile.mktemp(prefix="lctime_sim_script")
-
-            # Output file for simulation results.
-            sim_output_file = tempfile.mktemp(prefix="lctime_sim_output")
-            logger.info(f"Simulation output file: {sim_output_file}")
-
             # Get voltages at static inputs.
             input_voltages = {net: supply_voltage * value for net, value in zip(static_input_nets, static_input)}
             logger.debug("Static input voltages: {}".format(input_voltages))
 
             for input_rising in [True, False]:
+
+                # Simulation script file path.
+                file_name = f"lctime_combinational_" \
+                            f"slew={input_transition_time}_" \
+                            f"load={output_cap}" \
+                            f"{''.join((f'{net}={v}' for net, v in input_voltages.items()))}_" \
+                            f"{'rising' if input_rising else 'falling'}.sp"
+                sim_file = os.path.join(workingdir, f"{file_name}.sp")
+
+                # Output file for simulation results.
+                sim_output_file = os.path.join(workingdir, f"{file_name}_output.txt")
 
                 bool_inputs[related_pin] = input_rising
                 expected_output = output_function(**bool_inputs)

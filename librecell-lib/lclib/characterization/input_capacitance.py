@@ -17,8 +17,8 @@
 ## You should have received a copy of the GNU General Public License
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 ##
-from typing import List
-from PySpice.Spice.Netlist import Circuit
+from typing import List, Optional
+import os
 
 from itertools import product
 
@@ -46,7 +46,12 @@ def characterize_input_capacitances(cell_name: str,
                                     spice_include_files: List[str] = None,
                                     time_resolution: float=1e-12,
                                     temperature=27,
+                                    workingdir: Optional[str] = None
                                     ):
+
+    if workingdir is None:
+        workingdir = tempfile.mkdtemp("lctime-")
+
     logger.debug("characterize_input_capacitances()")
     # Find ports of the SPICE netlist.
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
@@ -97,15 +102,20 @@ def characterize_input_capacitances(cell_name: str,
     capacitances_falling = []
     for static_input in static_inputs:
         for input_rising in [True, False]:
-            # Simulation script file path.
-            sim_file = tempfile.mktemp(prefix="lctime_sim_script")
-
-            # Output file for simulation results.
-            sim_output_file = tempfile.mktemp(prefix="lctime_sim_output")
 
             # Get voltages at static inputs.
             input_voltages = {net: supply_voltage * value for net, value in zip(static_input_nets, static_input)}
             logger.debug("Static input voltages: {}".format(input_voltages))
+
+            # Simulation script file path.
+            file_name = f"lctime_input_capacitance_" \
+                        f"{''.join((f'{net}={v}' for net, v in input_voltages.items()))}_" \
+                        f"{'rising' if input_rising else 'falling'}.sp"
+            sim_file = os.path.join(workingdir, f"{file_name}.sp")
+
+            # Output file for simulation results.
+            sim_output_file = os.path.join(workingdir, f"{file_name}_output.txt")
+
 
             # Switch polarity of current for falling edges.
             _input_current = input_current if input_rising else -input_current

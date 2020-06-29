@@ -17,6 +17,10 @@
 ## You should have received a copy of the GNU General Public License
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 ##
+
+import argparse
+import tempfile
+
 from liberty.parser import parse_liberty
 from liberty.types import *
 
@@ -26,10 +30,8 @@ from ..liberty.util import get_pin_information
 from .util import *
 from .timing_combinatorial import characterize_comb_cell
 from .input_capacitance import characterize_input_capacitances
-import argparse
 
 from copy import deepcopy
-from PySpice.Unit import *
 from PySpice.Spice.Parser import SpiceParser
 import logging
 
@@ -72,6 +74,9 @@ def main():
 
     parser.add_argument('-o', '--output', required=True, metavar='LIBERTY_OUT', type=str, help='Output liberty file.')
 
+    parser.add_argument('--workingdir', required=False, metavar='WORKDIR', type=str,
+                        help="Directory for ngspice simulation scripts and raw results.")
+
     parser.add_argument('--debug', action='store_true', help='Enable debug mode.')
 
     # Parse arguments
@@ -87,6 +92,10 @@ def main():
         log_format = '%(module)16s %(funcName)16s %(levelname)8s: %(message)s'
 
     logging.basicConfig(format=log_format, level=log_level)
+
+    workingdir = args.workingdir
+    if workingdir is None:
+        workingdir = tempfile.mkdtemp(prefix="lctime-")
 
     # Get list of cell names to be characterized.
     cell_names = [n for names in args.cell for n in names]  # Flatten the nested list.
@@ -245,7 +254,9 @@ def main():
                 spice_include_files=spice_includes,
 
                 time_resolution=time_resolution_seconds,
-                temperature=temperature
+                temperature=temperature,
+
+                workingdir=workingdir
             )
 
             input_pin_group['rise_capacitance'] = result['rise_capacitance'] * capacitance_unit_scale_factor
@@ -276,7 +287,9 @@ def main():
                     spice_include_files=spice_includes,
 
                     time_resolution=time_resolution_seconds,
-                    temperature=temperature
+                    temperature=temperature,
+
+                    workingdir=workingdir
                 )
 
                 # TODO: get correct index/variable mapping from liberty file.
