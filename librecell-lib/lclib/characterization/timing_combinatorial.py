@@ -113,7 +113,7 @@ def characterize_comb_cell(cell_name: str,
     include_statements = "\n".join((f".include {i}" for i in spice_include_files))
 
     # Get all input nets that are not toggled during a simulation run.
-    logger.info("Get all input nets that are not toggled during a simulation run.")
+    logger.debug("Get all input nets that are not toggled during a simulation run.")
     static_input_nets = [i for i in input_pins if i != related_pin]
     # Get a list of all input combinations that will be used for measuring conditional timing arcs.
     num_inputs = len(static_input_nets)
@@ -256,10 +256,9 @@ exit
 
                 logger.debug(sim_netlist)
                 # Dump simulation script to the file.
-                logger.info(f"Write simulation netlist: {sim_file}")
+                logger.debug(f"Write simulation netlist: {sim_file}")
                 open(sim_file, "w").write(sim_netlist)
-
-                logger.info("Run simulation.")
+                logger.debug("Run simulation.")
                 run_simulation(sim_file)
 
                 logger.debug("Load simulation output.")
