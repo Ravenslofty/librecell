@@ -42,5 +42,6 @@ setup(name='librecell-lib',
           'pyspice',  # GPLv3
           'scipy',  # BSD
           'liberty-parser',  # GPLv3
+          'joblib'
       ],
       zip_safe=False)

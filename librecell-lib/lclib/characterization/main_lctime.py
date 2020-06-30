@@ -18,8 +18,11 @@
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 ##
 
+import os
 import argparse
 import tempfile
+
+import joblib
 
 from liberty.parser import parse_liberty
 from liberty.types import *
@@ -204,7 +207,10 @@ def main():
         logger.warning("No transistor model supplied. Use --include or -I.")
 
     # Characterize all cells in the list.
-    for cell_name in cell_names:
+    def characterize_cell(cell_name: str) -> Group:
+        cell_workingdir = os.path.join(workingdir, cell_name)
+        os.mkdir(cell_workingdir)
+
         netlist_file = netlist_file_table[cell_name]
         cell_group = select_cell(library, cell_name)
         assert cell_group.args[0] == cell_name
@@ -229,7 +235,6 @@ def main():
         # Strip away timing groups.
         for pin_group in new_cell_group.get_groups('pin'):
             pin_group.groups = [g for g in pin_group.groups if g.group_name != 'timing']
-        new_library.groups.append(new_cell_group)
 
         logger.info("Run characterization")
 
@@ -256,7 +261,7 @@ def main():
                 time_resolution=time_resolution_seconds,
                 temperature=temperature,
 
-                workingdir=workingdir
+                workingdir=cell_workingdir
             )
 
             input_pin_group['rise_capacitance'] = result['rise_capacitance'] * capacitance_unit_scale_factor
@@ -289,7 +294,7 @@ def main():
                     time_resolution=time_resolution_seconds,
                     temperature=temperature,
 
-                    workingdir=workingdir
+                    workingdir=cell_workingdir
                 )
 
                 # TODO: get correct index/variable mapping from liberty file.
@@ -322,6 +327,16 @@ def main():
 
                 # Attach timing group to output pin group.
                 output_pin_group.groups.append(timing_group)
+
+        assert isinstance(new_cell_group, Group)
+        return new_cell_group
+
+    # Characterize cells in parallel.
+    new_cell_groups = joblib.Parallel(n_jobs=-1, prefer='threads')\
+        (joblib.delayed(characterize_cell)(cell_name) for cell_name in cell_names)
+
+    for new_cell_group in new_cell_groups:
+        new_library.groups.append(new_cell_group)
 
     with open(args.output, 'w') as f:
         logger.info("Write liberty: {}".format(args.output))
