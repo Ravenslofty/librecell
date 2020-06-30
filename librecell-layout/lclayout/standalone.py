@@ -325,28 +325,28 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     for net, shape in [(SUPPLY_VOLTAGE_NET, vdd_rail), (GND_NET, vss_rail)]:
         net_regions[net][tech.power_layer].insert(shape)
 
-    # Pre-route vertical gate-gate connections
-    for i in range(abstract_cell.width):
-        u = abstract_cell.upper[i]
-        l = abstract_cell.lower[i]
-
-        if u is not None and l is not None:
-            if u.gate == l.gate:
-                logger.debug("Pre-route gate at x position %d", i)
-                tu = transistor_layouts[u]
-                tl = transistor_layouts[l]
-
-                a = tu.gate.bbox().center()
-                b = tl.gate.bbox().center()
-                # Create gate shape.
-                gate_path = pya.Path.new(
-                    [a, b],
-                    tech.gate_length)
-
-                shapes[l_poly].insert(gate_path)
-                net_regions[u.gate][l_poly].insert(gate_path)
-                # tu.terminals.clear()
-                # tl.terminals.clear()
+    # # Pre-route vertical gate-gate connections
+    # for i in range(abstract_cell.width):
+    #     u = abstract_cell.upper[i]
+    #     l = abstract_cell.lower[i]
+    #
+    #     if u is not None and l is not None:
+    #         if u.gate == l.gate:
+    #             logger.debug("Pre-route gate at x position %d", i)
+    #             tu = transistor_layouts[u]
+    #             tl = transistor_layouts[l]
+    #
+    #             a = tu.gate.bbox().center()
+    #             b = tl.gate.bbox().center()
+    #             # Create gate shape.
+    #             gate_path = pya.Path.new(
+    #                 [a, b],
+    #                 tech.gate_length)
+    #
+    #             shapes[l_poly].insert(gate_path)
+    #             net_regions[u.gate][l_poly].insert(gate_path)
+    #             # tu.terminals.clear()
+    #             # tl.terminals.clear()
 
     # Construct net regions of transistors.
     for transistor, l in transistor_layouts.items():
