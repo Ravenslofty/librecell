@@ -144,6 +144,18 @@ class PieceWiseLinear:
     def __call__(self, x):
         return self.interpolated()(x)
 
+    def to_spice_pwl_string(self):
+        """
+        Format the signal as it is needed for describing a PWL source in SPICE.
+        The format is like: "T1 V1 T2 V2 ..." Where T is a time in seconds, V a voltage in volts.
+        :return:
+        """
+        pwl_string = ' '.join((
+            '%es %eV' % (float(time), float(voltage))
+            for time, voltage in zip(self.x, self.y)
+        ))
+        return pwl_string
+
 
 class StepWave(PieceWiseLinear):
     def __init__(self, start_time,

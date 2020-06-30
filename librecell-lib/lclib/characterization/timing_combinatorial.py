@@ -190,11 +190,7 @@ def characterize_comb_cell(cell_name: str,
                 input_wave.y = input_wave.y * vdd
 
                 # Create SPICE format of the piece wise linear source.
-                pwl_string = ' '.join((
-                    '%es %eV' % (float(time), float(voltage))
-                    for time, voltage in zip(input_wave.x, input_wave.y)
-                ))
-                input_source_statement = f"Vdata_in {related_pin} {ground} PWL({pwl_string})"
+                input_source_statement = f"Vdata_in {related_pin} {ground} PWL({input_wave.to_spice_pwl_string()})"
 
                 # Get initial voltage of active pin.
                 initial_voltage = 0 if input_rising else vdd
