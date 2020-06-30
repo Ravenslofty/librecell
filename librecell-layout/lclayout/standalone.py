@@ -354,8 +354,8 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         l_diffusion = l_ndiffusion if transistor.channel_type == ChannelType.NMOS else l_pdiffusion
         net_shapes = [
             # (l_poly, a.gate, l.gate),
-            (l_diffusion, transistor.left, l.source_box),
-            (l_diffusion, transistor.right, l.drain_box)
+            (l_diffusion, transistor.source_net, l.source_box),
+            (l_diffusion, transistor.drain_net, l.drain_box)
         ]
 
         for layer, net, shape in net_shapes:

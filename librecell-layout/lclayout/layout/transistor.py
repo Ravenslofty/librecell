@@ -211,7 +211,7 @@ def create_transistor_layout(t: Transistor, loc: Tuple[int, int], distance_to_ou
 
     # Create gate terminals.
     terminals = {
-        t.gate: [
+        t.gate_net: [
             (l_poly, (center_x, gate_top)),
             (l_poly, (center_x, gate_bottom))
         ]
