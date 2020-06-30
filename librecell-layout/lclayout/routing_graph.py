@@ -276,7 +276,7 @@ def embed_transistor_terminal_nodes(G: nx.Graph,
                 layer, (x, y) = t
 
                 # Insert terminal into G.
-                next_x = grid_round(x, tech.grid_offset_x, tech.routing_grid_pitch_x)
+                next_x = grid_round(x, tech.routing_grid_pitch_x, tech.grid_offset_x)
 
                 assert next_x == x, Exception("Terminal node not x-aligned.")
 
