@@ -209,7 +209,8 @@ def main():
     # Characterize all cells in the list.
     def characterize_cell(cell_name: str) -> Group:
         cell_workingdir = os.path.join(workingdir, cell_name)
-        os.mkdir(cell_workingdir)
+        if not os.path.exists(cell_workingdir):
+            os.mkdir(cell_workingdir)
 
         netlist_file = netlist_file_table[cell_name]
         cell_group = select_cell(library, cell_name)
@@ -332,7 +333,7 @@ def main():
         return new_cell_group
 
     # Characterize cells in parallel.
-    new_cell_groups = joblib.Parallel(n_jobs=-1, prefer='threads')\
+    new_cell_groups = joblib.Parallel(n_jobs=-1, prefer='threads') \
         (joblib.delayed(characterize_cell)(cell_name) for cell_name in cell_names)
 
     for new_cell_group in new_cell_groups:
