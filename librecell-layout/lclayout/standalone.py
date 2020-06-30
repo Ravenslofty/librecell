@@ -744,7 +744,7 @@ def main():
 
     if not lvs_success:
         logger.error("LVS check failed!")
-        if not args.ignore_lvs:
+        if not args.ignore_lvs and not args.debug_routing_graph:
             exit(1)
 
     # Output using defined output writers.
