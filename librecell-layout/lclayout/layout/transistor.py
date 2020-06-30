@@ -24,7 +24,7 @@ from ..place.place import Transistor, ChannelType
 from .grid_helpers import *
 from .layers import *
 from .. import tech_util
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import sys
 
 # klayout.db should not be imported if script is run from KLayout GUI.
@@ -42,7 +42,7 @@ class TransistorLayout:
                  active: pya.Box,
                  source_box: pya.Box,
                  drain_box: pya.Box,
-                 terminals,
+                 terminals: Dict[str, List[Tuple[str, Tuple[int, int]]]],
                  nwell: Optional[pya.Box] = None,
                  pwell: Optional[pya.Box] = None):
         """
@@ -78,29 +78,31 @@ class TransistorLayout:
         self.drain_box = drain_box
 
         # Terminal nodes for gate.
-        self.terminals = terminals
+        self._terminals = terminals
 
+    def terminal_nodes(self) -> Dict[str, List[Tuple[str, Tuple[int, int]]]]:
+        return self._terminals
 
-def draw_transistor(t: TransistorLayout, shapes: Dict[Any, pya.Region]):
-    """ Draw a TransistorLayout.
+    def terminal_shapes(self) -> Dict[str, db.Shape]:
+        pass
 
-    :param t: TransistorLayout
-    
-    :param shapes: Dict[layer name, pya.Shapes]
-      A dict mapping layer names to pya.Shapes.
-    """
+    def draw(self, shapes: Dict[Any, pya.Region]) -> None:
+        """ Draw a TransistorLayout.
 
-    if t.nwell:
-        # For PMOS.
-        shapes[l_pdiffusion].insert(t.active)
-        shapes[l_nwell].insert(t.nwell)
+        :param shapes: Dict[layer name, pya.Shapes]
+          A dict mapping layer names to pya.Shapes.
+        """
+        if self.nwell:
+            # For PMOS.
+            shapes[l_pdiffusion].insert(self.active)
+            shapes[l_nwell].insert(self.nwell)
 
-    if t.pwell:
-        # For NMOS.
-        shapes[l_ndiffusion].insert(t.active)
-        shapes[l_pwell].insert(t.pwell)
+        if self.pwell:
+            # For NMOS.
+            shapes[l_ndiffusion].insert(self.active)
+            shapes[l_pwell].insert(self.pwell)
 
-    shapes[l_poly].insert(t.gate)
+        shapes[l_poly].insert(self.gate)
 
 
 def create_transistor_layout(t: Transistor, loc: Tuple[int, int], distance_to_outline: int, tech) -> TransistorLayout:

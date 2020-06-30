@@ -269,7 +269,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     logging.info('Find transistor placement')
 
     abstract_cell = placer.place(transistors_abstract)
-    print(abstract_cell)
+    logger.info(f"Cell placement:\n\n{abstract_cell}\n")
 
     # Calculate dimensions of cell.
     num_unit_cells = abstract_cell.width
@@ -285,7 +285,8 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Draw the transistors
     for l in transistor_layouts.values():
-        draw_transistor(l, shapes)
+        assert isinstance(l, TransistorLayout)
+        l.draw(shapes)
 
     # Create mapping from nets to {layer: region}
     net_regions = defaultdict(lambda: defaultdict(pya.Region))

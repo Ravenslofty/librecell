@@ -270,7 +270,7 @@ def embed_transistor_terminal_nodes(G: nx.Graph,
     """
     # Connect terminal nodes of transistor gates in G.
     for t_layout in transistor_layouts.values():
-        terminals = t_layout.terminals
+        terminals = t_layout.terminal_nodes()
         for net, ts in terminals.items():
             for t in ts:
                 layer, (x, y) = t
