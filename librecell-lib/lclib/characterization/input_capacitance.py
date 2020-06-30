@@ -44,11 +44,10 @@ def characterize_input_capacitances(cell_name: str,
                                     timing_corner: CalcMode,
                                     spice_netlist_file: str,
                                     spice_include_files: List[str] = None,
-                                    time_resolution: float=1e-12,
+                                    time_resolution: float = 1e-12,
                                     temperature=27,
                                     workingdir: Optional[str] = None
                                     ):
-
     if workingdir is None:
         workingdir = tempfile.mkdtemp("lctime-")
 
@@ -110,12 +109,11 @@ def characterize_input_capacitances(cell_name: str,
             # Simulation script file path.
             file_name = f"lctime_input_capacitance_" \
                         f"{''.join((f'{net}={v}' for net, v in input_voltages.items()))}_" \
-                        f"{'rising' if input_rising else 'falling'}.sp"
+                        f"{'rising' if input_rising else 'falling'}"
             sim_file = os.path.join(workingdir, f"{file_name}.sp")
 
             # Output file for simulation results.
             sim_output_file = os.path.join(workingdir, f"{file_name}_output.txt")
-
 
             # Switch polarity of current for falling edges.
             _input_current = input_current if input_rising else -input_current
@@ -131,6 +129,14 @@ def characterize_input_capacitances(cell_name: str,
 
             static_supply_voltage_statemets = "\n".join(
                 (f"Vinput_{net} {ground} {voltage}" for net, voltage in input_voltages.items()))
+
+            # Initial node voltages.
+            initial_conditions = {
+                active_pin: initial_voltage,
+                supply: supply_voltage
+            }
+            initial_conditions.update(input_voltages)
+
 
             # Create ngspice simulation script.
             sim_netlist = f"""* librecell {__name__}
@@ -152,7 +158,7 @@ Iinput {ground} {active_pin} {_input_current}
 
 * Initial conditions.
 * Also all voltages of DC sources must be here if they are needed to compute the initial conditions.
-.ic v({active_pin})={initial_voltage} v({supply})={supply_voltage}
+.ic {" ".join((f"v({net})={v}" for net, v in initial_conditions.items()))}
 
 .control
 

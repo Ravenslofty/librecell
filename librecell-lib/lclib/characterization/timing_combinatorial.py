@@ -168,7 +168,7 @@ def characterize_comb_cell(cell_name: str,
                             f"slew={input_transition_time}_" \
                             f"load={output_cap}" \
                             f"{''.join((f'{net}={v}' for net, v in input_voltages.items()))}_" \
-                            f"{'rising' if input_rising else 'falling'}.sp"
+                            f"{'rising' if input_rising else 'falling'}"
                 sim_file = os.path.join(workingdir, f"{file_name}.sp")
 
                 # Output file for simulation results.
@@ -208,6 +208,14 @@ def characterize_comb_cell(cell_name: str,
                 static_supply_voltage_statemets = "\n".join(
                     (f"Vinput_{net} {ground} {voltage}" for net, voltage in input_voltages.items()))
 
+                # Initial node voltages.
+                initial_conditions = {
+                    related_pin: initial_voltage,
+                    supply: supply_voltage,
+                    output_pin: initial_output_voltage
+                }
+                initial_conditions.update(input_voltages)
+
                 # Create ngspice simulation script.
                 sim_netlist = f"""* librecell {__name__}
 .title Timing simulation for pin '{related_pin}', input_rising={input_rising}.
@@ -231,7 +239,7 @@ Vsupply {supply} {ground} {supply_voltage}
 
 * Initial conditions.
 * Also all voltages of DC sources must be here if they are needed to compute the initial conditions.
-.ic v({related_pin})={initial_voltage} v({supply})={supply_voltage} {" ".join((f"v({net})={v}" for net, v in input_voltages.items()))} v({output_pin})={initial_output_voltage}
+.ic {" ".join((f"v({net})={v}" for net, v in initial_conditions.items()))}
 
 .control
 
