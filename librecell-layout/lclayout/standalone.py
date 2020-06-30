@@ -724,21 +724,23 @@ def main():
 
     # LVS check
     logger.info("Running LVS check")
-    reference = lvs.read_netlist_mos4_to_mos3(netlist_path)
+    reference_netlist = lvs.read_netlist_mos4_to_mos3(netlist_path)
     # Combine parallel transistors.
     # This is currently a 'hack' to make sure that in the extracted as well as in the reference netlist the
     # transistors are merged.
-    reference.make_top_level_pins()
-    reference.purge()
-    reference.combine_devices()
-    circuit = reference.circuit_by_name(cell_name)
+
+    # Remove all unused circuits.
+    # The reference netlist must contain only the circuit of the cell to be checked.
+    # Copying a circuit into a new netlist makes `combine_devices` fail.
+    circuits_to_delete = {c for c in reference_netlist.each_circuit() if c.name != cell_name}
+    for c in circuits_to_delete:
+        reference_netlist.remove(c)
 
     # Extract netlist from layout.
-    netlist = lvs.extract_netlist(layout, cell)
+    extracted_netlist = lvs.extract_netlist(layout, cell)
 
-    sub_netlist = pya.Netlist()
-    sub_netlist.add(circuit)
-    lvs_success = lvs.compare_netlist(netlist, sub_netlist)
+    # Run LVS comparison of the two netlists.
+    lvs_success = lvs.compare_netlist(extracted_netlist, reference_netlist)
 
     logger.info("LVS result: {}".format('SUCCESS' if lvs_success else 'FAILED'))
 
