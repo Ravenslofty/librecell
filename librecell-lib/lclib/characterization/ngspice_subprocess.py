@@ -11,9 +11,14 @@ def run_simulation(sim_file: str, ngspice_executable: str = 'ngspice'):
     :param sim_file: Path to ngspice simulation file.
     """
     logger.info(f"Run simulation: {sim_file}")
-    ret = subprocess.run([ngspice_executable, sim_file])
-    # proc = subprocess.Popen([ngspice_executable, sim_file])
-    logger.debug(f"Subprocess return value: {ret}")
-    if ret.returncode != 0:
-        logger.error(f"ngspice simulation failed: {ret}")
-        raise Exception(f"ngspice simulation failed: {ret}")
+    try:
+        ret = subprocess.run([ngspice_executable, sim_file], capture_output=True)
+        # proc = subprocess.Popen([ngspice_executable, sim_file])
+        logger.debug(f"Subprocess return value: {ret}")
+        if ret.returncode != 0:
+            logger.error(f"ngspice simulation failed: {ret}")
+            raise Exception(f"ngspice simulation failed: {ret}")
+    except FileNotFoundError as e:
+        msg = f"SPICE simulator executable not found. Make sure it is in the current path: {ngspice_executable}"
+        logger.error(msg)
+        raise FileNotFoundError(msg)
