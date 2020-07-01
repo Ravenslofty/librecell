@@ -158,11 +158,16 @@ def get_clock_to_output_delay(
     # TODO
     initial_conditions = {
         data_in: input_wave(0),
-        clock_input: clk_wave(0)
+        clock_input: clk_wave(0),
+        data_out: 0 if rising_data_edge else supply_voltage
     }
 
     # TODO
-    breakpoint_statement = "* NO BREAKPOINT YET"
+    # if rising_data_edge:
+    #     breakpoint_statement = f"stop when v({data_out}) > {supply_voltage*0.99}"
+    # else:
+    #     breakpoint_statement = f"stop when v({data_out}) < {supply_voltage*0.01}"
+    breakpoint_statement = "* No breakpoint yet."
 
     # Create ngspice simulation script.
     sim_netlist = f"""* librecell {__name__}
@@ -191,7 +196,8 @@ Vsupply {supply} {ground} {supply_voltage}
 .ic {" ".join((f"v({net})={v}" for net, v in initial_conditions.items()))}
 
 .control 
-*option reltol=10e-5
+*option reltol=1e-5
+*option abstol=1e-15
 
 set filetype=ascii
 set wr_vecnames
@@ -415,7 +421,7 @@ def test_plot_flipflop_setup_behavior():
         # plt.show()
 
         min_setup_time_indep = optimize.bisect(f, 0, float(setup_guess))
-        # min_setup_time_uncond = optimize.newton(f, x0=float(setup_guess))
+        # min_setup_time_indep = optimize.newton(f, x0=float(setup_guess))
 
         return min_setup_time_indep, f(min_setup_time_indep) + max_delay
 
@@ -445,15 +451,15 @@ def test_plot_flipflop_setup_behavior():
                             rising_data_edge=rising_data_edge)
             return delay - max_delay
 
-        print(hold_guess)
-        x = np.linspace(-2*hold_guess, 0*hold_guess, 200)
-        y = np.array([f(st) for st in x])
-        plt.plot(x, y)
-        plt.show()
-        exit(1)
+        # print(hold_guess)
+        # x = np.linspace(-1*hold_guess, 1*hold_guess, 100)
+        # y = np.array([f(st) for st in x])
+        # plt.plot(x, y, 'x-')
+        # plt.show()
+        # exit(1)
 
         min_hold_time_indep = optimize.bisect(f, -float(setup_guess), float(hold_guess))
-        # min_setup_time_uncond = optimize.newton(f, x0=float(setup_guess))
+        # min_hold_time_indep = optimize.newton(f, x0=float(setup_guess))
 
         return min_hold_time_indep, f(min_hold_time_indep) + max_delay
 
@@ -469,10 +475,10 @@ def test_plot_flipflop_setup_behavior():
     min_hold_time_uncond_fall, min_hold_delay_fall = find_min_hold(rising_data_edge=False,
                                                                    setup_time=setup_time_guess)
 
-    # Find dependent setup time.
-    dependent_setup_time_rise, dependent_setup_delay_rise = \
-        find_min_setup(rising_data_edge=True,
-                       hold_time=min_hold_time_uncond_rise)
+    # # Find dependent setup time.
+    # dependent_setup_time_rise, dependent_setup_delay_rise = \
+    #     find_min_setup(rising_data_edge=True,
+    #                    hold_time=min_hold_time_uncond_rise)
 
     # dependent_setup_time_fall, dependent_setup_delay_fall = \
     #     find_min_setup(rising_data_edge=False,
