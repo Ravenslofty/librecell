@@ -151,7 +151,7 @@ class PieceWiseLinear:
         :return:
         """
         pwl_string = ' '.join((
-            '%es %eV' % (float(time), float(voltage))
+            f'{time:0.20e}s {voltage:0.20e}V'
             for time, voltage in zip(self.x, self.y)
         ))
         return pwl_string

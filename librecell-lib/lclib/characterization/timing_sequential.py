@@ -141,8 +141,8 @@ def get_clock_to_output_delay(
     input_wave *= supply_voltage
     clk_wave *= supply_voltage
 
-    input_source_statement = f"Vdata_in {data_in} {ground} PWL({input_wave.to_spice_pwl_string()})"
-    clk_source_statement = f"Vdata_in {clock_input} {ground} PWL({clk_wave.to_spice_pwl_string()})"
+    input_source_statement = f"Vdata_in {data_in} {ground} PWL({input_wave.to_spice_pwl_string()}) DC=0"
+    clk_source_statement = f"Vclk {clock_input} {ground} PWL({clk_wave.to_spice_pwl_string()}) DC=0"
 
     input_voltages = {
         clock_input: clk_wave,
@@ -190,7 +190,8 @@ Vsupply {supply} {ground} {supply_voltage}
 * Also all voltages of DC sources must be here if they are needed to compute the initial conditions.
 .ic {" ".join((f"v({net})={v}" for net, v in initial_conditions.items()))}
 
-.control
+.control 
+*option reltol=10e-5
 
 set filetype=ascii
 set wr_vecnames
@@ -206,9 +207,10 @@ exit
 
 .end
 """
-    logger.debug(sim_netlist)
+    # logger.debug(sim_netlist)
+
     # Dump simulation script to the file.
-    logger.info(f"Write simulation netlist: {sim_file}")
+    print(f"Write simulation netlist: {sim_file}")
     open(sim_file, "w").write(sim_netlist)
 
     logger.info("Run simulation.")
@@ -224,11 +226,11 @@ exit
     clock_voltage = sim_data[:, 5]
     output_voltage = sim_data[:, 7]
 
-    plt.plot(time, clock_voltage, label='clk')
-    plt.plot(time, input_voltage, label='din')
-    plt.plot(time, output_voltage, label='dout')
-    plt.legend()
-    plt.show()
+    # plt.plot(time, clock_voltage, label='clk')
+    # plt.plot(time, input_voltage, label='din')
+    # plt.plot(time, output_voltage, label='dout')
+    # plt.legend()
+    # plt.show()
 
     # Start of interesting interval
     start = int((t_clock_edge - period / 2) / period * samples_per_period)
@@ -361,7 +363,7 @@ def test_plot_flipflop_setup_behavior():
 
             prev_delay = delay
 
-        logger.debug(f"Minimum clock to data delay: {delay}. (Iterations = {next(ctr)})")
+        logger.info(f"Minimum clock to data delay: {delay}. (Iterations = {next(ctr)})")
 
         # Return the minimum delay and setup/hold times that lead to it.
         # setup/hold times are devided by 2 because the previous values actually lead to a delay that is close enough.
@@ -369,6 +371,9 @@ def test_plot_flipflop_setup_behavior():
 
     min_rise_delay, (setup_guess_rise, hold_guess_rise) = find_min_data_delay(rising_data_edge=True)
     min_fall_delay, (setup_guess_fall, hold_guess_fall) = find_min_data_delay(rising_data_edge=False)
+
+    print(f"min_rise_delay = {min_rise_delay}")
+    print(f"min_fall_delay = {min_fall_delay}")
 
     # Define how much delay increase is tolerated.
     # Larger values lead to smaller setup/hold window but to increased delay.
@@ -392,7 +397,8 @@ def test_plot_flipflop_setup_behavior():
 
         def f(setup_time: float) -> float:
             """
-            Function to find zero.
+            Optimization function.
+            Find `setup_time` such that the delay equals the maximum allowed delay.
             :param setup_time:
             :return:
             """
@@ -402,8 +408,9 @@ def test_plot_flipflop_setup_behavior():
                             rising_data_edge=rising_data_edge)
             return delay - max_delay
 
-        # x = np.linspace(0, float(setup_guess), 100)
+        # x = np.linspace(0, float(setup_guess), 200)
         # y = np.array([f(st) for st in x])
+        # plt.xlabel('setup time')
         # plt.plot(x, y)
         # plt.show()
 
@@ -438,10 +445,12 @@ def test_plot_flipflop_setup_behavior():
                             rising_data_edge=rising_data_edge)
             return delay - max_delay
 
-        # x = np.linspace(-float(1.2*hold_guess), float(2*hold_guess), 80)
-        # y = np.array([f(st) for st in x])
-        # plt.plot(x, y)
-        # plt.show()
+        print(hold_guess)
+        x = np.linspace(-2*hold_guess, 0*hold_guess, 200)
+        y = np.array([f(st) for st in x])
+        plt.plot(x, y)
+        plt.show()
+        exit(1)
 
         min_hold_time_indep = optimize.bisect(f, -float(setup_guess), float(hold_guess))
         # min_setup_time_uncond = optimize.newton(f, x0=float(setup_guess))
