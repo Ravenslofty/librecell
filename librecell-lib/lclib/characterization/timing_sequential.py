@@ -157,17 +157,17 @@ def get_clock_to_output_delay(
 
     # TODO
     initial_conditions = {
+        supply: supply_voltage,
         data_in: input_wave(0),
         clock_input: clk_wave(0),
         data_out: 0 if rising_data_edge else supply_voltage
     }
 
     # TODO
-    # if rising_data_edge:
-    #     breakpoint_statement = f"stop when v({data_out}) > {supply_voltage*0.99}"
-    # else:
-    #     breakpoint_statement = f"stop when v({data_out}) < {supply_voltage*0.01}"
-    breakpoint_statement = "* No breakpoint yet."
+    if rising_data_edge:
+        breakpoint_statement = f"stop when v({data_out}) > {supply_voltage*0.99}"
+    else:
+        breakpoint_statement = f"stop when v({data_out}) < {supply_voltage*0.01}"
 
     # Create ngspice simulation script.
     sim_netlist = f"""* librecell {__name__}
@@ -232,11 +232,11 @@ exit
     clock_voltage = sim_data[:, 5]
     output_voltage = sim_data[:, 7]
 
-    # plt.plot(time, clock_voltage, label='clk')
-    # plt.plot(time, input_voltage, label='din')
-    # plt.plot(time, output_voltage, label='dout')
-    # plt.legend()
-    # plt.show()
+    plt.plot(time, clock_voltage, label='clk')
+    plt.plot(time, input_voltage, label='din')
+    plt.plot(time, output_voltage, label='dout')
+    plt.legend()
+    plt.show()
 
     # Start of interesting interval
     start = int((t_clock_edge - period / 2) / period * samples_per_period)
@@ -293,12 +293,13 @@ def test_plot_flipflop_setup_behavior():
     ground = 'GND'
     supply = 'VDD'
 
-    input_rise_time = 60e-12
-    input_fall_time = 60e-12
+    input_rise_time = 0.060e-9
+    input_fall_time = 0.060e-9
 
     temperature = 27
 
-    output_load_capacitance = 0.0e-12
+    output_load_capacitance = 0.06e-12
+
     time_step = 10e-12
 
     # TODO: find appropriate simulation_duration_hint
@@ -320,6 +321,7 @@ def test_plot_flipflop_setup_behavior():
             rising_clock_edge: bool,
             rising_data_edge: bool
     ):
+        print(f"evaluate delay_f({setup_time}, {hold_time}, {rising_clock_edge}, {rising_data_edge})")
         return get_clock_to_output_delay(
 
             cell_name=subckt_name,
