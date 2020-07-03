@@ -17,6 +17,7 @@
 ## You should have received a copy of the GNU General Public License
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 ##
+import os
 import tempfile
 import matplotlib.pyplot as plt
 
@@ -225,6 +226,9 @@ exit
     logger.debug("Load simulation output.")
     sim_data = np.loadtxt(sim_output_file, skiprows=1)
 
+    # os.remove(sim_file)
+    # os.remove(sim_output_file)
+
     # Retreive data.
     time = sim_data[:, 0]
     supply_current = sim_data[:, 1]
@@ -232,11 +236,11 @@ exit
     clock_voltage = sim_data[:, 5]
     output_voltage = sim_data[:, 7]
 
-    plt.plot(time, clock_voltage, label='clk')
-    plt.plot(time, input_voltage, label='din')
-    plt.plot(time, output_voltage, label='dout')
-    plt.legend()
-    plt.show()
+    # plt.plot(time, clock_voltage, label='clk')
+    # plt.plot(time, input_voltage, label='din')
+    # plt.plot(time, output_voltage, label='dout')
+    # plt.legend()
+    # plt.show()
 
     # Start of interesting interval
     start = int((t_clock_edge - period / 2) / period * samples_per_period)
@@ -315,6 +319,9 @@ def test_plot_flipflop_setup_behavior():
 
     pos_edge_flipflop = True
 
+    # Cache for faster re-evaluation of `delay_f`
+    cache = dict()
+
     def delay_f(
             setup_time: float,
             hold_time: float,
@@ -322,26 +329,34 @@ def test_plot_flipflop_setup_behavior():
             rising_data_edge: bool
     ):
         print(f"evaluate delay_f({setup_time}, {hold_time}, {rising_clock_edge}, {rising_data_edge})")
-        return get_clock_to_output_delay(
 
-            cell_name=subckt_name,
-            cell_ports=ports,
-            clock_input=clock,
-            data_in=data_in,
-            data_out=data_out,
-            setup_time=setup_time,
-            hold_time=hold_time,
-            rising_clock_edge=rising_clock_edge,
-            rising_data_edge=rising_data_edge,
-            supply_voltage=vdd,
-            input_rise_time=input_rise_time,
-            input_fall_time=input_fall_time,
-            trip_points=trip_points,
-            temperature=temperature,
-            output_load_capacitance=output_load_capacitance,
-            time_step=time_step,
-            simulation_duration_hint=simulation_duration_hint,
-            spice_include_files=includes)
+        cache_tag = (setup_time, hold_time, rising_clock_edge, rising_data_edge)
+        result = cache.get(cache_tag)
+        if result is None:
+            result = get_clock_to_output_delay(
+
+                cell_name=subckt_name,
+                cell_ports=ports,
+                clock_input=clock,
+                data_in=data_in,
+                data_out=data_out,
+                setup_time=setup_time,
+                hold_time=hold_time,
+                rising_clock_edge=rising_clock_edge,
+                rising_data_edge=rising_data_edge,
+                supply_voltage=vdd,
+                input_rise_time=input_rise_time,
+                input_fall_time=input_fall_time,
+                trip_points=trip_points,
+                temperature=temperature,
+                output_load_capacitance=output_load_capacitance,
+                time_step=time_step,
+                simulation_duration_hint=simulation_duration_hint,
+                spice_include_files=includes)
+            cache[cache_tag] = result
+        else:
+            print('Cache hit.')
+        return result
 
     def find_min_data_delay(rising_data_edge: bool) -> Tuple[float, Tuple[float, float]]:
         """ Find minimum clock->data delay (with large setup/hold window).
