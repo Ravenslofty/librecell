@@ -214,6 +214,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
       The name of the cell to be drawn.
     :param netlist_path: Path to SPICE transistor netlist.
     :param placer: `TransistorPlacer` object which is used for the placement. If not supplied, a default will be chosen.
+    :param router: A `GraphRouter` object that will be used for creating the connections between the transistors.
     :param debug_routing_graph: bool
       If set to True, the full routing graph is written to the layout instead of the routing paths.
     :param debug_smt_solver: Tell DRC cleaner to show which assertions are not satisfiable.
@@ -280,7 +281,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     transistors = abstract_cell.get_transistor_locations()
 
     # Create the layouts of the single transistors. Layouts are already translated to the absolute position.
-    transistor_layouts = {t: create_transistor_layout(t, (x, y), tech.transistor_offset_y, tech)
+    transistor_layouts = {t: DefaultTransistorLayout(t, (x, y), tech.transistor_offset_y, tech)
                           for t, (x, y) in transistors}
 
     # Draw the transistors
@@ -352,17 +353,15 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     # Construct net regions of transistors.
     for transistor, l in transistor_layouts.items():
         assert isinstance(t, Transistor)
-        l_diffusion = l_ndiffusion if transistor.channel_type == ChannelType.NMOS else l_pdiffusion
-        net_shapes = [
-            # (l_poly, a.gate, l.gate),
-            (l_diffusion, transistor.source_net, l.source_box),
-            (l_diffusion, transistor.drain_net, l.drain_box)
-        ]
+        assert isinstance(l, TransistorLayout)
+        terminal_shapes = l.terminal_shapes()
 
-        for layer, net, shape in net_shapes:
-            r = net_regions[net][layer]
-            r.insert(shape)
-            r.merge()
+        for net, _shapes in terminal_shapes.items():
+            for layer, shape in _shapes:
+                logger.debug(f"Terminal for net {net} on {layer} {shape}")
+                r = net_regions[net][layer]
+                r.insert(shape)
+                r.merge()
 
     # Construct two dimensional grid which defines the routing graph on a single layer.
     grid = Grid2D((tech.grid_offset_x, tech.grid_offset_y),
@@ -396,8 +395,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     # Check if each net really has a routing terminal.
     # It can happen that there is none due to spacing issues.
     error = False
-    for net_name, layer, terminals in terminals_by_net:
-        if len(terminals) == 0:
+    for net_name in net_regions.keys():
+        num_terminals = num_appearance.get(net_name)
+        if num_terminals is None or num_terminals == 0:
             logger.error("Net '{}' has no routing terminal.".format(net_name))
             error = True
 
