@@ -31,33 +31,48 @@ if 'pya' not in sys.modules:
 
 
 class TransistorLayout:
-    """ Layout representation of transistor.
-
-    Contains the shapes of the transistor plus shapes that mark possible locations of contacts.
+    """ Implementations of this class are responsible for drawing a transistor to the layout.
+    The function `draw()` must be implemented.
     """
 
     def __init__(self, abstract_transistor: Transistor, location: Tuple[int, int], distance_to_outline: int, tech):
+        """
+        Create the layout representation of a transistor based on the abstract transistor (netlist) a location within the cell
+        and design rules.
+        :param abstract_transistor: Netlist representation of the transistor.
+        :param location: Location in the cell matrix.
+        :param distance_to_outline: TODO: This should be put into the `tech`.
+        :param tech: Technology specific designrules.
+        """
         raise NotImplemented()
 
     def terminal_nodes(self) -> Dict[str, List[Tuple[str, Tuple[int, int]]]]:
         """
         Get point-like terminal nodes in the form `{net name: {(layer name, (x, y)), ...}}`.
-        """
-        pass
 
-    def terminal_shapes(self) -> Dict[str, Set[Tuple[str, db.Shape]]]:
+        This function allows to define point-like terminals at precise locations additionally to the terminals
+        defined by polygons in the layout.
+
+        This could be used for instance if a net region does not touch any grid points. Hence it is possible to insert
+        off-grid routing terminals.
         """
-        Get geometrical terminals in the form `{net name: {(layer name, shape), ...}}`.
-        """
-        pass
+        return dict()
 
     def draw(self, shapes: Dict[Any, pya.Region]) -> None:
-        """ Draw a TransistorLayout.
+        """ Draw the TransistorLayout.
+
+        Routing terminals must be labelled with the `'net'` property.
+
+        Example
+        =======
+        To insert the gate of a transistor:
+
+        `shapes[l_poly].insert(gate_shape).set_property('net', gate_net)`
 
         :param shapes: Dict[layer name, pya.Shapes]
           A dict mapping layer names to pya.Shapes.
         """
-        pass
+        raise NotImplemented()
 
 
 class DefaultTransistorLayout(TransistorLayout):
@@ -67,12 +82,13 @@ class DefaultTransistorLayout(TransistorLayout):
     """
 
     def __init__(self, abstract_transistor: Transistor, location: Tuple[int, int], distance_to_outline: int, tech):
-        """ Given an abstract transistor create its layout.
-        :param abstract_transistor:
-        :param location: Transistor location on the grid. (0,0) is the transistor on the bottom left, (0,1) its upper neighbour, (1,0) its right neighbour.
-        :param distance_to_outline: Distance of active area to upper or lower boundary of the cell. Basically determines the y-offset of the transistors.
-        :param tech: module containing technology information
-        :return:
+        """
+        Create the layout representation of a transistor based on the abstract transistor (netlist) a location within the cell
+        and design rules.
+        :param abstract_transistor: Netlist representation of the transistor.
+        :param location: Location in the cell matrix.
+        :param distance_to_outline: TODO: This should be put into the `tech`.
+        :param tech: Technology specific designrules.
         """
 
         self.abstract_transistor = abstract_transistor
@@ -202,17 +218,6 @@ class DefaultTransistorLayout(TransistorLayout):
         Get point-like terminal nodes in the form `{net name: {(layer name, (x, y)), ...}}`.
         """
         return self._terminals
-
-    def terminal_shapes(self) -> Dict[str, Set[Tuple[str, db.Shape]]]:
-        """
-        Get geometrical terminals in the form `{net name: {(layer name, shape), ...}}`.
-        """
-        l_diffusion = l_ndiffusion if self.abstract_transistor.channel_type == ChannelType.NMOS else l_pdiffusion
-        return {
-            self.abstract_transistor.source_net: {(l_diffusion, self._source_box)},
-            self.abstract_transistor.drain_net: {(l_diffusion, self._drain_box)},
-            self.abstract_transistor.gate_net: {(l_poly, self._gate_path)}
-        }
 
     def draw(self, shapes: Dict[Any, pya.Region]) -> None:
         """ Draw a TransistorLayout.
