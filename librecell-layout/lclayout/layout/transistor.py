@@ -224,6 +224,9 @@ class DefaultTransistorLayout(TransistorLayout):
         # Create well and active shape.
         shapes[self.l_well].insert(self._well_box)
         shapes[self.l_diffusion].insert(self._active_box)
+        shapes[self.l_diffusion].insert(self._source_box).set_property('net', self.abstract_transistor.source_net)
+        shapes[self.l_diffusion].insert(self._drain_box).set_property('net', self.abstract_transistor.drain_net)
 
         # Create gate shape.
-        shapes[l_poly].insert(self._gate_path)
+        inst = shapes[l_poly].insert(self._gate_path)
+        inst.set_property('net', self.abstract_transistor.gate_net)

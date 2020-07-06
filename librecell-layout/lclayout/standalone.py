@@ -238,7 +238,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     top = layout.create_cell(cell_name)
 
     # Setup layers.
-    shapes = {}
+    shapes: Dict[str, db.Shapes] = dict()
     for name, (num, purpose) in layermap.items():
         layer = layout.layer(num, purpose)
         shapes[name] = top.shapes(layer)
@@ -289,9 +289,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
         assert isinstance(l, TransistorLayout)
         l.draw(shapes)
 
-    # Create mapping from nets to {layer: region}
-    net_regions = defaultdict(lambda: defaultdict(pya.Region))
-
     # Load spacing rules in form of a graph.
     spacing_graph = tech_util.spacing_graph(tech.min_spacing)
 
@@ -300,14 +297,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                                      cell_shape=(cell_width, cell_height),
                                      nwell_pwell_spacing=spacing_graph[l_nwell][l_pwell]['min_spacing']
                                      )
-
-    # Draw power rails.
-    vdd_rail = pya.Path([pya.Point(0, tech.unit_cell_height), pya.Point(cell_width, tech.unit_cell_height)],
-                        tech.power_rail_width)
-    vss_rail = pya.Path([pya.Point(0, 0), pya.Point(cell_width, 0)], tech.power_rail_width)
-
-    shapes[tech.power_layer].insert(vdd_rail)
-    shapes[tech.power_layer].insert(vss_rail)
 
     ground_nets = {p for p in cell_pins if is_ground_net(p)}
     supply_nets = {p for p in cell_pins if is_supply_net(p)}
@@ -323,9 +312,14 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     logger.info("Supply net: {}".format(SUPPLY_VOLTAGE_NET))
     logger.info("Ground net: {}".format(GND_NET))
 
-    # Register power rails as net regions.
-    for net, shape in [(SUPPLY_VOLTAGE_NET, vdd_rail), (GND_NET, vss_rail)]:
-        net_regions[net][tech.power_layer].insert(shape)
+    # Draw power rails.
+    vdd_rail = pya.Path([pya.Point(0, tech.unit_cell_height), pya.Point(cell_width, tech.unit_cell_height)],
+                        tech.power_rail_width)
+    vss_rail = pya.Path([pya.Point(0, 0), pya.Point(cell_width, 0)], tech.power_rail_width)
+
+    # Insert power rails into layout.
+    shapes[tech.power_layer].insert(vdd_rail).set_property('net', SUPPLY_VOLTAGE_NET)
+    shapes[tech.power_layer].insert(vss_rail).set_property('net', GND_NET)
 
     # # Pre-route vertical gate-gate connections
     # for i in range(abstract_cell.width):
@@ -345,23 +339,9 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     #                 [a, b],
     #                 tech.gate_length)
     #
-    #             shapes[l_poly].insert(gate_path)
-    #             net_regions[u.gate][l_poly].insert(gate_path)
+    #             shapes[l_poly].insert(gate_path).set_property('net', u.gate)
     #             # tu.terminals.clear()
     #             # tl.terminals.clear()
-
-    # Construct net regions of transistors.
-    for transistor, l in transistor_layouts.items():
-        assert isinstance(t, Transistor)
-        assert isinstance(l, TransistorLayout)
-        terminal_shapes = l.terminal_shapes()
-
-        for net, _shapes in terminal_shapes.items():
-            for layer, shape in _shapes:
-                logger.debug(f"Terminal for net {net} on {layer} {shape}")
-                r = net_regions[net][layer]
-                r.insert(shape)
-                r.merge()
 
     # Construct two dimensional grid which defines the routing graph on a single layer.
     grid = Grid2D((tech.grid_offset_x, tech.grid_offset_y),
@@ -381,7 +361,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     remove_existing_routing_edges(G, shapes, tech)
 
     # Create a list of terminal areas: [(net, layer, [terminal, ...]), ...]
-    terminals_by_net = extract_terminal_nodes(G, net_regions, tech)
+    terminals_by_net = extract_terminal_nodes(G, shapes, tech)
 
     # Embed transistor terminal nodes in to routing graph.
     embed_transistor_terminal_nodes(G, terminals_by_net, transistor_layouts, tech)
@@ -394,8 +374,13 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Check if each net really has a routing terminal.
     # It can happen that there is none due to spacing issues.
+    # First find all net names in the layout.
+    all_net_names = {s.property('net') for _, _shapes in shapes.items() for s in _shapes.each()}
+    all_net_names -= {None}
+
     error = False
-    for net_name in net_regions.keys():
+    # Check if each net has at least a terminal.
+    for net_name in all_net_names:
         num_terminals = num_appearance.get(net_name)
         if num_terminals is None or num_terminals == 0:
             logger.error("Net '{}' has no routing terminal.".format(net_name))
