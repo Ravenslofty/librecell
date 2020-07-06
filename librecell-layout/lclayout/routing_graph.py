@@ -274,13 +274,13 @@ def extract_terminal_nodes(graph: nx.Graph,
     #         else:
     #             logger.warning("Layer '{}' does not contain any routing nodes.".format(layer))
 
-    # Sanity check
-    error = False
-    for net_name, layer, terminals in terminals_by_net:
-        if len(terminals) == 0:
-            logger.error(
-                "Shape of net {} on layer '{}' does not contain any routing grid point.".format(net_name, layer))
-            error = True
+    # # Sanity check
+    # error = False
+    # for net_name, layer, terminals in terminals_by_net:
+    #     if len(terminals) == 0:
+    #         logger.error(
+    #             "Shape of net {} on layer '{}' does not contain any routing grid point.".format(net_name, layer))
+    #         error = True
 
     return terminals_by_net
 
