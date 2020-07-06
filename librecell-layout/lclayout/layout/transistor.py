@@ -58,7 +58,7 @@ class TransistorLayout:
         """
         return dict()
 
-    def draw(self, shapes: Dict[Any, pya.Region]) -> None:
+    def draw(self, shapes: Dict[Any, pya.Shapes]) -> None:
         """ Draw the TransistorLayout.
 
         Routing terminals must be labelled with the `'net'` property.
@@ -81,7 +81,7 @@ class DefaultTransistorLayout(TransistorLayout):
     Contains the shapes of the transistor plus shapes that mark possible locations of contacts.
     """
 
-    def __init__(self, abstract_transistor: Transistor, location: Tuple[int, int], distance_to_outline: int, tech):
+    def __init__(self, abstract_transistor: Transistor, location: Tuple[int, int], tech):
         """
         Create the layout representation of a transistor based on the abstract transistor (netlist) a location within the cell
         and design rules.
@@ -93,7 +93,7 @@ class DefaultTransistorLayout(TransistorLayout):
 
         self.abstract_transistor = abstract_transistor
         self.location = location
-        self.distance_to_outline = distance_to_outline
+        self.distance_to_outline = tech.transistor_offset_y # TODO: Simplify this.
 
         # Get either the ndiffusion or pdiffusion layer.
         if abstract_transistor.channel_type == ChannelType.NMOS:
@@ -111,8 +111,8 @@ class DefaultTransistorLayout(TransistorLayout):
         # as well as distance from poly to poly in neighbouring cell.
         min_distance_to_outline = max(active_half_spacing, tech.gate_extension + poly_half_spacing)
 
-        assert distance_to_outline >= min_distance_to_outline, 'Chosen distance will violate minimum spacing rules. {} >= {}.'.format(
-            distance_to_outline, min_distance_to_outline)
+        assert self.distance_to_outline >= min_distance_to_outline, 'Chosen distance will violate minimum spacing rules. {} >= {}.'.format(
+            self.distance_to_outline, min_distance_to_outline)
 
         # Bottom left of l_diffusion.
         x, y = location
@@ -127,13 +127,13 @@ class DefaultTransistorLayout(TransistorLayout):
         y_eff = 0
         if y % 2 == 1:
             # Top aligned.
-            y_eff = y * tech.unit_cell_height - distance_to_outline
+            y_eff = y * tech.unit_cell_height - self.distance_to_outline
             # y_eff = grid_floor(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) + tech.via_size[l_diff_contact] // 2 + \
             #         tech.minimum_enclosure[(l_diffusion, l_diff_contact)]
             y_eff = y_eff - h
         else:
             # Bottom aligned
-            y_eff = y * tech.unit_cell_height + distance_to_outline
+            y_eff = y * tech.unit_cell_height + self.distance_to_outline
             # y_eff = grid_ceil(y_eff, tech.routing_grid_pitch_y, tech.grid_offset_y) - tech.via_size[l_diff_contact] // 2 - \
             #         tech.minimum_enclosure[(l_diffusion, l_diff_contact)]
 
@@ -219,7 +219,7 @@ class DefaultTransistorLayout(TransistorLayout):
         """
         return self._terminals
 
-    def draw(self, shapes: Dict[Any, pya.Region]) -> None:
+    def draw(self, shapes: Dict[Any, pya.Shapes]) -> None:
         """ Draw a TransistorLayout.
 
         :param shapes: Dict[layer name, pya.Shapes]

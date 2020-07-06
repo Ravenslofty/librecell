@@ -123,7 +123,7 @@ def _get_routing_node_locations_per_layer(g: nx.Graph) -> Dict[Any, Set[Tuple[in
     return routing_nodes
 
 
-def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
+def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Shapes], tech) -> None:
     """ Remove nodes and edges from  G that would conflict
     with predefined `shapes`.
     :param graph: routing graph.
@@ -188,7 +188,7 @@ def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Region],
     graph.remove_nodes_from(unconnected)
 
 
-def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
+def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Shapes], tech) -> None:
     """ Remove edges in G that are already routed by a shape in `shapes`.
     :param G: Routing graph to be modified.
     :param shapes: Dict[layer, pya.Shapes]
