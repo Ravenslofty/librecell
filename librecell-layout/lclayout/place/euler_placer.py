@@ -121,7 +121,7 @@ def _row_io_ordering_cost(row: List[Transistor], input_nets: Set[Any], output_ne
     """
 
     nets = [(net, pos) for pos, net in
-            enumerate(chain(*[[t.left, t.gate, t.right] for t in row if t is not None]))
+            enumerate(chain(*[[t.source_net, t.gate_net, t.drain_net] for t in row if t is not None]))
             ]
     return _io_ordering_cost(nets, input_nets, output_nets)
 
@@ -158,7 +158,7 @@ def _num_gate_matches(cell: Cell) -> int:
     sum = 0
     for a, b in zip(cell.upper, cell.lower):
         if a is not None and b is not None:
-            if a.gate == b.gate:
+            if a.gate_net == b.gate_net:
                 sum += 1
     return sum
 
@@ -182,7 +182,7 @@ def __need_gap(left: Transistor, right: Transistor):
     if left is None or right is None:
         return False
     else:
-        return left.right != right.left
+        return left.drain_net != right.source_net
 
 
 def _wiring_length_bbox1(nets: Iterable[Tuple[Hashable, float]]) -> float:
@@ -227,7 +227,7 @@ def wiring_length_bbox(cell: Cell) -> float:
 
     net_positions = []
     for row in (cell.upper, cell.lower):
-        for pos, net in enumerate(chain(*[[t.left, t.gate, t.right] for t in row if t is not None])):
+        for pos, net in enumerate(chain(*[list(t.terminals()) for t in row if t is not None])):
             net_positions.append((net, pos))
 
     return _wiring_length_bbox1(net_positions)
@@ -510,7 +510,7 @@ def _transistors2graph(transistors: Iterable[Transistor]) -> nx.MultiGraph:
     """
     G = nx.MultiGraph()
     for t in transistors:
-        G.add_edge(t.left, t.right, t)
+        G.add_edge(t.source_net, t.drain_net, t)
     # assert nx.is_connected(G)
     return G
 
@@ -554,7 +554,7 @@ def _find_optimal_single_row_placements(transistor_graph: nx.MultiGraph) -> List
             tour = _trim_none(tour)
             assert len(tour) >= 1
 
-            if tour[0].left != tour[-1].right:
+            if tour[0].source_net != tour[-1].drain_net:
                 # Can not be shifted without inserting a gap.
                 tour.append(None)
 
@@ -588,12 +588,12 @@ def _find_optimal_single_row_placements(transistor_graph: nx.MultiGraph) -> List
         for l, r, t in edges:
             transistor = None
             if isinstance(t, Transistor):
-                if t.left == l:
+                if t.source_net == l:
                     transistor = t
                 else:
                     transistor = t.flipped()
 
-                assert transistor.left == l and transistor.right == r
+                assert transistor.source_net == l and transistor.drain_net == r
 
             ts.append(transistor)
         return ts

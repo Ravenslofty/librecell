@@ -214,6 +214,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
       The name of the cell to be drawn.
     :param netlist_path: Path to SPICE transistor netlist.
     :param placer: `TransistorPlacer` object which is used for the placement. If not supplied, a default will be chosen.
+    :param router: A `GraphRouter` object that will be used for creating the connections between the transistors.
     :param debug_routing_graph: bool
       If set to True, the full routing graph is written to the layout instead of the routing paths.
     :param debug_smt_solver: Tell DRC cleaner to show which assertions are not satisfiable.
@@ -237,7 +238,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     top = layout.create_cell(cell_name)
 
     # Setup layers.
-    shapes = {}
+    shapes: Dict[str, db.Shapes] = dict()
     for name, (num, purpose) in layermap.items():
         layer = layout.layer(num, purpose)
         shapes[name] = top.shapes(layer)
@@ -269,7 +270,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     logging.info('Find transistor placement')
 
     abstract_cell = placer.place(transistors_abstract)
-    print(abstract_cell)
+    logger.info(f"Cell placement:\n\n{abstract_cell}\n")
 
     # Calculate dimensions of cell.
     num_unit_cells = abstract_cell.width
@@ -280,15 +281,13 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     transistors = abstract_cell.get_transistor_locations()
 
     # Create the layouts of the single transistors. Layouts are already translated to the absolute position.
-    transistor_layouts = {t: create_transistor_layout(t, (x, y), tech.transistor_offset_y, tech)
+    transistor_layouts = {t: DefaultTransistorLayout(t, (x, y), tech.transistor_offset_y, tech)
                           for t, (x, y) in transistors}
 
     # Draw the transistors
     for l in transistor_layouts.values():
-        draw_transistor(l, shapes)
-
-    # Create mapping from nets to {layer: region}
-    net_regions = defaultdict(lambda: defaultdict(pya.Region))
+        assert isinstance(l, TransistorLayout)
+        l.draw(shapes)
 
     # Load spacing rules in form of a graph.
     spacing_graph = tech_util.spacing_graph(tech.min_spacing)
@@ -298,14 +297,6 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
                                      cell_shape=(cell_width, cell_height),
                                      nwell_pwell_spacing=spacing_graph[l_nwell][l_pwell]['min_spacing']
                                      )
-
-    # Draw power rails.
-    vdd_rail = pya.Path([pya.Point(0, tech.unit_cell_height), pya.Point(cell_width, tech.unit_cell_height)],
-                        tech.power_rail_width)
-    vss_rail = pya.Path([pya.Point(0, 0), pya.Point(cell_width, 0)], tech.power_rail_width)
-
-    shapes[tech.power_layer].insert(vdd_rail)
-    shapes[tech.power_layer].insert(vss_rail)
 
     ground_nets = {p for p in cell_pins if is_ground_net(p)}
     supply_nets = {p for p in cell_pins if is_supply_net(p)}
@@ -321,47 +312,36 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     logger.info("Supply net: {}".format(SUPPLY_VOLTAGE_NET))
     logger.info("Ground net: {}".format(GND_NET))
 
-    # Register power rails as net regions.
-    for net, shape in [(SUPPLY_VOLTAGE_NET, vdd_rail), (GND_NET, vss_rail)]:
-        net_regions[net][tech.power_layer].insert(shape)
+    # Draw power rails.
+    vdd_rail = pya.Path([pya.Point(0, tech.unit_cell_height), pya.Point(cell_width, tech.unit_cell_height)],
+                        tech.power_rail_width)
+    vss_rail = pya.Path([pya.Point(0, 0), pya.Point(cell_width, 0)], tech.power_rail_width)
 
-    # Pre-route vertical gate-gate connections
-    for i in range(abstract_cell.width):
-        u = abstract_cell.upper[i]
-        l = abstract_cell.lower[i]
+    # Insert power rails into layout.
+    shapes[tech.power_layer].insert(vdd_rail).set_property('net', SUPPLY_VOLTAGE_NET)
+    shapes[tech.power_layer].insert(vss_rail).set_property('net', GND_NET)
 
-        if u is not None and l is not None:
-            if u.gate == l.gate:
-                logger.debug("Pre-route gate at x position %d", i)
-                tu = transistor_layouts[u]
-                tl = transistor_layouts[l]
-
-                a = tu.gate.bbox().center()
-                b = tl.gate.bbox().center()
-                # Create gate shape.
-                gate_path = pya.Path.new(
-                    [a, b],
-                    tech.gate_length)
-
-                shapes[l_poly].insert(gate_path)
-                net_regions[u.gate][l_poly].insert(gate_path)
-                # tu.terminals.clear()
-                # tl.terminals.clear()
-
-    # Construct net regions of transistors.
-    for transistor, l in transistor_layouts.items():
-        assert isinstance(t, Transistor)
-        l_diffusion = l_ndiffusion if transistor.channel_type == ChannelType.NMOS else l_pdiffusion
-        net_shapes = [
-            # (l_poly, a.gate, l.gate),
-            (l_diffusion, transistor.left, l.source_box),
-            (l_diffusion, transistor.right, l.drain_box)
-        ]
-
-        for layer, net, shape in net_shapes:
-            r = net_regions[net][layer]
-            r.insert(shape)
-            r.merge()
+    # # Pre-route vertical gate-gate connections
+    # for i in range(abstract_cell.width):
+    #     u = abstract_cell.upper[i]
+    #     l = abstract_cell.lower[i]
+    #
+    #     if u is not None and l is not None:
+    #         if u.gate == l.gate:
+    #             logger.debug("Pre-route gate at x position %d", i)
+    #             tu = transistor_layouts[u]
+    #             tl = transistor_layouts[l]
+    #
+    #             a = tu.gate.bbox().center()
+    #             b = tl.gate.bbox().center()
+    #             # Create gate shape.
+    #             gate_path = pya.Path.new(
+    #                 [a, b],
+    #                 tech.gate_length)
+    #
+    #             shapes[l_poly].insert(gate_path).set_property('net', u.gate)
+    #             # tu.terminals.clear()
+    #             # tl.terminals.clear()
 
     # Construct two dimensional grid which defines the routing graph on a single layer.
     grid = Grid2D((tech.grid_offset_x, tech.grid_offset_y),
@@ -381,7 +361,7 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
     remove_existing_routing_edges(G, shapes, tech)
 
     # Create a list of terminal areas: [(net, layer, [terminal, ...]), ...]
-    terminals_by_net = extract_terminal_nodes(G, net_regions, tech)
+    terminals_by_net = extract_terminal_nodes(G, shapes, tech)
 
     # Embed transistor terminal nodes in to routing graph.
     embed_transistor_terminal_nodes(G, terminals_by_net, transistor_layouts, tech)
@@ -394,9 +374,15 @@ def create_cell_layout(tech, layout: pya.Layout, cell_name: str, netlist_path: s
 
     # Check if each net really has a routing terminal.
     # It can happen that there is none due to spacing issues.
+    # First find all net names in the layout.
+    all_net_names = {s.property('net') for _, _shapes in shapes.items() for s in _shapes.each()}
+    all_net_names -= {None}
+
     error = False
-    for net_name, layer, terminals in terminals_by_net:
-        if len(terminals) == 0:
+    # Check if each net has at least a terminal.
+    for net_name in all_net_names:
+        num_terminals = num_appearance.get(net_name)
+        if num_terminals is None or num_terminals == 0:
             logger.error("Net '{}' has no routing terminal.".format(net_name))
             error = True
 
@@ -724,21 +710,23 @@ def main():
 
     # LVS check
     logger.info("Running LVS check")
-    reference = lvs.read_netlist_mos4_to_mos3(netlist_path)
+    reference_netlist = lvs.read_netlist_mos4_to_mos3(netlist_path)
     # Combine parallel transistors.
     # This is currently a 'hack' to make sure that in the extracted as well as in the reference netlist the
     # transistors are merged.
-    reference.make_top_level_pins()
-    reference.purge()
-    reference.combine_devices()
-    circuit = reference.circuit_by_name(cell_name)
+
+    # Remove all unused circuits.
+    # The reference netlist must contain only the circuit of the cell to be checked.
+    # Copying a circuit into a new netlist makes `combine_devices` fail.
+    circuits_to_delete = {c for c in reference_netlist.each_circuit() if c.name != cell_name}
+    for c in circuits_to_delete:
+        reference_netlist.remove(c)
 
     # Extract netlist from layout.
-    netlist = lvs.extract_netlist(layout, cell)
+    extracted_netlist = lvs.extract_netlist(layout, cell)
 
-    sub_netlist = pya.Netlist()
-    sub_netlist.add(circuit)
-    lvs_success = lvs.compare_netlist(netlist, sub_netlist)
+    # Run LVS comparison of the two netlists.
+    lvs_success = lvs.compare_netlist(extracted_netlist, reference_netlist)
 
     logger.info("LVS result: {}".format('SUCCESS' if lvs_success else 'FAILED'))
 
