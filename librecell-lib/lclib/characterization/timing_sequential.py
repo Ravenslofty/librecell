@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 from itertools import count
 
-from lclib.characterization.ngspice_subprocess import run_simulation
+from .ngspice_subprocess import run_simulation
 
 from .util import *
 from lccommon.net_util import get_subcircuit_ports
@@ -153,8 +153,8 @@ def get_clock_to_output_delay(
     samples_per_period = int(period / time_step)
     logger.debug("Run simulation.")
 
-    sim_file = tempfile.mktemp(prefix='lctime-', suffix='.sp')
-    sim_output_file = tempfile.mktemp(prefix='lctime-out-', suffix='.txt')
+    sim_file = tempfile.mktemp(prefix='lctime-', suffix='.sp', dir='/dev/shm')
+    sim_output_file = tempfile.mktemp(prefix='lctime-out-', suffix='.txt', dir='/dev/shm')
 
     # TODO
     initial_conditions = {
@@ -286,8 +286,10 @@ def test_plot_flipflop_setup_behavior():
     )
 
     subckt_name = 'DFFPOSX1'
-    include_file = '/home/user/FreePDK45/osu_soc/lib/source/netlists/{}.pex.netlist'.format(subckt_name)
-    model_file = '/home/user/FreePDK45/osu_soc/lib/files/gpdk45nm.m'
+    import os
+    base = os.path.expanduser("~")
+    include_file = f'{base}/FreePDK45/osu_soc/lib/source/netlists/{subckt_name}.pex.netlist'
+    model_file = f'{base}/FreePDK45/osu_soc/lib/files/gpdk45nm.m'
 
     ports = get_subcircuit_ports(include_file, subckt_name)
     print("Ports: ", ports)
@@ -418,6 +420,8 @@ def test_plot_flipflop_setup_behavior():
         max_delay = max_rise_delay if rising_data_edge else max_fall_delay
         setup_guess = setup_guess_rise if rising_data_edge else setup_guess_fall
 
+        logger.info(f"Find min. setup time. Hold time = {hold_time}")
+
         def f(setup_time: float) -> float:
             """
             Optimization function.
@@ -437,7 +441,9 @@ def test_plot_flipflop_setup_behavior():
         # plt.plot(x, y)
         # plt.show()
 
-        min_setup_time_indep = optimize.bisect(f, 0, float(setup_guess))
+        shortest = max(0, -hold_time)
+        longest = setup_guess
+        min_setup_time_indep = optimize.bisect(f, shortest, longest)
         # min_setup_time_indep = optimize.newton(f, x0=float(setup_guess))
 
         return min_setup_time_indep, f(min_setup_time_indep) + max_delay
@@ -493,9 +499,9 @@ def test_plot_flipflop_setup_behavior():
                                                                    setup_time=setup_time_guess)
 
     # # Find dependent setup time.
-    # dependent_setup_time_rise, dependent_setup_delay_rise = \
-    #     find_min_setup(rising_data_edge=True,
-    #                    hold_time=min_hold_time_uncond_rise)
+    dependent_setup_time_rise, dependent_setup_delay_rise = \
+        find_min_setup(rising_data_edge=True,
+                       hold_time=min_hold_time_uncond_rise)
 
     # dependent_setup_time_fall, dependent_setup_delay_fall = \
     #     find_min_setup(rising_data_edge=False,
