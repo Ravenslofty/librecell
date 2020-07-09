@@ -17,6 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+import tempfile
+import matplotlib.pyplot as plt
 from itertools import count
 
 from .ngspice_subprocess import run_simulation
