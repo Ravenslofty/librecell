@@ -518,7 +518,7 @@ def _transistors2graph(transistors: Iterable[Transistor]) -> nx.MultiGraph:
 def _find_optimal_single_row_placements(transistor_graph: nx.MultiGraph) -> List[List[Transistor]]:
     """ Find with-optimal single row placements of transistors.
 
-    :param transistors: nx.MultiGraph representing the transistor network. Each edge corresponts to a transistor.
+    :param transistors: nx.MultiGraph representing the transistor network. Each edge coresponds to a transistor.
     :return: List[List[Transistor]]
     """
 
