@@ -1,3 +1,16 @@
+#
+# Copyright 2019-2020 Thomas Kramer.
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-S v2.
+#
+# You may redistribute and modify this documentation and make products using it
+# under the terms of the CERN-OHL-S v2 (https:/cern.ch/cern-ohl).
+# This documentation is distributed WITHOUT ANY EXPRESS OR IMPLIED WARRANTY,
+# INCLUDING OF MERCHANTABILITY, SATISFACTORY QUALITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# Please see the CERN-OHL-S v2 for applicable conditions.
+#
+# Source location: https://codeberg.org/tok/librecell
+#
 from klayout import db
 from ..layout.layers import *
 from typing import Dict, List
@@ -152,6 +165,9 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
 def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     """
     Check if two netlists are equal.
+    Both netlists must contain only the circuit of the cell.
+    Note: It is not possible to copy a circuit from one netlist into another. This makes `simplify()` fail. Better just
+    delete all non-used circuits from the netlist.
     :param extracted:
     :param reference:
     :return: Returns True iff the two netlists are equivalent.
@@ -159,13 +175,10 @@ def compare_netlist(extracted: db.Netlist, reference: db.Netlist) -> bool:
     assert extracted.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
     assert reference.top_circuit_count() == 1, "Expected to get exactly one top level circuit."
 
-    # TODO: Make sure that combined/fingered transistors are compared correctly.
-    # As a temporary fix, devices are now not combined in both netlists.
-    # reference.simplify()
-    # extracted.simplify()
-    reference.combine_devices() # Seems to have no effect.
-    print(reference)
-    # extracted.combine_devices()
+    # Make sure that combined/fingered transistors are compared correctly.
+    # Bring transistors into a unique representation.
+    reference.simplify()
+    extracted.simplify()
 
     cmp = db.NetlistComparer()
     compare_result = cmp.compare(extracted, reference)

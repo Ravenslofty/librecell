@@ -1,24 +1,16 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-layout 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-layout).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the CERN Open Hardware License (CERN OHL-S) as it will be published
-## by the CERN, either version 2.0 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## CERN Open Hardware License for more details.
-## 
-## You should have received a copy of the CERN Open Hardware License
-## along with this program. If not, see <http://ohwr.org/licenses/>.
-## 
-## 
-##
+#
+# Copyright 2019-2020 Thomas Kramer.
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-S v2.
+#
+# You may redistribute and modify this documentation and make products using it
+# under the terms of the CERN-OHL-S v2 (https:/cern.ch/cern-ohl).
+# This documentation is distributed WITHOUT ANY EXPRESS OR IMPLIED WARRANTY,
+# INCLUDING OF MERCHANTABILITY, SATISFACTORY QUALITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# Please see the CERN-OHL-S v2 for applicable conditions.
+#
+# Source location: https://codeberg.org/tok/librecell
+#
 from enum import Enum
 
 from itertools import islice, tee, chain, product
@@ -32,7 +24,16 @@ class ChannelType(Enum):
 
 
 class Transistor:
-    def __init__(self, channel_type: ChannelType, left, gate, right, channel_width=None, name='M?'):
+    """
+    Abstract representation of a MOS transistor.
+    """
+
+    def __init__(self, channel_type: ChannelType,
+                 source_net: str, gate_net: str, drain_net: str,
+                 channel_width=None,
+                 name: str = 'M?',
+                 allow_flip_source_drain: bool = True
+                 ):
         """
         params:
         left: Either source or drain net.
@@ -40,24 +41,26 @@ class Transistor:
         """
         self.name = name
         self.channel_type = channel_type
-        self.left = left
-        self.gate = gate
-        self.right = right
+        self.source_net = source_net
+        self.gate_net = gate_net
+        self.drain_net = drain_net
 
         self.channel_width = channel_width
 
+        self.allow_flip_source_drain = allow_flip_source_drain
+
         # TODO
         self.threshold_voltage = None
-
-    # self.location = None
 
     def flipped(self):
         """ Return the same transistor but with left/right terminals flipped.
         """
 
+        assert self.allow_flip_source_drain, "Flipping source and drain is not allowed."
+
         f = deepcopy(self)
-        f.left = self.right
-        f.right = self.left
+        f.source_net = self.drain_net
+        f.drain_net = self.source_net
 
         return f
 
@@ -65,10 +68,10 @@ class Transistor:
         """ Return a tuple of all terminal names.
         :return:
         """
-        return self.left, self.gate, self.right
+        return self.source_net, self.gate_net, self.drain_net
 
     def __key(self):
-        return self.name, self.channel_type, self.left, self.gate, self.right, self.channel_width, self.threshold_voltage
+        return self.name, self.channel_type, self.source_net, self.gate_net, self.drain_net, self.channel_width, self.threshold_voltage
 
     def __hash__(self):
         return hash(self.__key())
@@ -77,7 +80,7 @@ class Transistor:
         return x.__key() == y.__key()
 
     def __repr__(self):
-        return "({}, {}, {})".format(self.left, self.gate, self.right)
+        return "({}, {}, {})".format(self.source_net, self.gate_net, self.drain_net)
 
 
 class Cell:

@@ -166,8 +166,8 @@ def get_cell_inputs(transistors: Iterable[Transistor]) -> Set[str]:
 
     transistors = [t for t in transistors if t is not None]
 
-    gate_nets = set(t.gate for t in transistors)
-    source_and_drain_nets = set(t.left for t in transistors) | set(t.right for t in transistors)
+    gate_nets = set(t.gate_net for t in transistors)
+    source_and_drain_nets = set(t.source_net for t in transistors) | set(t.drain_net for t in transistors)
 
     # Input nets are only connected to transistor gates.
     input_nets = gate_nets - source_and_drain_nets
