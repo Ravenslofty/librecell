@@ -14,7 +14,7 @@ def run_simulation(sim_file: str, ngspice_executable: str = 'ngspice'):
     try:
         ret = subprocess.run([ngspice_executable, sim_file], capture_output=True)
         # proc = subprocess.Popen([ngspice_executable, sim_file])
-        logger.debug(f"Subprocess return value: {ret}")
+        # logger.debug(f"Subprocess return value: {ret}")
         if ret.returncode != 0:
             logger.error(f"ngspice simulation failed: {ret}")
             raise Exception(f"ngspice simulation failed: {ret}")

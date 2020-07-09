@@ -166,9 +166,9 @@ def get_clock_to_output_delay(
 
     # TODO
     if rising_data_edge:
-        breakpoint_statement = f"stop when v({data_out}) > {supply_voltage*0.99}"
+        breakpoint_statement = f"stop when v({data_out}) > {supply_voltage * 0.99}"
     else:
-        breakpoint_statement = f"stop when v({data_out}) < {supply_voltage*0.01}"
+        breakpoint_statement = f"stop when v({data_out}) < {supply_voltage * 0.01}"
 
     # Create ngspice simulation script.
     sim_netlist = f"""* librecell {__name__}
@@ -299,8 +299,8 @@ def test_plot_flipflop_setup_behavior():
     ground = 'GND'
     supply = 'VDD'
 
-    input_rise_time = 0.060e-9
-    input_fall_time = 0.060e-9
+    input_rise_time = 0.010e-9
+    input_fall_time = 0.010e-9
 
     temperature = 27
 
@@ -430,21 +430,31 @@ def test_plot_flipflop_setup_behavior():
             :return:
             """
             # print('eval f', setup_time)
-            delay = delay_f(setup_time=setup_time, hold_time=hold_time,
-                            rising_clock_edge=pos_edge_flipflop,
-                            rising_data_edge=rising_data_edge)
-            return delay - max_delay
+            try:
+                delay = delay_f(setup_time=setup_time, hold_time=hold_time,
+                                rising_clock_edge=pos_edge_flipflop,
+                                rising_data_edge=rising_data_edge)
+                return delay - max_delay
+            except:
+                return float('Inf')
 
-        # x = np.linspace(0, float(setup_guess), 200)
-        # y = np.array([f(st) for st in x])
-        # plt.xlabel('setup time')
-        # plt.plot(x, y)
-        # plt.show()
-
-        shortest = max(0, -hold_time)
+        shortest = -hold_time+input_rise_time/2+input_fall_time/2
         longest = setup_guess
-        min_setup_time_indep = optimize.bisect(f, shortest, longest)
-        # min_setup_time_indep = optimize.newton(f, x0=float(setup_guess))
+
+        x = np.linspace(shortest, longest, 2)
+        y = np.array([f(st) for st in x])
+        plt.title(f'setup time for $t_{{hold}} = {hold_time}$')
+        plt.xlabel(f'setup time')
+        plt.plot(x, y)
+        plt.show()
+        exit()
+
+        xtol = 1e-20
+        min_setup_time_indep = optimize.bisect(f, shortest, longest, xtol=xtol)
+        delay = f(min_setup_time_indep)
+        print(f"f({min_setup_time_indep}) = {delay}")
+        # Check if we really found the root of `f`.
+        assert np.allclose(0, delay, atol=xtol*100), "Failed to find solution for minimal setup time."
 
         return min_setup_time_indep, f(min_setup_time_indep) + max_delay
 
@@ -481,27 +491,32 @@ def test_plot_flipflop_setup_behavior():
         # plt.show()
         # exit(1)
 
-        min_hold_time_indep = optimize.bisect(f, -float(setup_guess), float(hold_guess))
+        # min_hold_time_indep = optimize.bisect(f, setup_guess, hold_guess)
+        min_hold_time_indep = optimize.bisect(f, setup_guess, hold_guess)
         # min_hold_time_indep = optimize.newton(f, x0=float(setup_guess))
 
         return min_hold_time_indep, f(min_hold_time_indep) + max_delay
 
-    hold_time_guess = max(hold_guess_rise, hold_guess_fall) * 4
-    min_setup_time_uncond_rise, min_setup_delay_rise = find_min_setup(rising_data_edge=True,
-                                                                      hold_time=hold_time_guess)
-    min_setup_time_uncond_fall, min_setup_delay_fall = find_min_setup(rising_data_edge=False,
-                                                                      hold_time=hold_time_guess)
+    # hold_time_guess = max(hold_guess_rise, hold_guess_fall) * 4
+    # min_setup_time_uncond_rise, min_setup_delay_rise = find_min_setup(rising_data_edge=True,
+    #                                                                   hold_time=hold_time_guess)
+    # min_setup_time_uncond_fall, min_setup_delay_fall = find_min_setup(rising_data_edge=False,
+    #                                                                   hold_time=hold_time_guess)
+    #
+    # setup_time_guess = max(setup_guess_rise, setup_guess_fall) * 4
+    # min_hold_time_uncond_rise, min_hold_delay_rise = find_min_hold(rising_data_edge=True,
+    #                                                                setup_time=setup_time_guess)
+    # min_hold_time_uncond_fall, min_hold_delay_fall = find_min_hold(rising_data_edge=False,
+    #                                                                setup_time=setup_time_guess)
 
-    setup_time_guess = max(setup_guess_rise, setup_guess_fall) * 4
-    min_hold_time_uncond_rise, min_hold_delay_rise = find_min_hold(rising_data_edge=True,
-                                                                   setup_time=setup_time_guess)
-    min_hold_time_uncond_fall, min_hold_delay_fall = find_min_hold(rising_data_edge=False,
-                                                                   setup_time=setup_time_guess)
-
+    # print(min_hold_time_uncond_rise)
+    # min_hold_time_uncond_rise = -5.8125e-11  # TODO remove
+    min_hold_time_uncond_rise = 1e-11  # TODO remove
     # # Find dependent setup time.
     dependent_setup_time_rise, dependent_setup_delay_rise = \
         find_min_setup(rising_data_edge=True,
                        hold_time=min_hold_time_uncond_rise)
+    print(dependent_setup_time_rise, dependent_setup_delay_rise)
 
     # dependent_setup_time_fall, dependent_setup_delay_fall = \
     #     find_min_setup(rising_data_edge=False,
@@ -515,11 +530,11 @@ def test_plot_flipflop_setup_behavior():
     #     find_min_hold(rising_data_edge=False,
     #                   hold_time=min_setup_time_uncond_fall)
 
-    print("min setup: ", min_setup_time_uncond_rise, min_setup_time_uncond_fall)
-    print("max delays: ", min_setup_delay_rise, min_setup_delay_fall)
-
-    print("min hold: ", min_hold_time_uncond_rise, min_hold_time_uncond_fall)
-    print("min delays: ", min_hold_delay_rise, min_hold_delay_fall)
+    # print("min setup: ", min_setup_time_uncond_rise, min_setup_time_uncond_fall)
+    # print("max delays: ", min_setup_delay_rise, min_setup_delay_fall)
+    #
+    # print("min hold: ", min_hold_time_uncond_rise, min_hold_time_uncond_fall)
+    # print("min delays: ", min_hold_delay_rise, min_hold_delay_fall)
 
     # print("dep setup:", dependent_setup_time_rise, dependent_setup_time_fall)
     # print("dep setup delay:", dependent_setup_delay_rise, dependent_setup_delay_fall)
