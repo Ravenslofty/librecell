@@ -639,12 +639,12 @@ class EulerPlacer(TransistorPlacer):
                         '`HierarchicalPlacer` could be a better choice.')
 
         # Find best nmos/pmos row pair.
-
         pairs = product(all_nmos, all_pmos)
 
         input_nets = net_util.get_cell_inputs(transistors)
         output_nets = {}
 
+        # Assemble optimal cell candidates.
         cells = (_assemble_cell(nmos, pmos) for nmos, pmos in pairs)
 
         best_cells_gate_match = all_max(cells, key=_num_gate_matches)
