@@ -457,16 +457,6 @@ def test_plot_flipflop_setup_behavior():
             longest = longest*2
             b = f(longest)
 
-        # x = np.linspace(shortest, longest, 2)
-        # y = np.array([f(st) for st in x])
-        # print(x)
-        # print(y)
-        # # plt.title(f'setup time for $t_{{hold}} = {hold_time}$')
-        # # plt.xlabel(f'setup time')
-        # # plt.plot(x, y)
-        # # plt.show()
-        # # exit()
-
         xtol = 1e-20
         min_setup_time_indep = optimize.bisect(f, shortest, longest, xtol=xtol)
         delay = f(min_setup_time_indep)
@@ -500,12 +490,6 @@ def test_plot_flipflop_setup_behavior():
                             rising_data_edge=rising_data_edge)
             return delay - max_delay
 
-        # print(hold_guess)
-        # x = np.linspace(-1*hold_guess, 1*hold_guess, 100)
-        # y = np.array([f(st) for st in x])
-        # plt.plot(x, y, 'x-')
-        # plt.show()
-        # exit(1)
         # Determine min and max hold time for binary search.
         shortest = -setup_time + input_rise_time + input_fall_time
         longest = hold_guess
@@ -516,16 +500,6 @@ def test_plot_flipflop_setup_behavior():
         while not b < 0:
             longest = longest*2
             b = f(longest)
-
-        # x = np.linspace(shortest, longest, 2)
-        # y = np.array([f(st) + max_delay for st in x])
-        # print(x)
-        # print(y)
-        # # plt.title(f'setup time for $t_{{hold}} = {hold_time}$')
-        # # plt.xlabel(f'setup time')
-        # # plt.plot(x, y)
-        # # plt.show()
-        # # exit()
 
         xtol = 1e-20
         min_hold_time_indep = optimize.bisect(f, shortest, longest, xtol=xtol)
@@ -560,9 +534,6 @@ def test_plot_flipflop_setup_behavior():
     print(f"max delays (rise): {min_hold_delay_rise}")
     print(f"max delays (fall): {min_hold_delay_fall}")
 
-
-    # min_hold_time_uncond_rise = -3.465480288494276e-11  # TODO remove
-    # min_hold_time_uncond_rise = 1e-11  # TODO remove
 
     # # Find dependent setup time.
     dependent_setup_time_rise, dependent_setup_delay_rise = \
