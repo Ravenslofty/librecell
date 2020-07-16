@@ -328,6 +328,15 @@ def test_plot_flipflop_setup_behavior():
             rising_clock_edge: bool,
             rising_data_edge: bool
     ):
+        """
+        Wrapper around `get_clock_to_output_delay()`. Results are cached such that a further call with same arguments returns the
+        cached value of the first call.
+        :param setup_time:
+        :param hold_time:
+        :param rising_clock_edge:
+        :param rising_data_edge:
+        :return:
+        """
         print(f"evaluate delay_f({setup_time}, {hold_time}, {rising_clock_edge}, {rising_data_edge})")
 
         cache_tag = (setup_time, hold_time, rising_clock_edge, rising_data_edge)
@@ -367,6 +376,9 @@ def test_plot_flipflop_setup_behavior():
         setup_time = setup_time_guess
         hold_time = hold_time_guess
 
+        assert setup_time != 0  # Does not terminate otherwise.
+        assert hold_time != 0  # Does not terminate otherwise.
+
         prev_delay = None
         delay = None
         ctr = count()
@@ -379,7 +391,7 @@ def test_plot_flipflop_setup_behavior():
                 diff = abs(delay - prev_delay)
                 fraction = diff / delay
                 if fraction < 0.001:
-                    # close enough
+                    # Close enough.
                     break
             setup_time = setup_time * 2
             hold_time = hold_time * 2
@@ -428,31 +440,38 @@ def test_plot_flipflop_setup_behavior():
             :return:
             """
             # print('eval f', setup_time)
-            try:
-                delay = delay_f(setup_time=setup_time, hold_time=hold_time,
-                                rising_clock_edge=pos_edge_flipflop,
-                                rising_data_edge=rising_data_edge)
-                return delay - max_delay
-            except:
-                return float('Inf')
+            # assert setup_time + hold_time >= input_rise_time + input_fall_time
+            delay = delay_f(setup_time=setup_time, hold_time=hold_time,
+                            rising_clock_edge=pos_edge_flipflop,
+                            rising_data_edge=rising_data_edge)
+            return delay - max_delay
 
-        shortest = -hold_time+input_rise_time/2+input_fall_time/2
+        # Determine min and max setup time for binary search.
+        shortest = -hold_time + input_rise_time + input_fall_time
         longest = setup_guess
+        a = f(shortest)
+        b = f(longest)
+        assert a > 0
+        # Make sure f(longest) is larger than zero.
+        while not b < 0:
+            longest = longest*2
+            b = f(longest)
 
-        x = np.linspace(shortest, longest, 2)
-        y = np.array([f(st) for st in x])
-        plt.title(f'setup time for $t_{{hold}} = {hold_time}$')
-        plt.xlabel(f'setup time')
-        plt.plot(x, y)
-        plt.show()
-        exit()
+        # x = np.linspace(shortest, longest, 2)
+        # y = np.array([f(st) for st in x])
+        # print(x)
+        # print(y)
+        # # plt.title(f'setup time for $t_{{hold}} = {hold_time}$')
+        # # plt.xlabel(f'setup time')
+        # # plt.plot(x, y)
+        # # plt.show()
+        # # exit()
 
         xtol = 1e-20
         min_setup_time_indep = optimize.bisect(f, shortest, longest, xtol=xtol)
         delay = f(min_setup_time_indep)
-        print(f"f({min_setup_time_indep}) = {delay}")
         # Check if we really found the root of `f`.
-        assert np.allclose(0, delay, atol=xtol*100), "Failed to find solution for minimal setup time."
+        assert np.allclose(0, delay, atol=xtol * 1000), "Failed to find solution for minimal setup time."
 
         return min_setup_time_indep, f(min_setup_time_indep) + max_delay
 
@@ -467,7 +486,6 @@ def test_plot_flipflop_setup_behavior():
         """
         max_delay = max_rise_delay if rising_data_edge else max_fall_delay
         hold_guess = hold_guess_rise if rising_data_edge else hold_guess_fall
-        setup_guess = setup_guess_rise if rising_data_edge else setup_guess_fall
 
         def f(hold_time: float) -> float:
             """
@@ -488,54 +506,83 @@ def test_plot_flipflop_setup_behavior():
         # plt.plot(x, y, 'x-')
         # plt.show()
         # exit(1)
+        # Determine min and max hold time for binary search.
+        shortest = -setup_time + input_rise_time + input_fall_time
+        longest = hold_guess
+        a = f(shortest)
+        b = f(longest)
+        assert a > 0
+        # Make sure f(longest) is larger than zero.
+        while not b < 0:
+            longest = longest*2
+            b = f(longest)
 
-        # min_hold_time_indep = optimize.bisect(f, setup_guess, hold_guess)
-        min_hold_time_indep = optimize.bisect(f, setup_guess, hold_guess)
-        # min_hold_time_indep = optimize.newton(f, x0=float(setup_guess))
+        # x = np.linspace(shortest, longest, 2)
+        # y = np.array([f(st) + max_delay for st in x])
+        # print(x)
+        # print(y)
+        # # plt.title(f'setup time for $t_{{hold}} = {hold_time}$')
+        # # plt.xlabel(f'setup time')
+        # # plt.plot(x, y)
+        # # plt.show()
+        # # exit()
+
+        xtol = 1e-20
+        min_hold_time_indep = optimize.bisect(f, shortest, longest, xtol=xtol)
+        delay = f(min_hold_time_indep)
+        print(delay)
+        # Check if we really found the root of `f`.
+        assert np.allclose(0, delay, atol=xtol * 1000), "Failed to find solution for minimal hold time."
 
         return min_hold_time_indep, f(min_hold_time_indep) + max_delay
 
-    # hold_time_guess = max(hold_guess_rise, hold_guess_fall) * 4
-    # min_setup_time_uncond_rise, min_setup_delay_rise = find_min_setup(rising_data_edge=True,
-    #                                                                   hold_time=hold_time_guess)
-    # min_setup_time_uncond_fall, min_setup_delay_fall = find_min_setup(rising_data_edge=False,
-    #                                                                   hold_time=hold_time_guess)
-    #
-    # setup_time_guess = max(setup_guess_rise, setup_guess_fall) * 4
-    # min_hold_time_uncond_rise, min_hold_delay_rise = find_min_hold(rising_data_edge=True,
-    #                                                                setup_time=setup_time_guess)
-    # min_hold_time_uncond_fall, min_hold_delay_fall = find_min_hold(rising_data_edge=False,
-    #                                                                setup_time=setup_time_guess)
+    print("Measure unconditional minimal setup time.")
+    hold_time_guess = max(hold_guess_rise, hold_guess_fall) * 4
+    min_setup_time_uncond_rise, min_setup_delay_rise = find_min_setup(rising_data_edge=True,
+                                                                      hold_time=hold_time_guess)
+    min_setup_time_uncond_fall, min_setup_delay_fall = find_min_setup(rising_data_edge=False,
+                                                                      hold_time=hold_time_guess)
 
-    # print(min_hold_time_uncond_rise)
-    # min_hold_time_uncond_rise = -5.8125e-11  # TODO remove
-    min_hold_time_uncond_rise = 1e-11  # TODO remove
+    print(f"unconditional min. setup time rise: {min_setup_time_uncond_rise}")
+    print(f"unconditional min. setup time fall: {min_setup_time_uncond_fall}")
+    print(f"max delays (rise): {min_setup_delay_rise}")
+    print(f"max delays (fall): {min_setup_delay_fall}")
+
+    print("Measure unconditional minimal hold time.")
+    setup_time_guess = max(setup_guess_rise, setup_guess_fall) * 40
+    min_hold_time_uncond_rise, min_hold_delay_rise = find_min_hold(rising_data_edge=True,
+                                                                   setup_time=setup_time_guess)
+    min_hold_time_uncond_fall, min_hold_delay_fall = find_min_hold(rising_data_edge=False,
+                                                                   setup_time=setup_time_guess)
+
+    print(f"unconditional min. hold time rise: {min_hold_time_uncond_rise}")
+    print(f"unconditional min. hold time fall: {min_hold_time_uncond_fall}")
+    print(f"max delays (rise): {min_hold_delay_rise}")
+    print(f"max delays (fall): {min_hold_delay_fall}")
+
+
+    # min_hold_time_uncond_rise = -3.465480288494276e-11  # TODO remove
+    # min_hold_time_uncond_rise = 1e-11  # TODO remove
+
     # # Find dependent setup time.
     dependent_setup_time_rise, dependent_setup_delay_rise = \
         find_min_setup(rising_data_edge=True,
                        hold_time=min_hold_time_uncond_rise)
-    print(dependent_setup_time_rise, dependent_setup_delay_rise)
 
-    # dependent_setup_time_fall, dependent_setup_delay_fall = \
-    #     find_min_setup(rising_data_edge=False,
-    #                    hold_time=min_hold_time_uncond_fall)
-    #
-    # dependent_hold_time_rise, dependent_hold_delay_rise = \
-    #     find_min_hold(rising_data_edge=True,
-    #                   hold_time=min_setup_time_uncond_rise)
-    #
-    # dependent_hold_time_fall, dependent_hold_delay_fall = \
-    #     find_min_hold(rising_data_edge=False,
-    #                   hold_time=min_setup_time_uncond_fall)
+    dependent_setup_time_fall, dependent_setup_delay_fall = \
+        find_min_setup(rising_data_edge=False,
+                       hold_time=min_hold_time_uncond_fall)
 
-    # print("min setup: ", min_setup_time_uncond_rise, min_setup_time_uncond_fall)
-    # print("max delays: ", min_setup_delay_rise, min_setup_delay_fall)
-    #
-    # print("min hold: ", min_hold_time_uncond_rise, min_hold_time_uncond_fall)
-    # print("min delays: ", min_hold_delay_rise, min_hold_delay_fall)
+    dependent_hold_time_rise, dependent_hold_delay_rise = \
+        find_min_hold(rising_data_edge=True,
+                      setup_time=min_setup_time_uncond_rise)
 
-    # print("dep setup:", dependent_setup_time_rise, dependent_setup_time_fall)
-    # print("dep setup delay:", dependent_setup_delay_rise, dependent_setup_delay_fall)
+    dependent_hold_time_fall, dependent_hold_delay_fall = \
+        find_min_hold(rising_data_edge=False,
+                      setup_time=min_setup_time_uncond_fall)
+
+    print("dep setup:", dependent_setup_time_rise, dependent_setup_time_fall)
+    print("dep setup delay:", dependent_setup_delay_rise, dependent_setup_delay_fall)
     #
-    # print("dep hold:", dependent_hold_time_rise, dependent_hold_time_fall)
-    # print("dep hold delay:", dependent_hold_delay_rise, dependent_hold_delay_fall)
+    print("dep hold:", dependent_hold_time_rise, dependent_hold_time_fall)
+    print("dep hold delay:", dependent_hold_delay_rise, dependent_hold_delay_fall)
