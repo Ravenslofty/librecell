@@ -234,11 +234,11 @@ exit
     clock_voltage = sim_data[:, 5]
     output_voltage = sim_data[:, 7]
 
-    # plt.plot(time, clock_voltage, label='clk')
-    # plt.plot(time, input_voltage, label='din')
-    # plt.plot(time, output_voltage, label='dout')
-    # plt.legend()
-    # plt.show()
+    plt.plot(time, clock_voltage, label='clk')
+    plt.plot(time, input_voltage, label='din')
+    plt.plot(time, output_voltage, label='dout')
+    plt.legend()
+    plt.show()
 
     # Start of interesting interval
     start = int((t_clock_edge - period / 2) / period * samples_per_period)
@@ -554,6 +554,6 @@ def test_plot_flipflop_setup_behavior():
 
     print("dep setup:", dependent_setup_time_rise, dependent_setup_time_fall)
     print("dep setup delay:", dependent_setup_delay_rise, dependent_setup_delay_fall)
-    #
+
     print("dep hold:", dependent_hold_time_rise, dependent_hold_time_fall)
     print("dep hold delay:", dependent_hold_delay_rise, dependent_hold_delay_fall)
