@@ -162,7 +162,7 @@ def get_clock_to_output_delay(
         data_out: 0 if rising_data_edge else supply_voltage
     }
 
-    # TODO
+    # TODO: Simulate only until output reaches threshold.
     if rising_data_edge:
         breakpoint_statement = f"stop when v({data_out}) > {supply_voltage * 0.99}"
     else:
@@ -234,11 +234,11 @@ exit
     clock_voltage = sim_data[:, 5]
     output_voltage = sim_data[:, 7]
 
-    plt.plot(time, clock_voltage, label='clk')
-    plt.plot(time, input_voltage, label='din')
-    plt.plot(time, output_voltage, label='dout')
-    plt.legend()
-    plt.show()
+    # plt.plot(time, clock_voltage, label='clk')
+    # plt.plot(time, input_voltage, label='din')
+    # plt.plot(time, output_voltage, label='dout')
+    # plt.legend()
+    # plt.show()
 
     # Start of interesting interval
     start = int((t_clock_edge - period / 2) / period * samples_per_period)
