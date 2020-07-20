@@ -203,6 +203,10 @@ def main():
     if len(spice_includes) == 0:
         logger.warning("No transistor model supplied. Use --include or -I.")
 
+    # TODO: No hardcoded data here!
+    output_capacitances = np.array([0.05, 0.1, 0.2, 0.4, 0.8, 1.6])*1e-12 # pf
+    input_transition_times = np.array([0.1, 0.2, 0.4, 0.8, 1.6, 3.2])*1e-9 # ns
+
     # Characterize all cells in the list.
     def characterize_cell(cell_name: str) -> Group:
         cell_workingdir = os.path.join(workingdir, cell_name)
@@ -286,6 +290,10 @@ def main():
                     supply_voltage=supply_voltage,
                     trip_points=trip_points,
                     timing_corner=calc_mode,
+
+                    total_output_net_capacitance=output_capacitances,
+                    input_net_transition=input_transition_times,
+
                     spice_netlist_file=netlist_file_table[cell_name],
                     spice_include_files=spice_includes,
 
@@ -296,8 +304,8 @@ def main():
                 )
 
                 # TODO: get correct index/variable mapping from liberty file.
-                index_1 = result['total_output_net_capacitance']
-                index_2 = result['input_net_transition']
+                index_1 = result['total_output_net_capacitance'] * capacitance_unit_scale_factor
+                index_2 = result['input_net_transition'] * time_unit_scale_factor
                 # TODO: remember all necessary templates and create template tables.
                 table_template_name = 'delay_template_{}x{}'.format(len(index_1), len(index_2))
 

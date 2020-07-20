@@ -21,6 +21,7 @@ from typing import List, Dict, Callable, Optional
 
 from itertools import product
 import os
+import tempfile
 from .util import *
 from .piece_wise_linear import *
 from .ngspice_subprocess import run_simulation
@@ -40,6 +41,9 @@ def characterize_comb_cell(cell_name: str,
                            trip_points: TripPoints,
                            timing_corner: CalcMode,
 
+                           total_output_net_capacitance: np.ndarray,
+                           input_net_transition: np.ndarray,
+
                            spice_netlist_file: str,
                            spice_include_files: List[str] = None,
                            time_resolution=1e-12,
@@ -48,6 +52,8 @@ def characterize_comb_cell(cell_name: str,
                            ) -> Dict[str, np.ndarray]:
     """
     Calculate the NDLM timing table of a cell for a given timing arc.
+    :param input_net_transition: Transistion times of input signals in seconds.
+    :param total_output_net_capacitance: Load capacitance in Farads.
     :param cell_name: The name of the cell in the SPICE model. Required to find it in the spice netlist.
     :param input_pins: List of input pins.
     :param output_pin: The output pin of the timing arc.
@@ -84,15 +90,6 @@ def characterize_comb_cell(cell_name: str,
     # TODO
     # Maximum simulation time.
     time_max = time_resolution * 1e5
-
-    # Define grid points to be evaluated.
-    # TODO: Pass bounds as parameters & find optimal sampling points.
-    total_output_net_capacitance = np.array([0.1, 0.5, 1.2, 3, 4, 5])
-    input_net_transition = np.array([0.06, 0.24, 0.48, 0.9, 1.2, 1.8])
-
-    # Convert into SI units.
-    total_output_net_capacitance = total_output_net_capacitance * 1e-12  # pico farads
-    input_net_transition = input_net_transition * 1e-9  # nano seconds
 
     # Find function to summarize different timing arcs.
     reduction_function = {
@@ -308,8 +305,8 @@ exit
                 output_voltage /= vdd
 
                 # Check if signals are already stabilized after one `period`.
-                assert abs(input_voltage[0]) < 0.01, "Input signal not yet stable at start."
-                assert abs(1 - input_voltage[-1]) < 0.01, "Input signal not yet stable at end."
+                # assert abs(input_voltage[0]) < 0.01, "Input signal not yet stable at start."
+                # assert abs(1 - input_voltage[-1]) < 0.01, "Input signal not yet stable at end."
                 assert abs(output_voltage[0]) < 0.01, "Output signal not yet stable at start."
                 assert abs(1 - output_voltage[-1]) < 0.01, "Output signal not yet stable at end."
 
