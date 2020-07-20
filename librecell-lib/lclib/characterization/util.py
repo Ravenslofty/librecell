@@ -120,23 +120,16 @@ def transition_time(voltage: np.ndarray, time: np.ndarray,
     # Interpolate: Find zero between the both samples.
     # y1 and y2 don't have the same sign. Find the zero-crossing inbetween.
     y1 = y_shifted[transition_idx]
-    y2 = y_shifted[transition_idx+1]
+    y2 = y_shifted[transition_idx + 1]
     assert y1 <= 0 <= y2
     t1 = time[transition_idx]
-    t2 = time[transition_idx+1]
+    t2 = time[transition_idx + 1]
 
     dydt = (y2 - y1) / (t2 - t1)
     # 0 = y1 + delta_t * dydt
     # delta_t = -y1/dydt
-    delta_t = -y1/dydt
+    delta_t = -y1 / dydt
     t_threshold_crossing = t1 + delta_t
-
-    # # Interpolate the samples find a more accurate time of threshold crossing.
-    # f_interp = interpolate.interp1d(time, y_shifted)
-    #
-    # threshold_cross_arg = optimize.bisect(f_interp, time[transition_idx - 1], time[transition_idx + 1], xtol=1e-20)
-    #
-    # print(threshold_cross_arg, t_threshold_crossing)
 
     return t_threshold_crossing
 
