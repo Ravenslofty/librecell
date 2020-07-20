@@ -20,6 +20,7 @@
 import os
 import argparse
 import joblib
+import tempfile
 
 from liberty.parser import parse_liberty
 from liberty.types import *

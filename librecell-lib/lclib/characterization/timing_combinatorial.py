@@ -92,6 +92,7 @@ def characterize_comb_cell(cell_name: str,
     time_max = time_resolution * 1e5
 
     # Find function to summarize different timing arcs.
+    # TODO: Make this directly parametrizable by caller.
     reduction_function = {
         CalcMode.WORST: max,
         CalcMode.BEST: min,
@@ -185,7 +186,7 @@ def characterize_comb_cell(cell_name: str,
                 input_wave.y = input_wave.y * vdd
 
                 # Create SPICE format of the piece wise linear source.
-                input_source_statement = f"Vdata_in {related_pin} {ground} PWL({input_wave.to_spice_pwl_string()})"
+                input_source_statement = f"Vdata_in {related_pin} {ground} PWL({input_wave.to_spice_pwl_string()}) DC=0"
 
                 # Get initial voltage of active pin.
                 initial_voltage = 0 if input_rising else vdd
@@ -197,7 +198,7 @@ def characterize_comb_cell(cell_name: str,
                     breakpoint_statement = f"stop when v({output_pin}) < {vdd * 0.01}"
 
                 static_supply_voltage_statemets = "\n".join(
-                    (f"Vinput_{net} {ground} {voltage}" for net, voltage in input_voltages.items()))
+                    (f"Vinput_{net} {net} {ground} {voltage}" for net, voltage in input_voltages.items()))
 
                 # Initial node voltages.
                 initial_conditions = {
@@ -307,8 +308,12 @@ exit
                 # Check if signals are already stabilized after one `period`.
                 # assert abs(input_voltage[0]) < 0.01, "Input signal not yet stable at start."
                 # assert abs(1 - input_voltage[-1]) < 0.01, "Input signal not yet stable at end."
-                assert abs(output_voltage[0]) < 0.01, "Output signal not yet stable at start."
-                assert abs(1 - output_voltage[-1]) < 0.01, "Output signal not yet stable at end."
+                if input_rising:
+                    output_threshold = trip_points.output_threshold_rise
+                else:
+                    output_threshold = trip_points.output_threshold_fall
+                assert abs(output_voltage[0]) <= output_threshold, "Output signal not yet stable at start."
+                assert abs(1 - output_voltage[-1]) <= output_threshold, "Output signal not yet stable at end."
 
                 # Calculate the output slew time: the time the output signal takes to change from
                 # `slew_lower_threshold` to `slew_upper_threshold`.
@@ -331,8 +336,10 @@ exit
                 else:
                     fall_powers.append(switching_energy)
 
-        return (np.array(rise_delays), np.array(fall_delays),
-                np.array(rise_transition_durations), np.array(fall_transition_durations))
+        return (reduction_function(np.array(rise_delays)),
+                reduction_function(np.array(fall_delays)),
+                reduction_function(np.array(rise_transition_durations)),
+                reduction_function(np.array(fall_transition_durations)))
 
     f_vec = np.vectorize(f)
 
