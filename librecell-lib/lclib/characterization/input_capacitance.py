@@ -17,11 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-from typing import List, Dict
-from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit.SiUnits import Farad, Second
-from PySpice.Unit import *
-from PySpice.Logging import Logging
+import os
+from typing import List, Optional
 
 from itertools import product
 
@@ -31,7 +28,6 @@ from .ngspice_subprocess import run_simulation
 from lccommon.net_util import get_subcircuit_ports
 import tempfile
 import logging
-import matplotlib.pyplot as plt
 
 from scipy import interpolate
 

@@ -140,13 +140,16 @@ def get_clock_to_output_delay(
     input_wave *= supply_voltage
     clk_wave *= supply_voltage
 
-    input_source_statement = f"Vdata_in {data_in} {ground} PWL({input_wave.to_spice_pwl_string()}) DC=0"
-    clk_source_statement = f"Vclk {clock_input} {ground} PWL({clk_wave.to_spice_pwl_string()}) DC=0"
-
     input_voltages = {
         clock_input: clk_wave,
         data_in: input_wave
     }
+
+    # Create SPICE description of the input voltage sources.
+    source_statements = "\n".join(
+        (f"V{net} {net} {ground} PWL({wave.to_spice_pwl_string()}) DC=0"
+         for net, wave in input_voltages.items())
+    )
 
     samples_per_period = int(period / time_step)
     logger.debug("Run simulation.")
@@ -157,10 +160,11 @@ def get_clock_to_output_delay(
     # TODO
     initial_conditions = {
         supply: supply_voltage,
-        data_in: input_wave(0),
-        clock_input: clk_wave(0),
         data_out: 0 if rising_data_edge else supply_voltage
     }
+    # Calculate initial conditions for all PWL sources.
+    for net, wave in input_voltages.items():
+        initial_conditions[net] = wave(0)
 
     # TODO: Simulate only until output reaches threshold.
     if rising_data_edge:
@@ -187,8 +191,7 @@ Vsupply {supply} {ground} {supply_voltage}
 * TODO {{static_supply_voltage_statemets}}
 
 * Active input signals (clock & data_in).
-{clk_source_statement}
-{input_source_statement}
+{source_statements}
 
 * Initial conditions.
 * Also all voltages of DC sources must be here if they are needed to compute the initial conditions.
@@ -257,8 +260,13 @@ exit
     input_voltage /= supply_voltage
     output_voltage /= supply_voltage
 
-    q0 = output_voltage[0] > 0.5
-    q1 = output_voltage[-1] > 0.5
+    if rising_data_edge:
+        output_threshold = trip_points.output_threshold_rise
+    else:
+        output_threshold = trip_points.output_threshold_fall
+
+    q0 = output_voltage[0] > output_threshold
+    q1 = output_voltage[-1] > output_threshold
 
     if not q0 and q1:
         # Output has rising edge
@@ -301,10 +309,13 @@ def test_plot_flipflop_setup_behavior():
     input_fall_time = 0.010e-9
 
     temperature = 27
+    logger.info(f"Temperature: {temperature} C")
 
     output_load_capacitance = 0.06e-12
+    logger.info(f"Output load capacitance: {output_load_capacitance} F")
 
     time_step = 10e-12
+    logger.info(f"Time step: {time_step} s")
 
     # TODO: find appropriate simulation_duration_hint
     simulation_duration_hint = 250e-12
@@ -313,6 +324,7 @@ def test_plot_flipflop_setup_behavior():
     includes = [include_file, model_file]
 
     vdd = 1.1
+    logger.info(f"Supply voltage: {vdd} V")
 
     # Voltage sources for input signals.
     # input_sources = [circuit.V('in_{}'.format(inp), inp, circuit.gnd, 'dc 0 external') for inp in inputs]
@@ -458,7 +470,7 @@ def test_plot_flipflop_setup_behavior():
             b = f(longest)
 
         xtol = 1e-20
-        min_setup_time_indep = optimize.bisect(f, shortest, longest, xtol=xtol)
+        min_setup_time_indep = optimize.brentq(f, shortest, longest, xtol=xtol)
         delay = f(min_setup_time_indep)
         # Check if we really found the root of `f`.
         assert np.allclose(0, delay, atol=xtol * 1000), "Failed to find solution for minimal setup time."
@@ -502,7 +514,7 @@ def test_plot_flipflop_setup_behavior():
             b = f(longest)
 
         xtol = 1e-20
-        min_hold_time_indep = optimize.bisect(f, shortest, longest, xtol=xtol)
+        min_hold_time_indep = optimize.brentq(f, shortest, longest, xtol=xtol)
         delay = f(min_hold_time_indep)
         print(delay)
         # Check if we really found the root of `f`.

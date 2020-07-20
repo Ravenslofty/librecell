@@ -17,15 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-from typing import List, Dict, Callable
-from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit.SiUnits import Farad, Second
-from PySpice.Unit import *
+from typing import List, Dict, Callable, Optional
 
-from PySpice.Logging import Logging
-
-from itertools import product, count
-
+from itertools import product
+import os
 from .util import *
 from .piece_wise_linear import *
 from .ngspice_subprocess import run_simulation
