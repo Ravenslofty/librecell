@@ -114,9 +114,6 @@ def transition_time(voltage: np.ndarray, time: np.ndarray,
         # Normalize to rising edge.
         y_shifted = -y_shifted
 
-    # Estimate where `y` crosses `threshold`.
-    estimate = time[transition_idx]
-
     # Interpolate: Find zero between the both samples.
     # y1 and y2 don't have the same sign. Find the zero-crossing inbetween.
     y1 = y_shifted[transition_idx]
