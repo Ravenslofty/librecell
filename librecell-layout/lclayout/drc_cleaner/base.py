@@ -116,6 +116,7 @@ class OEdge:
         self.interval = None  # Sorted endpoints such that start < end.
         self.attrs = dict()
 
+    @staticmethod
     def from_points(start: Tuple[int, int], end: Tuple[int, int]):
         """ Create an edge from start and end point.
         """
