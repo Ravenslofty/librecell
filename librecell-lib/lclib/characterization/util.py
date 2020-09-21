@@ -1,22 +1,22 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-lib 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-lib).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-## 
-## You should have received a copy of the GNU General Public License
-## along with this program. If not, see <http://www.gnu.org/licenses/>.
-##
+#
+# Copyright (c) 2019-2020 Thomas Kramer.
+#
+# This file is part of librecell 
+# (see https://codeberg.org/tok/librecell).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 import numpy as np
 from scipy import interpolate, optimize
 from enum import Enum
@@ -114,29 +114,19 @@ def transition_time(voltage: np.ndarray, time: np.ndarray,
         # Normalize to rising edge.
         y_shifted = -y_shifted
 
-    # Estimate where `y` crosses `threshold`.
-    estimate = time[transition_idx]
-
     # Interpolate: Find zero between the both samples.
     # y1 and y2 don't have the same sign. Find the zero-crossing inbetween.
     y1 = y_shifted[transition_idx]
-    y2 = y_shifted[transition_idx+1]
+    y2 = y_shifted[transition_idx + 1]
     assert y1 <= 0 <= y2
     t1 = time[transition_idx]
-    t2 = time[transition_idx+1]
+    t2 = time[transition_idx + 1]
 
     dydt = (y2 - y1) / (t2 - t1)
     # 0 = y1 + delta_t * dydt
     # delta_t = -y1/dydt
-    delta_t = -y1/dydt
+    delta_t = -y1 / dydt
     t_threshold_crossing = t1 + delta_t
-
-    # # Interpolate the samples find a more accurate time of threshold crossing.
-    # f_interp = interpolate.interp1d(time, y_shifted)
-    #
-    # threshold_cross_arg = optimize.bisect(f_interp, time[transition_idx - 1], time[transition_idx + 1], xtol=1e-20)
-    #
-    # print(threshold_cross_arg, t_threshold_crossing)
 
     return t_threshold_crossing
 

@@ -1,28 +1,26 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-lib 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-lib).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-## 
-## You should have received a copy of the GNU General Public License
-## along with this program. If not, see <http://www.gnu.org/licenses/>.
-##
-
+#
+# Copyright (c) 2019-2020 Thomas Kramer.
+#
+# This file is part of librecell 
+# (see https://codeberg.org/tok/librecell).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 import os
 import argparse
-import tempfile
-
 import joblib
+import tempfile
 
 from liberty.parser import parse_liberty
 from liberty.types import *
@@ -206,6 +204,10 @@ def main():
     if len(spice_includes) == 0:
         logger.warning("No transistor model supplied. Use --include or -I.")
 
+    # TODO: No hardcoded data here!
+    output_capacitances = np.array([0.05, 0.1, 0.2, 0.4, 0.8, 1.6])*1e-12 # pf
+    input_transition_times = np.array([0.1, 0.2, 0.4, 0.8, 1.6, 3.2])*1e-9 # ns
+
     # Characterize all cells in the list.
     def characterize_cell(cell_name: str) -> Group:
         cell_workingdir = os.path.join(workingdir, cell_name)
@@ -289,6 +291,10 @@ def main():
                     supply_voltage=supply_voltage,
                     trip_points=trip_points,
                     timing_corner=calc_mode,
+
+                    total_output_net_capacitance=output_capacitances,
+                    input_net_transition=input_transition_times,
+
                     spice_netlist_file=netlist_file_table[cell_name],
                     spice_include_files=spice_includes,
 
@@ -299,8 +305,8 @@ def main():
                 )
 
                 # TODO: get correct index/variable mapping from liberty file.
-                index_1 = result['total_output_net_capacitance']
-                index_2 = result['input_net_transition']
+                index_1 = result['total_output_net_capacitance'] * capacitance_unit_scale_factor
+                index_2 = result['input_net_transition'] * time_unit_scale_factor
                 # TODO: remember all necessary templates and create template tables.
                 table_template_name = 'delay_template_{}x{}'.format(len(index_1), len(index_2))
 

@@ -1,24 +1,24 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-lib 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-lib).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-## 
-## You should have received a copy of the GNU General Public License
-## along with this program. If not, see <http://www.gnu.org/licenses/>.
-##
-from typing import List, Optional
+#
+# Copyright (c) 2019-2020 Thomas Kramer.
+#
+# This file is part of librecell 
+# (see https://codeberg.org/tok/librecell).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 import os
+from typing import List, Optional
 
 from itertools import product
 
@@ -28,7 +28,6 @@ from .ngspice_subprocess import run_simulation
 from lccommon.net_util import get_subcircuit_ports
 import tempfile
 import logging
-import matplotlib.pyplot as plt
 
 from scipy import interpolate
 

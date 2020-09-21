@@ -1,26 +1,24 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-lib 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-lib).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-## 
-## You should have received a copy of the GNU General Public License
-## along with this program. If not, see <http://www.gnu.org/licenses/>.
-##
-import os
+#
+# Copyright (c) 2019-2020 Thomas Kramer.
+#
+# This file is part of librecell 
+# (see https://codeberg.org/tok/librecell).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 import tempfile
 import matplotlib.pyplot as plt
-
 from itertools import count
 
 from .ngspice_subprocess import run_simulation
@@ -142,13 +140,16 @@ def get_clock_to_output_delay(
     input_wave *= supply_voltage
     clk_wave *= supply_voltage
 
-    input_source_statement = f"Vdata_in {data_in} {ground} PWL({input_wave.to_spice_pwl_string()}) DC=0"
-    clk_source_statement = f"Vclk {clock_input} {ground} PWL({clk_wave.to_spice_pwl_string()}) DC=0"
-
     input_voltages = {
         clock_input: clk_wave,
         data_in: input_wave
     }
+
+    # Create SPICE description of the input voltage sources.
+    source_statements = "\n".join(
+        (f"V{net} {net} {ground} PWL({wave.to_spice_pwl_string()}) DC=0"
+         for net, wave in input_voltages.items())
+    )
 
     samples_per_period = int(period / time_step)
     logger.debug("Run simulation.")
@@ -159,16 +160,17 @@ def get_clock_to_output_delay(
     # TODO
     initial_conditions = {
         supply: supply_voltage,
-        data_in: input_wave(0),
-        clock_input: clk_wave(0),
         data_out: 0 if rising_data_edge else supply_voltage
     }
+    # Calculate initial conditions for all PWL sources.
+    for net, wave in input_voltages.items():
+        initial_conditions[net] = wave(0)
 
-    # TODO
+    # TODO: Simulate only until output reaches threshold.
     if rising_data_edge:
-        breakpoint_statement = f"stop when v({data_out}) > {supply_voltage*0.99}"
+        breakpoint_statement = f"stop when v({data_out}) > {supply_voltage * 0.99}"
     else:
-        breakpoint_statement = f"stop when v({data_out}) < {supply_voltage*0.01}"
+        breakpoint_statement = f"stop when v({data_out}) < {supply_voltage * 0.01}"
 
     # Create ngspice simulation script.
     sim_netlist = f"""* librecell {__name__}
@@ -189,8 +191,7 @@ Vsupply {supply} {ground} {supply_voltage}
 * TODO {{static_supply_voltage_statemets}}
 
 * Active input signals (clock & data_in).
-{clk_source_statement}
-{input_source_statement}
+{source_statements}
 
 * Initial conditions.
 * Also all voltages of DC sources must be here if they are needed to compute the initial conditions.
@@ -259,8 +260,13 @@ exit
     input_voltage /= supply_voltage
     output_voltage /= supply_voltage
 
-    q0 = output_voltage[0] > 0.5
-    q1 = output_voltage[-1] > 0.5
+    if rising_data_edge:
+        output_threshold = trip_points.output_threshold_rise
+    else:
+        output_threshold = trip_points.output_threshold_fall
+
+    q0 = output_voltage[0] > output_threshold
+    q1 = output_voltage[-1] > output_threshold
 
     if not q0 and q1:
         # Output has rising edge
@@ -299,14 +305,17 @@ def test_plot_flipflop_setup_behavior():
     ground = 'GND'
     supply = 'VDD'
 
-    input_rise_time = 0.060e-9
-    input_fall_time = 0.060e-9
+    input_rise_time = 0.010e-9
+    input_fall_time = 0.010e-9
 
     temperature = 27
+    logger.info(f"Temperature: {temperature} C")
 
     output_load_capacitance = 0.06e-12
+    logger.info(f"Output load capacitance: {output_load_capacitance} F")
 
     time_step = 10e-12
+    logger.info(f"Time step: {time_step} s")
 
     # TODO: find appropriate simulation_duration_hint
     simulation_duration_hint = 250e-12
@@ -315,6 +324,7 @@ def test_plot_flipflop_setup_behavior():
     includes = [include_file, model_file]
 
     vdd = 1.1
+    logger.info(f"Supply voltage: {vdd} V")
 
     # Voltage sources for input signals.
     # input_sources = [circuit.V('in_{}'.format(inp), inp, circuit.gnd, 'dc 0 external') for inp in inputs]
@@ -330,6 +340,15 @@ def test_plot_flipflop_setup_behavior():
             rising_clock_edge: bool,
             rising_data_edge: bool
     ):
+        """
+        Wrapper around `get_clock_to_output_delay()`. Results are cached such that a further call with same arguments returns the
+        cached value of the first call.
+        :param setup_time:
+        :param hold_time:
+        :param rising_clock_edge:
+        :param rising_data_edge:
+        :return:
+        """
         print(f"evaluate delay_f({setup_time}, {hold_time}, {rising_clock_edge}, {rising_data_edge})")
 
         cache_tag = (setup_time, hold_time, rising_clock_edge, rising_data_edge)
@@ -369,6 +388,9 @@ def test_plot_flipflop_setup_behavior():
         setup_time = setup_time_guess
         hold_time = hold_time_guess
 
+        assert setup_time != 0  # Does not terminate otherwise.
+        assert hold_time != 0  # Does not terminate otherwise.
+
         prev_delay = None
         delay = None
         ctr = count()
@@ -381,7 +403,7 @@ def test_plot_flipflop_setup_behavior():
                 diff = abs(delay - prev_delay)
                 fraction = diff / delay
                 if fraction < 0.001:
-                    # close enough
+                    # Close enough.
                     break
             setup_time = setup_time * 2
             hold_time = hold_time * 2
@@ -430,21 +452,28 @@ def test_plot_flipflop_setup_behavior():
             :return:
             """
             # print('eval f', setup_time)
+            # assert setup_time + hold_time >= input_rise_time + input_fall_time
             delay = delay_f(setup_time=setup_time, hold_time=hold_time,
                             rising_clock_edge=pos_edge_flipflop,
                             rising_data_edge=rising_data_edge)
             return delay - max_delay
 
-        # x = np.linspace(0, float(setup_guess), 200)
-        # y = np.array([f(st) for st in x])
-        # plt.xlabel('setup time')
-        # plt.plot(x, y)
-        # plt.show()
-
-        shortest = max(0, -hold_time)
+        # Determine min and max setup time for binary search.
+        shortest = -hold_time + input_rise_time + input_fall_time
         longest = setup_guess
-        min_setup_time_indep = optimize.bisect(f, shortest, longest)
-        # min_setup_time_indep = optimize.newton(f, x0=float(setup_guess))
+        a = f(shortest)
+        b = f(longest)
+        assert a > 0
+        # Make sure f(longest) is larger than zero.
+        while not b < 0:
+            longest = longest*2
+            b = f(longest)
+
+        xtol = 1e-20
+        min_setup_time_indep = optimize.brentq(f, shortest, longest, xtol=xtol)
+        delay = f(min_setup_time_indep)
+        # Check if we really found the root of `f`.
+        assert np.allclose(0, delay, atol=xtol * 1000), "Failed to find solution for minimal setup time."
 
         return min_setup_time_indep, f(min_setup_time_indep) + max_delay
 
@@ -459,7 +488,6 @@ def test_plot_flipflop_setup_behavior():
         """
         max_delay = max_rise_delay if rising_data_edge else max_fall_delay
         hold_guess = hold_guess_rise if rising_data_edge else hold_guess_fall
-        setup_guess = setup_guess_rise if rising_data_edge else setup_guess_fall
 
         def f(hold_time: float) -> float:
             """
@@ -474,55 +502,70 @@ def test_plot_flipflop_setup_behavior():
                             rising_data_edge=rising_data_edge)
             return delay - max_delay
 
-        # print(hold_guess)
-        # x = np.linspace(-1*hold_guess, 1*hold_guess, 100)
-        # y = np.array([f(st) for st in x])
-        # plt.plot(x, y, 'x-')
-        # plt.show()
-        # exit(1)
+        # Determine min and max hold time for binary search.
+        shortest = -setup_time + input_rise_time + input_fall_time
+        longest = hold_guess
+        a = f(shortest)
+        b = f(longest)
+        assert a > 0
+        # Make sure f(longest) is larger than zero.
+        while not b < 0:
+            longest = longest*2
+            b = f(longest)
 
-        min_hold_time_indep = optimize.bisect(f, -float(setup_guess), float(hold_guess))
-        # min_hold_time_indep = optimize.newton(f, x0=float(setup_guess))
+        xtol = 1e-20
+        min_hold_time_indep = optimize.brentq(f, shortest, longest, xtol=xtol)
+        delay = f(min_hold_time_indep)
+        print(delay)
+        # Check if we really found the root of `f`.
+        assert np.allclose(0, delay, atol=xtol * 1000), "Failed to find solution for minimal hold time."
 
         return min_hold_time_indep, f(min_hold_time_indep) + max_delay
 
+    print("Measure unconditional minimal setup time.")
     hold_time_guess = max(hold_guess_rise, hold_guess_fall) * 4
     min_setup_time_uncond_rise, min_setup_delay_rise = find_min_setup(rising_data_edge=True,
                                                                       hold_time=hold_time_guess)
     min_setup_time_uncond_fall, min_setup_delay_fall = find_min_setup(rising_data_edge=False,
                                                                       hold_time=hold_time_guess)
 
-    setup_time_guess = max(setup_guess_rise, setup_guess_fall) * 4
+    print(f"unconditional min. setup time rise: {min_setup_time_uncond_rise}")
+    print(f"unconditional min. setup time fall: {min_setup_time_uncond_fall}")
+    print(f"max delays (rise): {min_setup_delay_rise}")
+    print(f"max delays (fall): {min_setup_delay_fall}")
+
+    print("Measure unconditional minimal hold time.")
+    setup_time_guess = max(setup_guess_rise, setup_guess_fall) * 40
     min_hold_time_uncond_rise, min_hold_delay_rise = find_min_hold(rising_data_edge=True,
                                                                    setup_time=setup_time_guess)
     min_hold_time_uncond_fall, min_hold_delay_fall = find_min_hold(rising_data_edge=False,
                                                                    setup_time=setup_time_guess)
+
+    print(f"unconditional min. hold time rise: {min_hold_time_uncond_rise}")
+    print(f"unconditional min. hold time fall: {min_hold_time_uncond_fall}")
+    print(f"max delays (rise): {min_hold_delay_rise}")
+    print(f"max delays (fall): {min_hold_delay_fall}")
+
 
     # # Find dependent setup time.
     dependent_setup_time_rise, dependent_setup_delay_rise = \
         find_min_setup(rising_data_edge=True,
                        hold_time=min_hold_time_uncond_rise)
 
-    # dependent_setup_time_fall, dependent_setup_delay_fall = \
-    #     find_min_setup(rising_data_edge=False,
-    #                    hold_time=min_hold_time_uncond_fall)
-    #
-    # dependent_hold_time_rise, dependent_hold_delay_rise = \
-    #     find_min_hold(rising_data_edge=True,
-    #                   hold_time=min_setup_time_uncond_rise)
-    #
-    # dependent_hold_time_fall, dependent_hold_delay_fall = \
-    #     find_min_hold(rising_data_edge=False,
-    #                   hold_time=min_setup_time_uncond_fall)
+    dependent_setup_time_fall, dependent_setup_delay_fall = \
+        find_min_setup(rising_data_edge=False,
+                       hold_time=min_hold_time_uncond_fall)
 
-    print("min setup: ", min_setup_time_uncond_rise, min_setup_time_uncond_fall)
-    print("max delays: ", min_setup_delay_rise, min_setup_delay_fall)
+    dependent_hold_time_rise, dependent_hold_delay_rise = \
+        find_min_hold(rising_data_edge=True,
+                      setup_time=min_setup_time_uncond_rise)
 
-    print("min hold: ", min_hold_time_uncond_rise, min_hold_time_uncond_fall)
-    print("min delays: ", min_hold_delay_rise, min_hold_delay_fall)
+    dependent_hold_time_fall, dependent_hold_delay_fall = \
+        find_min_hold(rising_data_edge=False,
+                      setup_time=min_setup_time_uncond_fall)
 
-    # print("dep setup:", dependent_setup_time_rise, dependent_setup_time_fall)
-    # print("dep setup delay:", dependent_setup_delay_rise, dependent_setup_delay_fall)
-    #
-    # print("dep hold:", dependent_hold_time_rise, dependent_hold_time_fall)
-    # print("dep hold delay:", dependent_hold_delay_rise, dependent_hold_delay_fall)
+    print("dep setup:", dependent_setup_time_rise, dependent_setup_time_fall)
+    print("dep setup delay:", dependent_setup_delay_rise, dependent_setup_delay_fall)
+
+    print("dep hold:", dependent_hold_time_rise, dependent_hold_time_fall)
+    print("dep hold delay:", dependent_hold_delay_rise, dependent_hold_delay_fall)

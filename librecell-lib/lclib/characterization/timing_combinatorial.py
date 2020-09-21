@@ -1,28 +1,27 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-lib 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-lib).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-## 
-## You should have received a copy of the GNU General Public License
-## along with this program. If not, see <http://www.gnu.org/licenses/>.
-##
-import os
+#
+# Copyright (c) 2019-2020 Thomas Kramer.
+#
+# This file is part of librecell 
+# (see https://codeberg.org/tok/librecell).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 from typing import List, Dict, Callable, Optional
-import tempfile
-from itertools import product
-import matplotlib.pyplot as plt
 
+from itertools import product
+import os
+import tempfile
 from .util import *
 from .piece_wise_linear import *
 from .ngspice_subprocess import run_simulation
@@ -42,6 +41,9 @@ def characterize_comb_cell(cell_name: str,
                            trip_points: TripPoints,
                            timing_corner: CalcMode,
 
+                           total_output_net_capacitance: np.ndarray,
+                           input_net_transition: np.ndarray,
+
                            spice_netlist_file: str,
                            spice_include_files: List[str] = None,
                            time_resolution=1e-12,
@@ -50,6 +52,8 @@ def characterize_comb_cell(cell_name: str,
                            ) -> Dict[str, np.ndarray]:
     """
     Calculate the NDLM timing table of a cell for a given timing arc.
+    :param input_net_transition: Transistion times of input signals in seconds.
+    :param total_output_net_capacitance: Load capacitance in Farads.
     :param cell_name: The name of the cell in the SPICE model. Required to find it in the spice netlist.
     :param input_pins: List of input pins.
     :param output_pin: The output pin of the timing arc.
@@ -87,16 +91,8 @@ def characterize_comb_cell(cell_name: str,
     # Maximum simulation time.
     time_max = time_resolution * 1e5
 
-    # Define grid points to be evaluated.
-    # TODO: Pass bounds as parameters & find optimal sampling points.
-    total_output_net_capacitance = np.array([0.1, 0.5, 1.2, 3, 4, 5])
-    input_net_transition = np.array([0.06, 0.24, 0.48, 0.9, 1.2, 1.8])
-
-    # Convert into SI units.
-    total_output_net_capacitance = total_output_net_capacitance * 1e-12  # pico farads
-    input_net_transition = input_net_transition * 1e-9  # nano seconds
-
     # Find function to summarize different timing arcs.
+    # TODO: Make this directly parametrizable by caller.
     reduction_function = {
         CalcMode.WORST: max,
         CalcMode.BEST: min,
@@ -190,7 +186,7 @@ def characterize_comb_cell(cell_name: str,
                 input_wave.y = input_wave.y * vdd
 
                 # Create SPICE format of the piece wise linear source.
-                input_source_statement = f"Vdata_in {related_pin} {ground} PWL({input_wave.to_spice_pwl_string()})"
+                input_source_statement = f"Vdata_in {related_pin} {ground} PWL({input_wave.to_spice_pwl_string()}) DC=0"
 
                 # Get initial voltage of active pin.
                 initial_voltage = 0 if input_rising else vdd
@@ -202,7 +198,7 @@ def characterize_comb_cell(cell_name: str,
                     breakpoint_statement = f"stop when v({output_pin}) < {vdd * 0.01}"
 
                 static_supply_voltage_statemets = "\n".join(
-                    (f"Vinput_{net} {ground} {voltage}" for net, voltage in input_voltages.items()))
+                    (f"Vinput_{net} {net} {ground} {voltage}" for net, voltage in input_voltages.items()))
 
                 # Initial node voltages.
                 initial_conditions = {
@@ -310,10 +306,14 @@ exit
                 output_voltage /= vdd
 
                 # Check if signals are already stabilized after one `period`.
-                assert abs(input_voltage[0]) < 0.01, "Input signal not yet stable at start."
-                assert abs(1 - input_voltage[-1]) < 0.01, "Input signal not yet stable at end."
-                assert abs(output_voltage[0]) < 0.01, "Output signal not yet stable at start."
-                assert abs(1 - output_voltage[-1]) < 0.01, "Output signal not yet stable at end."
+                # assert abs(input_voltage[0]) < 0.01, "Input signal not yet stable at start."
+                # assert abs(1 - input_voltage[-1]) < 0.01, "Input signal not yet stable at end."
+                if input_rising:
+                    output_threshold = trip_points.output_threshold_rise
+                else:
+                    output_threshold = trip_points.output_threshold_fall
+                assert abs(output_voltage[0]) <= output_threshold, "Output signal not yet stable at start."
+                assert abs(1 - output_voltage[-1]) <= output_threshold, "Output signal not yet stable at end."
 
                 # Calculate the output slew time: the time the output signal takes to change from
                 # `slew_lower_threshold` to `slew_upper_threshold`.
@@ -336,8 +336,10 @@ exit
                 else:
                     fall_powers.append(switching_energy)
 
-        return (np.array(rise_delays), np.array(fall_delays),
-                np.array(rise_transition_durations), np.array(fall_transition_durations))
+        return (reduction_function(np.array(rise_delays)),
+                reduction_function(np.array(fall_delays)),
+                reduction_function(np.array(rise_transition_durations)),
+                reduction_function(np.array(fall_transition_durations)))
 
     f_vec = np.vectorize(f)
 

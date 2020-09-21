@@ -1,24 +1,16 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-layout 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-layout).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the CERN Open Hardware License (CERN OHL-S) as it will be published
-## by the CERN, either version 2.0 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## CERN Open Hardware License for more details.
-## 
-## You should have received a copy of the CERN Open Hardware License
-## along with this program. If not, see <http://ohwr.org/licenses/>.
-## 
-## 
-##
+#
+# Copyright 2019-2020 Thomas Kramer.
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-S v2.
+#
+# You may redistribute and modify this documentation and make products using it
+# under the terms of the CERN-OHL-S v2 (https:/cern.ch/cern-ohl).
+# This documentation is distributed WITHOUT ANY EXPRESS OR IMPLIED WARRANTY,
+# INCLUDING OF MERCHANTABILITY, SATISFACTORY QUALITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# Please see the CERN-OHL-S v2 for applicable conditions.
+#
+# Source location: https://codeberg.org/tok/librecell
+#
 from .place import TransistorPlacer
 from ..extrema import all_min, all_max
 from lccommon import net_util
@@ -518,7 +510,7 @@ def _transistors2graph(transistors: Iterable[Transistor]) -> nx.MultiGraph:
 def _find_optimal_single_row_placements(transistor_graph: nx.MultiGraph) -> List[List[Transistor]]:
     """ Find with-optimal single row placements of transistors.
 
-    :param transistors: nx.MultiGraph representing the transistor network. Each edge corresponts to a transistor.
+    :param transistors: nx.MultiGraph representing the transistor network. Each edge coresponds to a transistor.
     :return: List[List[Transistor]]
     """
 
@@ -639,12 +631,12 @@ class EulerPlacer(TransistorPlacer):
                         '`HierarchicalPlacer` could be a better choice.')
 
         # Find best nmos/pmos row pair.
-
         pairs = product(all_nmos, all_pmos)
 
         input_nets = net_util.get_cell_inputs(transistors)
         output_nets = {}
 
+        # Assemble optimal cell candidates.
         cells = (_assemble_cell(nmos, pmos) for nmos, pmos in pairs)
 
         best_cells_gate_match = all_max(cells, key=_num_gate_matches)

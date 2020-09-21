@@ -1,24 +1,16 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-layout 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-layout).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the CERN Open Hardware License (CERN OHL-S) as it will be published
-## by the CERN, either version 2.0 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## CERN Open Hardware License for more details.
-## 
-## You should have received a copy of the CERN Open Hardware License
-## along with this program. If not, see <http://ohwr.org/licenses/>.
-## 
-## 
-##
+#
+# Copyright 2019-2020 Thomas Kramer.
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-S v2.
+#
+# You may redistribute and modify this documentation and make products using it
+# under the terms of the CERN-OHL-S v2 (https:/cern.ch/cern-ohl).
+# This documentation is distributed WITHOUT ANY EXPRESS OR IMPLIED WARRANTY,
+# INCLUDING OF MERCHANTABILITY, SATISFACTORY QUALITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# Please see the CERN-OHL-S v2 for applicable conditions.
+#
+# Source location: https://codeberg.org/tok/librecell
+#
 import networkx as nx
 from itertools import count
 from collections import defaultdict
@@ -123,7 +115,7 @@ def _get_routing_node_locations_per_layer(g: nx.Graph) -> Dict[Any, Set[Tuple[in
     return routing_nodes
 
 
-def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
+def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Shapes], tech) -> None:
     """ Remove nodes and edges from  G that would conflict
     with predefined `shapes`.
     :param graph: routing graph.
@@ -188,7 +180,7 @@ def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Region],
     graph.remove_nodes_from(unconnected)
 
 
-def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
+def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Shapes], tech) -> None:
     """ Remove edges in G that are already routed by a shape in `shapes`.
     :param G: Routing graph to be modified.
     :param shapes: Dict[layer, pya.Shapes]
@@ -274,13 +266,13 @@ def extract_terminal_nodes(graph: nx.Graph,
     #         else:
     #             logger.warning("Layer '{}' does not contain any routing nodes.".format(layer))
 
-    # Sanity check
-    error = False
-    for net_name, layer, terminals in terminals_by_net:
-        if len(terminals) == 0:
-            logger.error(
-                "Shape of net {} on layer '{}' does not contain any routing grid point.".format(net_name, layer))
-            error = True
+    # # Sanity check
+    # error = False
+    # for net_name, layer, terminals in terminals_by_net:
+    #     if len(terminals) == 0:
+    #         logger.error(
+    #             "Shape of net {} on layer '{}' does not contain any routing grid point.".format(net_name, layer))
+    #         error = True
 
     return terminals_by_net
 
