@@ -254,7 +254,7 @@ def clean(tech,
 
     # Fix via shapes but allow them to be moved.
     logger.debug("Assuming immutable via shapes.")
-    via_layers = set(tech.via_layers.values())
+    via_layers = set(tech.via_layers.nodes())
     logger.debug("Add constraint for relative immutable shapes: {}".format(via_layers))
     relative_fixed_layers = via_layers
     for l in relative_fixed_layers:
