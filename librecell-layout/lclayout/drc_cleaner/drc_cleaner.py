@@ -112,7 +112,7 @@ def clean(tech,
 
         if isinstance(shape, pya.SimplePolygon):
             poly = shape
-        if isinstance(shape, pya.Polygon):
+        elif isinstance(shape, pya.Polygon):
             poly = shape.to_simple_polygon()
         else:
             poly = shape.simple_polygon
