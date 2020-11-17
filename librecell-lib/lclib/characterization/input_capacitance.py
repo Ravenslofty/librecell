@@ -1,22 +1,22 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-lib 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-lib).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-## 
-## You should have received a copy of the GNU General Public License
-## along with this program. If not, see <http://www.gnu.org/licenses/>.
-##
+#
+# Copyright (c) 2019-2020 Thomas Kramer.
+#
+# This file is part of librecell 
+# (see https://codeberg.org/tok/librecell).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 from typing import List, Dict
 from PySpice.Spice.Netlist import Circuit
 from PySpice.Unit.SiUnits import Farad, Second
@@ -44,7 +44,7 @@ def characterize_input_capacitances(cell_name: str,
                                     output_pins: List[str],
                                     supply_voltage: float,
                                     trip_points: TripPoints,
-                                    timing_corner: TimingCorner,
+                                    timing_corner: CalcMode,
 
                                     spice_netlist_file: str,
                                     spice_include_files: List[str] = None,
@@ -82,9 +82,9 @@ def characterize_input_capacitances(cell_name: str,
 
     # Find function to summarize different timing arcs.
     reduction_function = {
-        TimingCorner.WORST: max,
-        TimingCorner.BEST: min,
-        TimingCorner.TYPICAL: np.mean
+        CalcMode.WORST: max,
+        CalcMode.BEST: min,
+        CalcMode.TYPICAL: np.mean
     }[timing_corner]
     logger.info("Reduction function for summarizing multiple timing arcs: {}".format(reduction_function.__name__))
 

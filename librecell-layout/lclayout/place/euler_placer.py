@@ -1,24 +1,16 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-layout 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-layout).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the CERN Open Hardware License (CERN OHL-S) as it will be published
-## by the CERN, either version 2.0 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## CERN Open Hardware License for more details.
-## 
-## You should have received a copy of the CERN Open Hardware License
-## along with this program. If not, see <http://ohwr.org/licenses/>.
-## 
-## 
-##
+#
+# Copyright 2019-2020 Thomas Kramer.
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-S v2.
+#
+# You may redistribute and modify this documentation and make products using it
+# under the terms of the CERN-OHL-S v2 (https:/cern.ch/cern-ohl).
+# This documentation is distributed WITHOUT ANY EXPRESS OR IMPLIED WARRANTY,
+# INCLUDING OF MERCHANTABILITY, SATISFACTORY QUALITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# Please see the CERN-OHL-S v2 for applicable conditions.
+#
+# Source location: https://codeberg.org/tok/librecell
+#
 from .place import TransistorPlacer
 from ..extrema import all_min, all_max
 from lccommon import net_util
@@ -121,7 +113,7 @@ def _row_io_ordering_cost(row: List[Transistor], input_nets: Set[Any], output_ne
     """
 
     nets = [(net, pos) for pos, net in
-            enumerate(chain(*[[t.left, t.gate, t.right] for t in row if t is not None]))
+            enumerate(chain(*[[t.source_net, t.gate_net, t.drain_net] for t in row if t is not None]))
             ]
     return _io_ordering_cost(nets, input_nets, output_nets)
 
@@ -158,7 +150,7 @@ def _num_gate_matches(cell: Cell) -> int:
     sum = 0
     for a, b in zip(cell.upper, cell.lower):
         if a is not None and b is not None:
-            if a.gate == b.gate:
+            if a.gate_net == b.gate_net:
                 sum += 1
     return sum
 
@@ -182,7 +174,7 @@ def __need_gap(left: Transistor, right: Transistor):
     if left is None or right is None:
         return False
     else:
-        return left.right != right.left
+        return left.drain_net != right.source_net
 
 
 def _wiring_length_bbox1(nets: Iterable[Tuple[Hashable, float]]) -> float:
@@ -227,7 +219,7 @@ def wiring_length_bbox(cell: Cell) -> float:
 
     net_positions = []
     for row in (cell.upper, cell.lower):
-        for pos, net in enumerate(chain(*[[t.left, t.gate, t.right] for t in row if t is not None])):
+        for pos, net in enumerate(chain(*[list(t.terminals()) for t in row if t is not None])):
             net_positions.append((net, pos))
 
     return _wiring_length_bbox1(net_positions)
@@ -240,8 +232,8 @@ class HierarchicalPlacer(TransistorPlacer):
 
     def place(self, transistors: Iterable[Transistor]) -> Cell:
         """ Place transistors by a hierarchical approach.
-        The full circuit is split into subcircuits, each containing only nmos or pmos transistors.
-        The subcircuits are placed independent of their internal placement.
+        The full circuit is split into sub-circuits, each containing only nmos or pmos transistors.
+        The sub-circuits are placed independent of their internal placement.
         :param transistors:
         :return:
         """
@@ -279,7 +271,7 @@ class HierarchicalPlacer(TransistorPlacer):
                 """
 
                 :param width: Width of sub cell
-                :param nets: Set of net names inside the subcell (without power nets)
+                :param nets: Set of net names inside the sub-cell (without power nets)
                 :param row: Row index as a placement constraint. (e.g. 0 for a NMOS sub cell and 1 for a PMOS sub cell)
                 :param id: Some identifier or reference to the transistors in this sub cell.
                 """
@@ -318,9 +310,9 @@ class HierarchicalPlacer(TransistorPlacer):
 
         def get_subcell_net_position(subcells: Iterable[SubCell]) -> List[Tuple[Any, float]]:
             """
-            Get approximate net positions given a row of subcells.
+            Get approximate net positions given a row of sub-cells.
             Each net is treated as it would be localized in the center of the sub cell.
-            :param subcells: A row of subcells
+            :param subcells: A row of sub-cells
             :return: List[(net name, x coordinate)]
             """
             offset = 0
@@ -341,7 +333,7 @@ class HierarchicalPlacer(TransistorPlacer):
 
         # Extract input nets.
         input_nets = net_util.get_cell_inputs(transistors)
-        output_nets = {} # TODO: extract output nets.
+        output_nets = set()  # TODO: extract output nets.
 
         for ps, ns in subcell_placements:
             ppos = get_subcell_net_position(ps)
@@ -510,7 +502,7 @@ def _transistors2graph(transistors: Iterable[Transistor]) -> nx.MultiGraph:
     """
     G = nx.MultiGraph()
     for t in transistors:
-        G.add_edge(t.left, t.right, t)
+        G.add_edge(t.source_net, t.drain_net, t)
     # assert nx.is_connected(G)
     return G
 
@@ -518,7 +510,7 @@ def _transistors2graph(transistors: Iterable[Transistor]) -> nx.MultiGraph:
 def _find_optimal_single_row_placements(transistor_graph: nx.MultiGraph) -> List[List[Transistor]]:
     """ Find with-optimal single row placements of transistors.
 
-    :param transistors: nx.MultiGraph representing the transistor network. Each edge corresponts to a transistor.
+    :param transistors: nx.MultiGraph representing the transistor network. Each edge coresponds to a transistor.
     :return: List[List[Transistor]]
     """
 
@@ -554,7 +546,7 @@ def _find_optimal_single_row_placements(transistor_graph: nx.MultiGraph) -> List
             tour = _trim_none(tour)
             assert len(tour) >= 1
 
-            if tour[0].left != tour[-1].right:
+            if tour[0].source_net != tour[-1].drain_net:
                 # Can not be shifted without inserting a gap.
                 tour.append(None)
 
@@ -588,12 +580,12 @@ def _find_optimal_single_row_placements(transistor_graph: nx.MultiGraph) -> List
         for l, r, t in edges:
             transistor = None
             if isinstance(t, Transistor):
-                if t.left == l:
+                if t.source_net == l:
                     transistor = t
                 else:
                     transistor = t.flipped()
 
-                assert transistor.left == l and transistor.right == r
+                assert transistor.source_net == l and transistor.drain_net == r
 
             ts.append(transistor)
         return ts
@@ -639,12 +631,12 @@ class EulerPlacer(TransistorPlacer):
                         '`HierarchicalPlacer` could be a better choice.')
 
         # Find best nmos/pmos row pair.
-
         pairs = product(all_nmos, all_pmos)
 
         input_nets = net_util.get_cell_inputs(transistors)
         output_nets = {}
 
+        # Assemble optimal cell candidates.
         cells = (_assemble_cell(nmos, pmos) for nmos, pmos in pairs)
 
         best_cells_gate_match = all_max(cells, key=_num_gate_matches)

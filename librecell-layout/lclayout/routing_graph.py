@@ -1,26 +1,19 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-layout 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-layout).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the CERN Open Hardware License (CERN OHL-S) as it will be published
-## by the CERN, either version 2.0 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## CERN Open Hardware License for more details.
-## 
-## You should have received a copy of the CERN Open Hardware License
-## along with this program. If not, see <http://ohwr.org/licenses/>.
-## 
-## 
-##
+#
+# Copyright 2019-2020 Thomas Kramer.
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-S v2.
+#
+# You may redistribute and modify this documentation and make products using it
+# under the terms of the CERN-OHL-S v2 (https:/cern.ch/cern-ohl).
+# This documentation is distributed WITHOUT ANY EXPRESS OR IMPLIED WARRANTY,
+# INCLUDING OF MERCHANTABILITY, SATISFACTORY QUALITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# Please see the CERN-OHL-S v2 for applicable conditions.
+#
+# Source location: https://codeberg.org/tok/librecell
+#
 import networkx as nx
 from itertools import count
+from collections import defaultdict
 
 from .layout.grid_helpers import *
 from .layout.geometry_helpers import *
@@ -105,24 +98,24 @@ def create_routing_graph_base(grid: Grid2D, tech) -> nx.Graph:
     return G
 
 
-def _get_routing_node_locations_per_layer(g: nx.Graph) -> Dict[Any, Tuple[int, int]]:
+def _get_routing_node_locations_per_layer(g: nx.Graph) -> Dict[Any, Set[Tuple[int, int]]]:
     """ For each layer extract the positions of the routing nodes.
 
     :param g: Routing graph.
     :return: Dict[layer name, set of (x,y) coordinates of routing nodes]
     """
     # Dict that will contain for each layer the node coordinates that can be used for routing.
-    routing_nodes = dict()
+    routing_nodes = defaultdict(set)
     # Populate `routing_nodes`
     for e in g.edges:
         (l1, p1), (l2, p2) = e
-        routing_nodes.setdefault(l1, set()).add(p1)
-        routing_nodes.setdefault(l2, set()).add(p2)
+        routing_nodes[l1].add(p1)
+        routing_nodes[l2].add(p2)
 
     return routing_nodes
 
 
-def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
+def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Shapes], tech) -> None:
     """ Remove nodes and edges from  G that would conflict
     with predefined `shapes`.
     :param graph: routing graph.
@@ -186,10 +179,8 @@ def remove_illegal_routing_edges(graph: nx.Graph, shapes: Dict[Any, pya.Region],
             unconnected.add(n)
     graph.remove_nodes_from(unconnected)
 
-    assert nx.is_connected(graph)
 
-
-def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Region], tech) -> None:
+def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Shapes], tech) -> None:
     """ Remove edges in G that are already routed by a shape in `shapes`.
     :param G: Routing graph to be modified.
     :param shapes: Dict[layer, pya.Shapes]
@@ -208,7 +199,7 @@ def remove_existing_routing_edges(G: nx.Graph, shapes: Dict[Any, pya.Region], te
 
 
 def extract_terminal_nodes(graph: nx.Graph,
-                           net_regions: Dict[str, List[pya.Region]],
+                           shapes: Dict[str, pya.Shapes],
                            tech):
     """ Get terminal nodes for each net.
     :param graph: Routing graph.
@@ -221,37 +212,67 @@ def extract_terminal_nodes(graph: nx.Graph,
 
     # Create a list of terminal areas: [(net, layer, [terminal, ...]), ...]
     terminals_by_net = []
-    for net, regions in net_regions.items():
-        for layer, region in regions.items():
-            if layer in routing_nodes:
-                for net_shape in region.each_merged():
+    for layer, _shapes in shapes.items():
+        for net_shape in _shapes.each():
+            net = net_shape.property('net')
 
-                    possible_via_layers = [data['layer'] for _, _, data in via_layers.edges(layer, data=True)]
-                    enc = max((tech.minimum_enclosure.get((layer, via_layer), 0) for via_layer in possible_via_layers))
-                    max_via_size = max((tech.via_size[l] for l in possible_via_layers))
+            if net is not None:
+                possible_via_layers = [data['layer'] for _, _, data in via_layers.edges(layer, data=True)]
+                enc = max((tech.minimum_enclosure.get((layer, via_layer), 0) for via_layer in possible_via_layers))
+                max_via_size = max((tech.via_size[l] for l in possible_via_layers))
 
-                    if layer in tech.routing_layers:
-                        # On routing layers enclosure can be added, so nodes are not required to be properly enclosed.
-                        d = 1
-                    else:
-                        # A routing node must be properly enclosed to be used.
-                        d = enc + max_via_size // 2
+                # TODO: How to convert db.Shape into db.Region in a clean way???
 
-                    routing_terminals = inside(routing_nodes[layer], pya.Region(net_shape), d)
-                    terminals_by_net.append((net, layer, routing_terminals))
-                    # Don't use terminals for normal routing
-                    routing_nodes[layer] -= set(routing_terminals)
-                    # TODO: need to be removed from G also. Better: construct edges in G afterwards.
-            else:
-                logger.warning("Layer '{}' does not contain any routing nodes.".format(layer))
+                s = db.Shapes()
+                s.insert(net_shape)
+                terminal_region = pya.Region(s)
 
-    # Sanity check
-    error = False
-    for net_name, layer, terminals in terminals_by_net:
-        if len(terminals) == 0:
-            logger.error(
-                "Shape of net {} on layer '{}' does not contain any routing grid point.".format(net_name, layer))
-            error = True
+                if layer in tech.routing_layers:
+                    # On routing layers enclosure can be added, so nodes are not required to be properly enclosed.
+                    d = 1
+                    routing_terminals = interacting(routing_nodes[layer], terminal_region, d)
+                else:
+                    # A routing node must be properly enclosed to be used.
+                    d = enc + max_via_size // 2
+                    routing_terminals = inside(routing_nodes[layer], terminal_region, d)
+
+                terminals_by_net.append((net, layer, routing_terminals))
+                # Don't use terminals for normal routing
+                routing_nodes[layer] -= set(routing_terminals)
+                # TODO: need to be removed from G also. Better: construct edges in G afterwards.
+
+    # for net, regions in net_regions.items():
+    #     for layer, region in regions.items():
+    #         if layer in routing_nodes:
+    #             for net_shape in region.each_merged():
+    #
+    #                 possible_via_layers = [data['layer'] for _, _, data in via_layers.edges(layer, data=True)]
+    #                 enc = max((tech.minimum_enclosure.get((layer, via_layer), 0) for via_layer in possible_via_layers))
+    #                 max_via_size = max((tech.via_size[l] for l in possible_via_layers))
+    #
+    #                 if layer in tech.routing_layers:
+    #                     # On routing layers enclosure can be added, so nodes are not required to be properly enclosed.
+    #                     d = 1
+    #                     routing_terminals = interacting(routing_nodes[layer], pya.Region(net_shape), d)
+    #                 else:
+    #                     # A routing node must be properly enclosed to be used.
+    #                     d = enc + max_via_size // 2
+    #                     routing_terminals = inside(routing_nodes[layer], pya.Region(net_shape), d)
+    #
+    #                 terminals_by_net.append((net, layer, routing_terminals))
+    #                 # Don't use terminals for normal routing
+    #                 routing_nodes[layer] -= set(routing_terminals)
+    #                 # TODO: need to be removed from G also. Better: construct edges in G afterwards.
+    #         else:
+    #             logger.warning("Layer '{}' does not contain any routing nodes.".format(layer))
+
+    # # Sanity check
+    # error = False
+    # for net_name, layer, terminals in terminals_by_net:
+    #     if len(terminals) == 0:
+    #         logger.error(
+    #             "Shape of net {} on layer '{}' does not contain any routing grid point.".format(net_name, layer))
+    #         error = True
 
     return terminals_by_net
 
@@ -270,13 +291,15 @@ def embed_transistor_terminal_nodes(G: nx.Graph,
     """
     # Connect terminal nodes of transistor gates in G.
     for t_layout in transistor_layouts.values():
-        terminals = t_layout.terminals
+        terminals = t_layout.terminal_nodes()
         for net, ts in terminals.items():
             for t in ts:
                 layer, (x, y) = t
 
+                logger.info(f"Terminal node {net} {layer} {t}")
+
                 # Insert terminal into G.
-                next_x = grid_round(x, tech.grid_offset_x, tech.routing_grid_pitch_x)
+                next_x = grid_round(x, tech.routing_grid_pitch_x, tech.grid_offset_x)
 
                 assert next_x == x, Exception("Terminal node not x-aligned.")
 
@@ -312,43 +335,43 @@ def create_virtual_terminal_nodes(G: nx.Graph,
     routing_nodes = _get_routing_node_locations_per_layer(G)
 
     # Create virtual graph nodes for each net terminal.
-    virtual_terminal_nodes = {}
+    virtual_terminal_nodes = defaultdict(list)
     cnt = count()
 
     for net, layer, terminals in terminals_by_net:
         weight = 1000
         if len(terminals) > 0:
-            if layer == 'l_active' and False:  # TODO: make tech independet
-                for p in terminals:
-                    # Force router to connect to all contacts to a l_active shape.
-                    virtual_net_terminal = ('virtual', net, layer, next(cnt))
-                    virtual_terminal_nodes.setdefault(net, []).append(virtual_net_terminal)
-                    n = layer, p
-                    assert n in G.nodes, "Node not present in graph: %s" % str(n)
-                    G.add_edge(virtual_net_terminal, n, weight=weight)
-            else:
-                virtual_net_terminal = ('virtual', net, layer, next(cnt))
-                virtual_terminal_nodes.setdefault(net, []).append(virtual_net_terminal)
+            # if layer in (l_ndiffusion, l_pdiffusion) and False:  # TODO: make tech independet
+            #     for p in terminals:
+            #         # Force router to connect to all contacts to a l_active shape.
+            #         virtual_net_terminal = ('virtual', net, layer, next(cnt))
+            #         virtual_terminal_nodes[net].append(virtual_net_terminal)
+            #         n = layer, p
+            #         assert n in G.nodes, "Node not present in graph: %s" % str(n)
+            #         G.add_edge(virtual_net_terminal, n, weight=weight)
+            # else:
+            virtual_net_terminal = ('virtual', net, layer, next(cnt))
+            virtual_terminal_nodes[net].append(virtual_net_terminal)
 
-                for p in terminals:
-                    n = layer, p
-                    assert n in G.nodes, "Node not present in graph: %s" % str(n)
-                    # High weight for virtual edge
-                    # TODO: High weight only for low-resistance layers.
-                    G.add_edge(virtual_net_terminal, n, weight=weight)
+            for p in terminals:
+                n = layer, p
+                assert n in G.nodes, "Node not present in graph: %s" % str(n)
+                # High weight for virtual edge
+                # TODO: High weight only for low-resistance layers.
+                G.add_edge(virtual_net_terminal, n, weight=weight)
 
     cnt = count()
     # Create virtual nodes for I/O pins.
     for p in io_pins:
         virtual_net_terminal = ('virtual_pin', p, tech.pin_layer, next(cnt))
-        virtual_terminal_nodes.setdefault(p, []).append(virtual_net_terminal)
+        virtual_terminal_nodes[p].append(virtual_net_terminal)
 
         for p in routing_nodes[tech.pin_layer]:
             n = tech.pin_layer, p
             x, y = p
             assert n in G.nodes, "Node not present in graph: %s" % str(n)
             # A huge weight assures that the virtual node is not used as a worm hole for routing.
-            weight = 100000 + (y - tech.unit_cell_height // 2) // tech.routing_grid_pitch_y
+            weight = 10000000 + (y - tech.unit_cell_height // 2) // tech.routing_grid_pitch_y
             G.add_edge(virtual_net_terminal, n, weight=weight)
 
     return virtual_terminal_nodes

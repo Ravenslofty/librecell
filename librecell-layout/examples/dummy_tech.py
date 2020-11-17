@@ -1,3 +1,16 @@
+#
+# Copyright 2019-2020 Thomas Kramer.
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-S v2.
+#
+# You may redistribute and modify this documentation and make products using it
+# under the terms of the CERN-OHL-S v2 (https:/cern.ch/cern-ohl).
+# This documentation is distributed WITHOUT ANY EXPRESS OR IMPLIED WARRANTY,
+# INCLUDING OF MERCHANTABILITY, SATISFACTORY QUALITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# Please see the CERN-OHL-S v2 for applicable conditions.
+#
+# Source location: https://codeberg.org/tok/librecell
+#
 from lclayout.layout.layers import *
 from lclayout.writer.magic_writer import MagWriter
 from lclayout.writer.lef_writer import LefWriter
@@ -16,7 +29,8 @@ db_unit = 1e-9
 transistor_channel_width_sizing = 1
 
 # GDS2 layer numbers for final output.
-my_active = (1, 0)
+my_ndiffusion = (1, 0)
+my_pdiffusion = (1, 7)
 my_nwell = (2, 0)
 my_nwell2 = (2, 1)
 my_pwell = (2, 7)
@@ -36,7 +50,8 @@ my_abutment_box = (200, 0)
 # For the final output the layers can be remapped with a mapping
 # defined in this dictioinary.
 output_map = {
-    l_active: my_active,
+    l_ndiffusion: my_ndiffusion,
+    l_pdiffusion: my_pdiffusion,
     l_nwell: [my_nwell, my_nwell2],  # Map l_nwell to two output layers.
     l_pwell: [my_pwell],  # Output layer for pwell. Uncomment this if needed. For instance for twin-well processes.
     l_poly: my_poly,
@@ -56,15 +71,17 @@ output_map = {
 output_writers = [
     MagWriter(
         tech_name='scmos',
-        scale_factor=0.1, # Scale all coordinates by this factor (rounded down to next integer).
+        scale_factor=0.1,  # Scale all coordinates by this factor (rounded down to next integer).
         output_map={
             l_via1: 'm2contact',
             l_poly: 'polysilicon',
             l_abutment_box: ['border', 'fence'],
             l_metal1: 'metal1',
+            l_metal2: 'metal2',
             l_metal1_label: 'metal1',
             l_metal2_label: 'metal2',
-            l_active: 'ndiffusion',
+            l_ndiffusion: 'ndiffusion',
+            l_pdiffusion: 'pdiffusion',
             l_metal2_pin: 'metal2',
             l_poly_contact: 'polycontact',
             l_diff_contact: 'pdcontact'
@@ -86,7 +103,8 @@ output_writers = [
 # Example for a layer that can be used for horizontal and vertical tracks: {'MyLayer1' : 'hv'}
 # Example for a layer that can be contacted but not used for routing: {'MyLayer2' : ''}
 routing_layers = {
-    l_active: '',
+    l_ndiffusion: '',
+    l_pdiffusion: '',
     l_poly: 'hv',
     l_metal1: 'hv',
     l_metal2: 'hv',
@@ -94,13 +112,17 @@ routing_layers = {
 
 # Minimum spacing rules for layer pairs.
 min_spacing = {
-    (l_active, l_active): 50,
-    (l_active, l_poly_contact): 10,
+    (l_ndiffusion, l_ndiffusion): 50,
+    (l_pdiffusion, l_pdiffusion): 50,
+    (l_pdiffusion, l_ndiffusion): 50,
+    (l_ndiffusion, l_poly_contact): 10,
+    (l_pdiffusion, l_poly_contact): 10,
     (l_nwell, l_nwell): 50,
     (l_nwell, l_pwell): 0,  # This might be used when n-well and p-well layers are used for a twin-well process.
     (l_pwell, l_pwell): 50,
     (l_poly, l_nwell): 50,
-    (l_poly, l_active): 50,
+    (l_poly, l_ndiffusion): 50,
+    (l_poly, l_pdiffusion): 50,
     (l_poly, l_poly): 50,
     (l_poly, l_diff_contact): 10,
     (l_metal1, l_metal1): 50,
@@ -129,6 +151,13 @@ gate_length = 50
 # Minimum length a polysilicon gate must overlap the silicon.
 gate_extension = 100
 
+# y-offset of the transistors (active) relative to the upper or lower boundary of the cell.
+# (minimal distance in y-direction from 'active' to cell boundary)
+# This showed to be too tricky to choose automatically because there are following trade offs:
+#   - Placing NMOS and PMOS rows closer to the center allows for shorter vertical wiring but makes the routing between the rows harder.
+#   - Also this offset must be chosen in a way such that the active region actually lies on at least one routing grid point.
+transistor_offset_y = 125
+
 # Routing pitch
 routing_grid_pitch_x = unit_cell_width // 2
 routing_grid_pitch_y = unit_cell_height // 8
@@ -140,7 +169,7 @@ grid_offset_y = routing_grid_pitch_y // 2
 # Width of power rail.
 power_rail_width = 360
 
-# Minimum gate widths of transistors, i.e. minimal widths of l_active.
+# Minimum gate widths of transistors, i.e. minimal widths of l_ndiffusion and l_pdiffusion.
 minimum_gate_width_nfet = 200
 minimum_gate_width_pfet = 200
 
@@ -180,20 +209,24 @@ minimum_width = {
 # Syntax: {(outer layer, inner layer): minimum enclosure, ...}
 minimum_enclosure = {
     # Via enclosure
-    (l_active, l_diff_contact): 10,
+    (l_ndiffusion, l_diff_contact): 10,
+    (l_pdiffusion, l_diff_contact): 10,
     (l_poly, l_poly_contact): 10,
     (l_metal1, l_diff_contact): 10,
     (l_metal1, l_poly_contact): 10,
     (l_metal1, l_via1): 20,
     (l_metal2, l_via1): 20,
 
-    # l_nwell must overlap l_active
-    (l_nwell, l_active): 100
+    # l_nwell must overlap l_pdiffusion.
+    (l_nwell, l_pdiffusion): 100,
+    # l_pwell must overlap l_ndiffusion.
+    (l_pwell, l_ndiffusion): 100
 }
 
 # Minimum notch rules.
 minimum_notch = {
-    l_active: 50,
+    l_ndiffusion: 50,
+    l_pdiffusion: 50,
     l_poly: 50,
     l_metal1: 50,
     l_metal2: 50,
@@ -226,7 +259,8 @@ weights_vertical = {
 
 # Via weights.
 via_weights = {
-    (l_metal1, l_active): 500,
+    (l_metal1, l_ndiffusion): 500,
+    (l_metal1, l_pdiffusion): 500,
     (l_metal1, l_poly): 500,
     (l_metal1, l_metal2): 400
 }

@@ -1,22 +1,22 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-lib 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-lib).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-## 
-## You should have received a copy of the GNU General Public License
-## along with this program. If not, see <http://www.gnu.org/licenses/>.
-##
+#
+# Copyright (c) 2019-2020 Thomas Kramer.
+#
+# This file is part of librecell 
+# (see https://codeberg.org/tok/librecell).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 from PySpice.Probe.Plot import plot
 from PySpice.Spice.Netlist import Circuit
 from PySpice.Spice.NgSpice.Shared import NgSpiceShared
@@ -35,7 +35,8 @@ def simulate_circuit(circuit: Circuit,
                      step_time: Second,
                      end_time: Second,
                      temperature: float = 25,
-                     initial_voltages: Optional[Dict[str, Volt]] = None):
+                     initial_voltages: Optional[Dict[str, Volt]] = None,
+                     simulator='ngspice-shared'):
     """
     Simulate a circuit with given input voltages.
     :param circuit:
@@ -47,6 +48,8 @@ def simulate_circuit(circuit: Circuit,
     :param temperature: Simulation temperature.
     :param initial_voltages: Dict[node name, voltage].
         Initial voltages for nodes. Default = None.
+    :param simulator: Choose the simulator.
+        One of {'ngspice-shared', 'ngspice-subprocess', 'xyce-serial', 'xyce-parallel'}
     :return: PySpice Analysis object.
     """
     circuit = circuit.clone()
@@ -60,7 +63,8 @@ def simulate_circuit(circuit: Circuit,
     #                               )
 
     simulator = circuit.simulator(temperature=temperature,
-                                  nominal_temperature=temperature
+                                  nominal_temperature=temperature,
+                                  simulator=simulator
                                   )
 
     # Create input drivers.
@@ -82,6 +86,7 @@ def simulate_circuit(circuit: Circuit,
     # Run transient analysis.
     # Set use_initial_condition (uic) to False to enable DC bias computation. See ngspice manual 15.2.2 2)
     logger.info("Run transient analysis. step_time = {}, end_time = {}".format(step_time, end_time))
+
     analysis = simulator.transient(step_time=step_time,
                                    end_time=end_time,
                                    use_initial_condition=False
@@ -94,6 +99,7 @@ def piece_wise_linear_voltage_source(circuit: Circuit, name: str, plus, minus, w
                                      repeat=None, time_delay=None):
     """ Create a piece wise linear voltage source.
     This is a helper function needed because PWL sources are not properly handled by PySpice at time of this writing.
+
     :param circuit: The netlist to add the source.
     :param name: Name of the voltage source.
     :param plus: Positive terminal.

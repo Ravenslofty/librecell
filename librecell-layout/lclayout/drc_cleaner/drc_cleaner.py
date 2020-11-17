@@ -1,24 +1,16 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-layout 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-layout).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the CERN Open Hardware License (CERN OHL-S) as it will be published
-## by the CERN, either version 2.0 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## CERN Open Hardware License for more details.
-## 
-## You should have received a copy of the CERN Open Hardware License
-## along with this program. If not, see <http://ohwr.org/licenses/>.
-## 
-## 
-##
+#
+# Copyright 2019-2020 Thomas Kramer.
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-S v2.
+#
+# You may redistribute and modify this documentation and make products using it
+# under the terms of the CERN-OHL-S v2 (https:/cern.ch/cern-ohl).
+# This documentation is distributed WITHOUT ANY EXPRESS OR IMPLIED WARRANTY,
+# INCLUDING OF MERCHANTABILITY, SATISFACTORY QUALITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# Please see the CERN-OHL-S v2 for applicable conditions.
+#
+# Source location: https://codeberg.org/tok/librecell
+#
 import klayout.db as pya
 from klayout.db import Point, Shape, Polygon, Shapes, Region
 
@@ -120,7 +112,7 @@ def clean(tech,
 
         if isinstance(shape, pya.SimplePolygon):
             poly = shape
-        if isinstance(shape, pya.Polygon):
+        elif isinstance(shape, pya.Polygon):
             poly = shape.to_simple_polygon()
         else:
             poly = shape.simple_polygon
@@ -262,7 +254,7 @@ def clean(tech,
 
     # Fix via shapes but allow them to be moved.
     logger.debug("Assuming immutable via shapes.")
-    via_layers = set(tech.via_layers.values())
+    via_layers = set(tech.via_layers.nodes())
     logger.debug("Add constraint for relative immutable shapes: {}".format(via_layers))
     relative_fixed_layers = via_layers
     for l in relative_fixed_layers:
@@ -279,8 +271,10 @@ def clean(tech,
 
     # TODO: more generic, based on technology file
     containtement_constraints = [
-        ([l_abutment_box], [l_active, l_diff_contact, l_poly_contact, l_via1, l_poly, l_metal1, l_metal2]),
-        ([l_active], [l_diff_contact]),
+        # Syntax ([Container shapes], [shapes that must be inside the container shape, ...])
+        ([l_abutment_box], [l_ndiffusion, l_pdiffusion, l_diff_contact, l_poly_contact, l_via1, l_poly, l_metal1, l_metal2]),
+        ([l_ndiffusion], [l_diff_contact]),
+        ([l_pdiffusion], [l_diff_contact]),
         ([l_poly], [l_poly_contact]),
         ([l_metal1], [l_poly_contact, l_diff_contact, l_via1]),
         ([l_metal2], [l_via1]),

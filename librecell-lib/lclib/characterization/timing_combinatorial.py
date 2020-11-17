@@ -1,22 +1,22 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-lib 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-lib).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-## 
-## You should have received a copy of the GNU General Public License
-## along with this program. If not, see <http://www.gnu.org/licenses/>.
-##
+#
+# Copyright (c) 2019-2020 Thomas Kramer.
+#
+# This file is part of librecell 
+# (see https://codeberg.org/tok/librecell).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
 from typing import List, Dict, Callable
 from PySpice.Spice.Netlist import Circuit
 from PySpice.Unit.SiUnits import Farad, Second
@@ -106,7 +106,7 @@ def measure_comb_cell(circuit: Circuit,
         """ Check if the signal is clearly on HIGH or LOW level right before changing an input.
         :param signal:
         :param sample_point: Where to sample the signal relative to the period.
-        :param epsilon:
+        :param epsilon: Tolerance. Deviations by epsilon from VDD or GND are still considered as a stable signal.
         :return:
         """
         assert 0 < sample_point <= 1.0
@@ -120,6 +120,9 @@ def measure_comb_cell(circuit: Circuit,
     assert output_net in output_functions, \
         "Boolean function not defined for output pin '{}'".format(output_net)
     output_function = output_functions[output_net]
+
+    # Tolerance used for defining a stable signal.
+    epsilon = 0.01
 
     # Loop through all combinations of inputs.
     logger.debug("Loop through all combinations of inputs.")
@@ -149,11 +152,16 @@ def measure_comb_cell(circuit: Circuit,
 
             logger.debug("Voltages at static inputs: {}".format(input_voltages))
 
-            # Do some quick simulations to check if signals settle to a stable state within simulation time.
+            # Variable for simulation results.
+            analysis = None
+
+            # Run the simulation an check if signals settle to a stable state within simulation time.
+            # If the signals don't settle, then increase the simulation time and run the simulation again.
             # TODO: Somehow continuing the simulation would be more efficient (if API allows to).
             for i in count():
                 __circuit = _circuit.clone(title='Timing simulation for pin "{}"'.format(active_pin))
-                step = min(time_step * 4, period / 8)
+                # step = min(time_step * 4, period / 8)
+                step = time_step
                 samples_per_period = int(period / step)
                 logger.debug('Low resolution simulation. Iteration %d', i)
 
@@ -164,19 +172,23 @@ def measure_comb_cell(circuit: Circuit,
 
                 input_wave.y = input_wave.y * vdd
 
+                # Add a voltage source to the circuit.
+                # This applies the changing signal to the input pin.
                 piece_wise_linear_voltage_source(__circuit, 'data_in',
                                                  active_pin,
                                                  __circuit.gnd,
                                                  input_wave)
 
+                # Run simulation.
                 analysis = simulate_circuit(__circuit, input_voltages, step_time=step @ u_s,
                                             end_time=period * len(bitsequence), temperature=temperature)
 
+                # This signals must be stable at the end of the simulation
                 must_be_stable = [analysis[active_pin], analysis[output_net]]
 
-                epsilon = 0.02
+                # ... check if they are all stable.
                 all_stable = all(
-                    (_is_signal_stable(signal, samples_per_period, sample_point=0.8, epsilon=epsilon / 2)
+                    (_is_signal_stable(signal, samples_per_period, epsilon=epsilon)
                      for signal in must_be_stable))
 
                 if all_stable:
@@ -184,12 +196,7 @@ def measure_comb_cell(circuit: Circuit,
                 else:
                     period = period * 2
 
-            # Perform high-resolution simulation.
-            logger.info("Perform high-resolution simulation.")
-            samples_per_period = int(period / time_step)
-
-            analysis = simulate_circuit(__circuit, input_voltages, step_time=time_step,
-                                        end_time=period * len(bitsequence), temperature=temperature)
+            assert analysis is not None
 
             time = np.array(analysis.time)
             assert len(time) > 0
@@ -197,6 +204,8 @@ def measure_comb_cell(circuit: Circuit,
             output_voltage = np.array(analysis[output_net])
             supply_current = np.array(analysis['vpower_vdd'])
 
+            # Plot input and output voltage.
+            # import matplotlib.pyplot as plt
             # plt.plot(time, input_voltage)
             # plt.plot(time, output_voltage)
             # plt.show()
@@ -207,6 +216,7 @@ def measure_comb_cell(circuit: Circuit,
                                      epsilon=epsilon), "Output signal not stable. Increase simulation time."
 
             # Skip first period.
+            # We are interested in the output signal after the input signal edge.
             time = time[samples_per_period - 1:] - float(period)
             input_voltage = input_voltage[samples_per_period - 1:]
             output_voltage = output_voltage[samples_per_period - 1:]
@@ -228,8 +238,9 @@ def measure_comb_cell(circuit: Circuit,
             output_a = output_voltage[0] > v_thresh
             output_b = output_voltage[-1] > v_thresh
 
-            if output_function is not None:
-                assert output_a != output_b, "Supplied boolean function and simulation are inconsistent."
+            # There should be an edge in the output signal.
+            # Because the input signals have been chosen that way.
+            assert output_a != output_b, "Supplied boolean function and simulation are inconsistent."
 
             # Check if output signal toggles.
             if output_a != output_b:
@@ -301,13 +312,13 @@ def characterize_comb_cell(cell_name: str,
                            output_functions: Dict[str, Callable],
                            supply_voltage: float,
                            trip_points: TripPoints,
-                           timing_corner: TimingCorner,
+                           timing_corner: CalcMode,
 
                            spice_netlist_file: str,
                            spice_include_files: List[str] = None,
                            time_resolution=50 @ u_ps,
                            temperature=27,
-                           ):
+                           ) -> Dict[str, np.ndarray]:
     """
     Calculate the NDLM timing table of a cell for a given timing arc.
     :param cell_name: The name of the cell in the SPICE model. Required to find it in the spice netlist.
@@ -361,14 +372,20 @@ def characterize_comb_cell(cell_name: str,
 
     # Find function to summarize different timing arcs.
     reduction_function = {
-        TimingCorner.WORST: max,
-        TimingCorner.BEST: min,
-        TimingCorner.TYPICAL: np.mean
+        CalcMode.WORST: max,
+        CalcMode.BEST: min,
+        CalcMode.TYPICAL: np.mean
     }[timing_corner]
 
     # TODO: Spice ABSTOL, RELTOL, CHARGETOL...
 
     def f(input_transition_time, output_cap):
+        """
+        Evaluate cell timing at a single input-transition-time/output-capacitance point.
+        :param input_transition_time:
+        :param output_cap:
+        :return:
+        """
         # TODO: handle multiple output pins in one run.
         r = measure_comb_cell(circuit,
                               inputs_nets=input_pins,

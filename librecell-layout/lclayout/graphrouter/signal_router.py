@@ -1,30 +1,23 @@
-##
-## Copyright (c) 2019 Thomas Kramer.
-## 
-## This file is part of librecell-layout 
-## (see https://codeberg.org/tok/librecell/src/branch/master/librecell-layout).
-## 
-## This program is free software: you can redistribute it and/or modify
-## it under the terms of the CERN Open Hardware License (CERN OHL-S) as it will be published
-## by the CERN, either version 2.0 of the License, or
-## (at your option) any later version.
-## 
-## This program is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## CERN Open Hardware License for more details.
-## 
-## You should have received a copy of the CERN Open Hardware License
-## along with this program. If not, see <http://ohwr.org/licenses/>.
-## 
-## 
-##
+#
+# Copyright 2019-2020 Thomas Kramer.
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-S v2.
+#
+# You may redistribute and modify this documentation and make products using it
+# under the terms of the CERN-OHL-S v2 (https:/cern.ch/cern-ohl).
+# This documentation is distributed WITHOUT ANY EXPRESS OR IMPLIED WARRANTY,
+# INCLUDING OF MERCHANTABILITY, SATISFACTORY QUALITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# Please see the CERN-OHL-S v2 for applicable conditions.
+#
+# Source location: https://codeberg.org/tok/librecell
+#
+from collections import defaultdict
 import networkx as nx
 
 from itertools import product, tee, count
 from heapq import heappush, heappop
 
-from typing import Iterable, Mapping, TypeVar, AbstractSet, Any, List
+from typing import Dict, Iterable, Mapping, TypeVar, AbstractSet, Any, List
 
 from .. import extrema
 
@@ -177,6 +170,7 @@ def spanning_subtree(
         end = path[-1]
         sinks.remove(end)
 
+    assert nx.is_tree(S)
     return S
 
 
@@ -196,10 +190,10 @@ def absolute_1_center(
         )
         for t in terminals}
 
-    distances_by_node = dict()
+    distances_by_node = defaultdict(list)
     for t, dists in distances.items():
         for n, dist in dists.items():
-            distances_by_node.setdefault(n, []).append(dist)
+            distances_by_node[n].append(dist)
 
     max_distances = {n: max(dists) for n, dists in distances_by_node.items()}
     # Use sum of squared distances as metric.
@@ -272,22 +266,24 @@ def dijkstra_traverse(
         edge_cost_fn,
         node_handler_fn,
         heuristic_fn=None
-):
+) -> Dict[Any, float]:
     """ Create a distance map from all nodes to the source.
     Nodes are visited in increasing distance order and passed to `node_handler_fn`. The search is continued
     as long as `node_handler_fn` returns `True` and there are unvisited nodes left.
 
     Parameters
     ----------
-    sources: Nodes to start the search from.
-    node_cost_fn: Node cost function. node -> cost
-    edge_cost_fn: Edge cost function. (node, node) -> cost
-    node_handler_fn: A function Node -> Bool
+    :param sources: Nodes to start the search from.
+    :param node_cost_fn: Node cost function. node -> cost
+    :param edge_cost_fn: Edge cost function. (node, node) -> cost
+    :param node_handler_fn: A function Node -> Bool
             Each node will be passed to this function in increasing distance order. The search will be aborted if the handler returns `False`.
 
-    heuristic_fn: Source -> Estimated cost to reach target.
+    :param heuristic_fn: Source -> Estimated cost to reach target.
             Heuristic function to estimate the cost from a node to a target.
             Shortest paths are found as long as the heuristic does not overestimate costs.
+
+    :return: Returns a dictionary like {node: distance to source, ...}.
     """
 
     if heuristic_fn is None:
@@ -400,8 +396,6 @@ def shortest_path(
     ----------
     sources: Nodes to start the search from.
     terminals: Destinations.
-    slack_ration: Tradeoff between base cost and history/sharing cost. If set to 1, only the base cost is taken into account.
-    max_paths: Maximum number of paths to find. If set to 1 only the shortest path from a source to a terminal node will be returned.
     """
     sinks = None
     if terminals:
@@ -484,3 +478,62 @@ def trace_back(G: nx.Graph, distance_map: Mapping[N, int], source: N, targets: A
     trace.reverse()
 
     return trace
+
+
+def test_dijkstra_router():
+    """
+    Create a routing tree for a single on a mesh graph signal and plot it.
+    :return:
+    """
+    import matplotlib.pyplot as plt
+
+    # Construct the graph.
+    G = nx.Graph()
+
+    num_x = 10
+    num_y = 10
+    x = range(0, num_x)
+    y = range(0, num_y)
+
+    # Store drawing positions of vertices. For plotting only.
+    pos = {}
+
+    # Construct mesh
+    for name, (x, y) in enumerate(product(x, y)):
+        G.add_node((x, y))
+        pos[(x, y)] = (x, y)
+
+        w = 1
+
+        if x < num_x - 1 and not (1 <= y < 5 and x == 4):
+            G.add_edge((x, y), (x + 1, y), weight=w, orientation='h')
+
+        if y < num_y - 1:
+            G.add_edge((x, y), (x, y + 1), weight=w, orientation='v')
+
+    G.add_edge((8, 0), (9, 0), multi_via=2)
+
+    # Plot the mesh.
+    nx.draw_networkx(G, pos=pos, node_color='gray', node_size=8, edge_color='lightgray', hold=True)
+
+    # This are the terminals to be connected.
+    terminals = [(0, 0), (8, 5), (7, 7), (6, 3), (8, 0), (1, 8), (3, 3), (8, 4)]
+
+    # Find the routing tree.
+    router = DijkstraRouter()
+    tree = router.route(G, terminals, node_cost_fn=lambda x: 1, edge_cost_fn=lambda x: 1)
+    assert nx.is_tree(tree), "Routing solution should be a tree!"
+    for n in terminals:
+        assert n in tree, "Terminal is not in routing tree!"
+
+    # Plot the result.
+
+    edges = list(tree.edges)
+    nx.draw_networkx_edges(G, pos, edgelist=edges, width=4, edge_color='red')
+
+    nx.draw_networkx_nodes(G, pos, nodelist=terminals, node_size=32, node_color='black')
+    # edge_labels = {(a, b): "%.2f" % data.get('weight', 0) for (a, b, data) in G.edges(data=True)}
+    # nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+
+    plt.draw()
+    plt.show()
