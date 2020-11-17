@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='librecell-common',
-      version='0.0.3',
+      version='0.0.4',
       description='Common utility functions for LibreCell suite.',
       long_description=readme(),
       long_description_content_type="text/markdown",
