@@ -330,7 +330,8 @@ def clean(tech,
             min_enclosure[(outer, inner)] = max(min_enc, half_spacing)
 
     # Add minimum enclosure rules (of vias).
-    for (l1, l2), via_layer in tech.via_layers.edges.items():
+    for [l1, l2], via_dict in tech.via_layers.edges.items():
+        via_layer=via_dict['layer']
         for outer in (l1, l2):
             min_enclosure[(outer, via_layer)] = tech.minimum_enclosure[(outer, via_layer)]
 
