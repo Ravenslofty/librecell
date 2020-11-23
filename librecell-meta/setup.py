@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='librecell',
-      version='0.0.1',
+      version='0.0.5',
       description='Meta-package for the LibreCell suite.',
       long_description=readme(),
       long_description_content_type="text/markdown",
@@ -20,7 +20,7 @@ setup(name='librecell',
       ],
       url='https://codeberg.org/tok/librecell',
       author='T. Kramer',
-      author_email='dont@spam.me',
+      author_email='code@tkramer.ch',
       license='',  # ???
       install_requires=[
           'librecell-common',
