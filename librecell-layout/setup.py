@@ -55,6 +55,5 @@ setup(name='librecell-layout',
           'liberty-parser',  # GPLv3
           'pysmt',  # Apache-2.0
           'z3-solver',  #
-          'pulp'  # MIT
       ],
       zip_safe=False)
