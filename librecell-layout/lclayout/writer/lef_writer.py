@@ -24,10 +24,37 @@ from ..lef import types as lef
 logger = logging.getLogger(__name__)
 
 
+def _decompose_region(region: db.Region, ignore_non_rectilinear: bool = False) -> List[db.Box]:
+    """
+    Decompose a `db.Region` of multiple `db.Polygon`s into non-overlapping rectangles (`db.Box`).
+    :param region:
+    :param ignore_non_rectilinear: If set to `True` then non-rectilinear polygons are skipped.
+    :return: Returns the list of rectangles.
+    """
+    trapezoids = region.decompose_trapezoids_to_region()
+    logger.debug("Number of trapezoids: {}".format(trapezoids.size()))
+    rectangles = []
+    for polygon in trapezoids.each():
+        box = polygon.bbox()
+
+        if db.Polygon(box) != polygon:
+            msg = "Cannot decompose into rectangles. Something is not rectilinear!"
+            if not ignore_non_rectilinear:
+                logger.error(msg)
+                assert False, msg
+            else:
+                logger.warning(msg)
+
+        rectangles.append(box)
+    return rectangles
+
+
 def generate_lef_macro(cell_name: str,
                        pin_geometries: Dict[str, List[Tuple[str, db.Shape]]],
                        pin_direction: Dict[str, lef.Direction],
-                       pin_use: Dict[str, lef.Use]
+                       pin_use: Dict[str, lef.Use],
+                       scaling_factor: float = 1,
+                       use_rectangles_only: bool = False,
                        ) -> lef.Macro:
     """
     Assemble a LEF MACRO structure containing the pin shapes.
@@ -35,12 +62,17 @@ def generate_lef_macro(cell_name: str,
     :param pin_geometries: A dictionary mapping pin names to geometries: Dict[pin name, List[(layer name, klayout Shape)]]
     :param pin_direction:
     :param pin_use:
+    :param use_rectangles_only: Decompose all polygons into rectangles. Non-rectilinear shapes are dropped.
     :return: Returns a `lef.Macro` object containing the pin information of the cell.
 
     # TODO: FOREIGN statement (reference to GDS)
     """
 
     logger.debug("Generate LEF MACRO structure for {}.".format(cell_name))
+    logger.debug(f"Scaling factor = {scaling_factor}.")
+
+    f = scaling_factor
+
     pins = []
     # Create LEF Pin objects containing geometry information of the pins.
     for pin_name, ports in pin_geometries.items():
@@ -52,21 +84,26 @@ def generate_lef_macro(cell_name: str,
             region = db.Region()
             region.insert(shape)
             region.merge()
+            if use_rectangles_only:
+                # Decompose into rectangles.
+                boxes = _decompose_region(region)
+                region = db.Region()
+                region.insert(boxes)
 
             geometries = []
-            for p in region.each_merged():
+            for p in region.each():
                 polygon = p.to_simple_polygon()
 
                 box = polygon.bbox()
                 is_box = db.SimplePolygon(box) == polygon
 
                 if is_box:
-                    rect = lef.Rect((box.p1.x, box.p1.y), (box.p2.x, box.p2.y))
+                    rect = lef.Rect((box.p1.x * f, box.p1.y * f), (box.p2.x * f, box.p2.y * f))
                     geometries.append(rect)
                 else:
                     # Port is a polygon
                     # Convert `db.Point`s into LEF points.
-                    points = [(p.x, p.y) for p in polygon.each_point()]
+                    points = [(p.x * f, p.y * f) for p in polygon.each_point()]
                     poly = lef.Polygon(points)
                     geometries.append(poly)
 
@@ -111,10 +148,19 @@ def generate_lef_macro(cell_name: str,
 class LefWriter(Writer):
 
     def __init__(self,
-                 db_unit: float,
-                 output_map: Dict[str, Tuple[int, int]]):
+                 output_map: Dict[str, Tuple[int, int]],
+                 db_unit: float = 1e-6,
+                 use_rectangles_only: bool = False):
+        """
+
+        :param output_map:
+        :param db_unit: Database unit in meters. Default is 1um (1e-6 m)
+        :param use_rectangles_only: Convert all polygons into rectangles. Non-rectilinear shapes are dropped.
+        """
         self.db_unit = db_unit
         self.output_map = output_map
+        self.scaling_factor = 1
+        self.use_rectangles_only = use_rectangles_only
 
     def write_layout(self,
                      layout: db.Layout,
@@ -125,16 +171,11 @@ class LefWriter(Writer):
         # Re-map layers
         layout = remap_layers(layout, self.output_map)
 
-        # Set database unit.
+        # Compute correct scaling factor.
         # klayout expects dbu to be in µm, the tech file takes it in meters.
-        layout.dbu = self.db_unit * 1e6
-        logger.debug("dbu = {} µm".format(layout.dbu))
-
-        # Possibly scale the layout.
-        scaling_factor = 1
-        if scaling_factor != 1:
-            logger.info("Scaling layout by factor {}".format(scaling_factor))
-            layout.transform(db.DCplxTrans(scaling_factor))
+        logger.debug(f"LEF db_unit = {self.db_unit} [m]")
+        scaling_factor = self.db_unit / (layout.dbu)
+        scaling_factor *= self.scaling_factor  # Allow to make corrections from the tech file.
 
         # Write LEF
         # Create and populate LEF Macro data structure.
@@ -142,7 +183,9 @@ class LefWriter(Writer):
         lef_macro = generate_lef_macro(top_cell.name,
                                        pin_geometries=pin_geometries,
                                        pin_use=None,
-                                       pin_direction=None)
+                                       pin_direction=None,
+                                       scaling_factor=scaling_factor,
+                                       use_rectangles_only=self.use_rectangles_only)
 
         # Write LEF
         lef_file_name = "{}.lef".format(top_cell.name)

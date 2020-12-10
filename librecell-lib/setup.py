@@ -26,7 +26,7 @@ def readme():
 
 
 setup(name='librecell-lib',
-      version='0.0.3.post0',
+      version='0.0.5',
       description='CMOS standard cell characterization kit.',
       long_description=readme(),
       long_description_content_type="text/markdown",
@@ -40,7 +40,7 @@ setup(name='librecell-lib',
       ],
       url='https://codeberg.org/tok/librecell',
       author='T. Kramer',
-      author_email='dont@spam.me',
+      author_email='code@tkramer.ch',
       license='AGPL',
       packages=find_packages(),
       package_data={'': ['examples/*', 'test_data/*']},
@@ -55,12 +55,12 @@ setup(name='librecell-lib',
       },
       install_requires=[
           'librecell-common',
-          'numpy',  # BSD
-          'sympy',  # BSD
-          'matplotlib',
-          'networkx',  # BSD
-          'pyspice',  # GPLv3
-          'scipy',  # BSD
-          'liberty-parser',  # GPLv3
+          'numpy==1.*',  # BSD
+          'sympy==1.6.*',  # BSD
+          'matplotlib==3.*',
+          'networkx==2.5',  # BSD
+          'pyspice==1.4.3',  # GPLv3
+          'scipy>=1.5.*',  # BSD
+          'liberty-parser==0.0.4',  # GPLv3
       ],
       zip_safe=False)

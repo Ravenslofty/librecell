@@ -30,8 +30,12 @@ def construct_even_degree_graphs(G: nx.MultiGraph) -> List[nx.MultiGraph]:
 
     assert isinstance(G, nx.MultiGraph), Exception("G must be a nx.MultiGraph.")
 
-    if not nx.is_connected(G):
-        logger.debug("Graph is not connected. Assuming there is a transmission gate.")
+    if nx.is_empty(G):
+        logger.debug("Graph is empty.")
+    else:
+        # nx.is_connected is not defined for empty graphs.
+        if not nx.is_connected(G):
+            logger.debug("Graph is not connected. Assuming there is a transmission gate.")
 
     # Find nodes with odd degree.
     odd_degree_nodes = [n for n, deg in G.degree if deg % 2 == 1]

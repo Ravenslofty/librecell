@@ -112,7 +112,7 @@ def clean(tech,
 
         if isinstance(shape, pya.SimplePolygon):
             poly = shape
-        if isinstance(shape, pya.Polygon):
+        elif isinstance(shape, pya.Polygon):
             poly = shape.to_simple_polygon()
         else:
             poly = shape.simple_polygon
@@ -254,7 +254,7 @@ def clean(tech,
 
     # Fix via shapes but allow them to be moved.
     logger.debug("Assuming immutable via shapes.")
-    via_layers = set(tech.via_layers.values())
+    via_layers = set(tech.via_layers.nodes())
     logger.debug("Add constraint for relative immutable shapes: {}".format(via_layers))
     relative_fixed_layers = via_layers
     for l in relative_fixed_layers:
@@ -330,7 +330,8 @@ def clean(tech,
             min_enclosure[(outer, inner)] = max(min_enc, half_spacing)
 
     # Add minimum enclosure rules (of vias).
-    for (l1, l2), via_layer in tech.via_layers.items():
+    for [l1, l2], via_dict in tech.via_layers.edges.items():
+        via_layer=via_dict['layer']
         for outer in (l1, l2):
             min_enclosure[(outer, via_layer)] = tech.minimum_enclosure[(outer, via_layer)]
 

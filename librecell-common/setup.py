@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='librecell-common',
-      version='0.0.3',
+      version='0.0.5',
       description='Common utility functions for LibreCell suite.',
       long_description=readme(),
       long_description_content_type="text/markdown",
@@ -21,12 +21,11 @@ setup(name='librecell-common',
       ],
       url='https://codeberg.org/tok/librecell',
       author='T. Kramer',
-      author_email='dont@spam.me',
+      author_email='code@tkramer.ch',
       license='GPLv3',
       packages=find_packages(),
       install_requires=[
-          'networkx',  # BSD
-          'pyparsing',  # MIT
-          'pyspice',  # GPLv3
+          'networkx==2.5',  # BSD
+          'pyspice==1.4.3',  # GPLv3
       ],
       zip_safe=False)
