@@ -143,7 +143,8 @@ l_nwell = 'nwell'
 l_pwell = 'pwell'
 l_poly = 'poly'
 l_poly_label = 'poly_label'
-l_diff_contact = 'diff_contact'
+l_pdiff_contact = 'pdiff_contact'
+l_ndiff_contact = 'ndiff_contact'
 l_poly_contact = 'poly_contact'
 l_metal1 = 'metal1'
 l_metal1_label = 'metal1_label'
@@ -160,7 +161,8 @@ layermap = {
     l_ndiffusion: (3, 0),
     l_pdiffusion: (4, 0),
     l_poly: (5, 0),
-    l_diff_contact: (6, 0),
+    l_pdiff_contact: (6, 0),
+    l_ndiff_contact: (6, 1),
     l_poly_contact: (7, 0),
     l_metal1: (8, 0),
     l_metal1_label: (8, 1),
@@ -175,7 +177,7 @@ layermap = {
 layermap_reverse = {v: k for k, v in layermap.items()}
 
 via_layers = nx.Graph()
-via_layers.add_edge(l_ndiffusion, l_metal1, layer=l_diff_contact)
-via_layers.add_edge(l_pdiffusion, l_metal1, layer=l_diff_contact)
+via_layers.add_edge(l_ndiffusion, l_metal1, layer=l_ndiff_contact)
+via_layers.add_edge(l_pdiffusion, l_metal1, layer=l_pdiff_contact)
 via_layers.add_edge(l_poly, l_metal1, layer=l_poly_contact)
 via_layers.add_edge(l_metal1, l_metal2, layer=l_via1)

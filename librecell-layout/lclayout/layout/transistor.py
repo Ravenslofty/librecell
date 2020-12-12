@@ -90,8 +90,10 @@ class DefaultTransistorLayout(TransistorLayout):
         # Get either the ndiffusion or pdiffusion layer.
         if abstract_transistor.channel_type == ChannelType.NMOS:
             l_diffusion = l_ndiffusion
+            l_diff_contact = l_ndiff_contact
         else:
             l_diffusion = l_pdiffusion
+            l_diff_contact = l_pdiff_contact
 
         # Diffusion layer.
         self.l_diffusion = l_diffusion

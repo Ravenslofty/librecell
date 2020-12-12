@@ -272,11 +272,11 @@ def clean(tech,
     # TODO: more generic, based on technology file
     containtement_constraints = [
         # Syntax ([Container shapes], [shapes that must be inside the container shape, ...])
-        ([l_abutment_box], [l_ndiffusion, l_pdiffusion, l_diff_contact, l_poly_contact, l_via1, l_poly, l_metal1, l_metal2]),
-        ([l_ndiffusion], [l_diff_contact]),
-        ([l_pdiffusion], [l_diff_contact]),
+        ([l_abutment_box], [l_ndiffusion, l_pdiffusion, l_ndiff_contact, l_pdiff_contact, l_poly_contact, l_via1, l_poly, l_metal1, l_metal2]),
+        ([l_ndiffusion], [l_ndiff_contact]),
+        ([l_pdiffusion], [l_pdiff_contact]),
         ([l_poly], [l_poly_contact]),
-        ([l_metal1], [l_poly_contact, l_diff_contact, l_via1]),
+        ([l_metal1], [l_poly_contact, l_ndiff_contact, l_pdiff_contact, l_via1]),
         ([l_metal2], [l_via1]),
     ]
 

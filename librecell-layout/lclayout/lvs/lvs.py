@@ -78,7 +78,8 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     rpdiff = make_layer(l_pdiffusion)
     rpoly = make_layer(l_poly)
     # rpoly_lbl = make_layer(l_poly_label)
-    rdiff_cont = make_layer(l_diff_contact)
+    rndiff_cont = make_layer(l_ndiff_contact)
+    rpdiff_cont = make_layer(l_pdiff_contact)
     rpoly_cont = make_layer(l_poly_contact)
     rmetal1 = make_layer(l_metal1)
     rmetal1_lbl = make_layer(l_metal1_label)
@@ -86,6 +87,7 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     rmetal2 = make_layer(l_metal2)
     rmetal2_lbl = make_layer(l_metal2_label)
 
+    rdiff_cont = rndiff_cont + rpdiff_cont
     rpactive = rpdiff & rnwell
     rpgate = rpactive & rpoly
     rpsd = rpactive - rpgate
@@ -126,14 +128,16 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     l2n.connect(rnsd)
     l2n.connect(rpoly)
     l2n.connect(rdiff_cont)
+    l2n.connect(rndiff_cont)
+    l2n.connect(rpdiff_cont)
     l2n.connect(rpoly_cont)
     l2n.connect(rmetal1)
     l2n.connect(rmetal2)
     # TODO: what if more than 2 metal layers?
 
     # Inter-layer
-    l2n.connect(rpsd, rdiff_cont)
-    l2n.connect(rnsd, rdiff_cont)
+    l2n.connect(rpsd, rpdiff_cont)
+    l2n.connect(rnsd, rndiff_cont)
     l2n.connect(rpoly, rpoly_cont)
     l2n.connect(rpoly_cont, rmetal1)
     l2n.connect(rdiff_cont, rmetal1)

@@ -36,7 +36,8 @@ my_nwell2 = (2, 1)
 my_pwell = (2, 7)
 my_poly = (3, 0)
 my_poly_contact = (4, 0)
-my_diff_contact = (5, 0)
+my_ndiff_contact = (5, 0)
+my_pdiff_contact = (5, 1)
 my_metal1 = (6, 0)
 my_metal1_label = (6, 1)
 my_metal1_pin = (6, 2)
@@ -56,7 +57,8 @@ output_map = {
     l_pwell: [my_pwell],  # Output layer for pwell. Uncomment this if needed. For instance for twin-well processes.
     l_poly: my_poly,
     l_poly_contact: my_poly_contact,
-    l_diff_contact: my_diff_contact,
+    l_ndiff_contact: my_ndiff_contact,
+    l_pdiff_contact: my_pdiff_contact,
     l_metal1: my_metal1,
     l_metal1_label: my_metal1_label,
     l_metal1_pin: my_metal1_pin,
@@ -84,7 +86,9 @@ output_writers = [
             l_pdiffusion: 'pdiffusion',
             l_metal2_pin: 'metal2',
             l_poly_contact: 'polycontact',
-            l_diff_contact: 'pdcontact'
+            l_pdiff_contact: 'pdcontact'
+            l_ndiff_contact: 'ndcontact'
+
         }
     ),
 
@@ -124,7 +128,8 @@ min_spacing = {
     (l_poly, l_ndiffusion): 50,
     (l_poly, l_pdiffusion): 50,
     (l_poly, l_poly): 50,
-    (l_poly, l_diff_contact): 10,
+    (l_poly, l_ndiff_contact): 10,
+    (l_poly, l_pdiff_contact): 10,
     (l_metal1, l_metal1): 50,
     (l_metal2, l_metal2): 100,
 }
@@ -194,7 +199,8 @@ wire_width_horizontal = {
 # Side lengths of vias (square shaped).
 via_size = {
     l_poly_contact: 80,
-    l_diff_contact: 80,
+    l_pdiff_contact: 80,
+    l_ndiff_contact: 80,
     l_via1: 100
 }
 
@@ -209,10 +215,11 @@ minimum_width = {
 # Syntax: {(outer layer, inner layer): minimum enclosure, ...}
 minimum_enclosure = {
     # Via enclosure
-    (l_ndiffusion, l_diff_contact): 10,
-    (l_pdiffusion, l_diff_contact): 10,
+    (l_ndiffusion, l_ndiff_contact): 10,
+    (l_pdiffusion, l_pdiff_contact): 10,
     (l_poly, l_poly_contact): 10,
-    (l_metal1, l_diff_contact): 10,
+    (l_metal1, l_ndiff_contact): 10,
+    (l_metal1, l_pdiff_contact): 10,
     (l_metal1, l_poly_contact): 10,
     (l_metal1, l_via1): 20,
     (l_metal2, l_via1): 20,
