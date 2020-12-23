@@ -258,7 +258,7 @@ def main():
 
         logger.info("Run characterization.")
 
-        # TODO: Make time resolutin parametrizable.
+        # TODO: Make time resolution parametrizable.
         time_resolution_seconds = 50e-12
         logger.info("Time resolution = {}s".format(time_resolution_seconds))
 
