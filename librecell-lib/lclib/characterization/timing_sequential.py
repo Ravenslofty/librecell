@@ -58,7 +58,7 @@ def get_clock_to_output_delay(
         temperature: float = 25,
         output_load_capacitances: Dict[str, float] = None,
         time_step: float = 100.0e-12,
-        simulation_duration_hint: float = 200.0e-12,
+        clock_cycle_hint: float = 200.0e-12,
         spice_include_files: List[str] = None,
         workingdir: Optional[str] = None,
         ground_net: str = 'GND',
@@ -83,7 +83,7 @@ def get_clock_to_output_delay(
     :param temperature: Temperature of the simulation.
     :param output_load_capacitances: A dict with (net, capacitance) pairs which defines the load capacitances attached to certain nets.
     :param time_step: Simulation time step.
-    :param simulation_duration_hint: Run the simulation for at least this amount of time.
+    :param clock_cycle_hint: Run the simulation for at least this amount of time.
     :param spice_include_files: List of include files (such as transistor models).
     :param ground_net: The name of the ground net.
     :param supply_net: The name of the supply net.
@@ -110,7 +110,7 @@ def get_clock_to_output_delay(
         logger.info("Include '{}'".format(inc))
     include_statements = "\n".join((f".include {i}" for i in spice_include_files))
 
-    period = max(simulation_duration_hint, input_rise_time + input_fall_time)
+    period = max(clock_cycle_hint, input_rise_time + input_fall_time)
 
     # Generate the wave form of the clock.
     # First a clock pulse makes sure that the right state is sampled into the cell.
@@ -478,7 +478,7 @@ def test_plot_flipflop_setup_behavior():
                 temperature=temperature,
                 output_load_capacitances=output_load_capacitances,
                 time_step=time_step,
-                simulation_duration_hint=simulation_duration_hint,
+                clock_cycle_hint=simulation_duration_hint,
                 spice_include_files=includes,
                 ground_net=ground,
                 supply_net=supply

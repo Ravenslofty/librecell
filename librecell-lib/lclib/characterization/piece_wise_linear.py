@@ -17,6 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+
+"""
+Classes for handling piece-wise linear waveforms.
+"""
+
 import numpy as np
 from scipy import interpolate
 from typing import Tuple, Sequence, Iterable, Union

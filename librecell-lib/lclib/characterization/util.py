@@ -17,6 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+
+"""
+Utility functions for handling signals such as finding signal edges, measuring delays.
+"""
+
 import numpy as np
 from scipy import interpolate, optimize
 from enum import Enum
