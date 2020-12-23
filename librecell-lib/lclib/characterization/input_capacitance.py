@@ -17,6 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+
+"""
+Measurement of the input capacitance by driving the input pin with a constant current.
+"""
+
 import os
 from typing import List, Optional
 
