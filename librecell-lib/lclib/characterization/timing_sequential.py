@@ -176,6 +176,10 @@ def get_clock_to_output_delay(
                 f"{''.join((f'{net}={v}' for net, v in input_voltages.items()))}_" \
                 f"{'clk_rising' if rising_clock_edge else 'clk_falling'}_" \
                 f"{'data_rising' if rising_data_edge else 'data_falling'}"
+
+    file_name = f"lctime_clock_to_output_delay_" \
+                f"{'clk_rising' if rising_clock_edge else 'clk_falling'}_" \
+                f"{'data_rising' if rising_data_edge else 'data_falling'}"
     sim_file = os.path.join(workingdir, f"{file_name}.sp")
 
     # Output file for simulation results.
@@ -325,9 +329,8 @@ def test_plot_flipflop_setup_behavior():
 
     subckt_name = 'DFFPOSX1'
     import os
-    base = os.path.expanduser("~")
-    include_file = f'{base}/FreePDK45/osu_soc/lib/source/netlists/{subckt_name}.pex.netlist'
-    model_file = f'{base}/FreePDK45/osu_soc/lib/files/gpdk45nm.m'
+    include_file = f'../../test_data/freepdk45/netlists_pex/{subckt_name}.pex.netlist'
+    model_file = f'../../test_data/freepdk45/gpdk45nm.m'
 
     ports = get_subcircuit_ports(include_file, subckt_name)
     print("Ports: ", ports)
