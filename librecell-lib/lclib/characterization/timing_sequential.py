@@ -35,7 +35,7 @@ from .piece_wise_linear import *
 from scipy import optimize
 from math import isclose
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def get_clock_to_output_delay(
         input_fall_time: float,
         trip_points: TripPoints,
         temperature: float = 25,
-        output_load_capacitance: float = 0.0,
+        output_load_capacitances: Dict[str, float] = None,
         time_step: float = 100.0e-12,
         simulation_duration_hint: float = 200.0e-12,
         spice_include_files: List[str] = None,
@@ -81,7 +81,7 @@ def get_clock_to_output_delay(
     :param input_fall_time: Fall time of the input signal (clock and data).
     :param trip_points:
     :param temperature: Temperature of the simulation.
-    :param output_load_capacitance: Attached capacitive load at the output pin.
+    :param output_load_capacitances: A dict with (net, capacitance) pairs which defines the load capacitances attached to certain nets.
     :param time_step: Simulation time step.
     :param simulation_duration_hint: Run the simulation for at least this amount of time.
     :param spice_include_files: List of include files (such as transistor models).
@@ -207,6 +207,18 @@ def get_clock_to_output_delay(
         )
     )
 
+    # Load capacitance statements.
+    if output_load_capacitances is None:
+        output_load_capacitances = dict()
+    else:
+        assert isinstance(output_load_capacitances, dict)
+    load_capacitance_statements = "\n".join(
+        (
+            f"Cload_{net} {net} {ground_net} {load}"
+            for net, load in output_load_capacitances.items()
+        )
+    )
+
     # Initial node voltages.
     initial_conditions = {
         supply_net: supply_voltage,
@@ -247,9 +259,11 @@ def get_clock_to_output_delay(
     # File for debug plot of the waveforms.
     sim_plot_file = os.path.join(workingdir, f"{file_name}_plot.svg")
 
+    simulation_title = f"Measure constraint '{data_in}'-'{clock_input}'->'{data_out}', rising_clock_edge={rising_clock_edge}."
+
     # Create ngspice simulation script.
     sim_netlist = f"""* librecell {__name__}
-.title Measure constraint '{data_in}'-'{clock_input}'->'{data_out}', rising_clock_edge={rising_clock_edge}.
+.title {simulation_title}
 
 .option TEMP={temperature}
 
@@ -257,8 +271,8 @@ def get_clock_to_output_delay(
 
 Xcircuit_under_test {" ".join(cell_ports)} {cell_name}
 
-* Output load.
-Cload {data_out} {ground_net} {output_load_capacitance}
+* Output load capacitances.
+{load_capacitance_statements}
 
 Vsupply {supply_net} {ground_net} {supply_voltage}
 
@@ -404,8 +418,8 @@ def test_plot_flipflop_setup_behavior():
     temperature = 27
     logger.info(f"Temperature: {temperature} C")
 
-    output_load_capacitance = 0.06e-12
-    logger.info(f"Output load capacitance: {output_load_capacitance} F")
+    output_load_capacitances = {data_out: 0.06e-12}
+    logger.info(f"Output load capacitance: {output_load_capacitances} [F]")
 
     time_step = 10e-12
     logger.info(f"Time step: {time_step} s")
@@ -462,7 +476,7 @@ def test_plot_flipflop_setup_behavior():
                 input_fall_time=input_fall_time,
                 trip_points=trip_points,
                 temperature=temperature,
-                output_load_capacitance=output_load_capacitance,
+                output_load_capacitances=output_load_capacitances,
                 time_step=time_step,
                 simulation_duration_hint=simulation_duration_hint,
                 spice_include_files=includes,
