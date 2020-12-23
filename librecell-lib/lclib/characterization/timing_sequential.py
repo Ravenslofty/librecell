@@ -113,6 +113,7 @@ def get_clock_to_output_delay(
     period = max(simulation_duration_hint, input_rise_time + input_fall_time)
 
     # Generate the wave form of the clock.
+    # First a clock pulse makes sure that the right state is sampled into the cell.
     clock_pulse1 = PulseWave(
         start_time=period,
         duration=period,
@@ -125,6 +126,7 @@ def get_clock_to_output_delay(
 
     t_clock_edge = 4 * period + setup_time
 
+    # Generate the clock edge relative to which the delay will be measured.
     clock_edge = StepWave(
         start_time=t_clock_edge,
         polarity=rising_clock_edge,
@@ -166,14 +168,68 @@ def get_clock_to_output_delay(
         data_in: input_wave
     }
 
+    input_voltages_static = dict()
+    input_voltages_active = dict()
+
+    # Split input signals into static and active signals
+    for net, voltage in input_voltages.items():
+        if isinstance(voltage, PieceWiseLinear):
+            input_voltages_active[net] = voltage
+        else:
+            assert isinstance(voltage, float, "Voltage needs to be a float or a piecewise linear function.")
+            input_voltages_static[net] = voltage
+
+    def create_voltage_source_statement(net: str, voltage: Union[float, PieceWiseLinear]) -> str:
+        """
+        Create a SPICE statement for a voltage source driving the 'net' with a voltage.
+        The voltage can be either a static value or a `PieceWiseLinear` function.
+        """
+        if isinstance(voltage, PieceWiseLinear):
+            return f"V{net} {net} {ground_net} PWL({voltage.to_spice_pwl_string()}) DC=0"
+        elif isinstance(voltage, float):
+            return f"Vinput_{net} {net} {ground_net} {voltage}"
+        else:
+            assert False, "`voltage` must be either a float or {}".format(PieceWiseLinear)
+
     # Create SPICE description of the input voltage sources.
-    source_statements = "\n".join(
-        (f"V{net} {net} {ground_net} PWL({wave.to_spice_pwl_string()}) DC=0"
-         for net, wave in input_voltages.items())
+    active_signal_source_statements = "\n".join(
+        (
+            create_voltage_source_statement(net, wave)
+            for net, wave in input_voltages_active.items()
+        )
     )
 
-    samples_per_period = int(period / time_step)
-    logger.debug("Run simulation.")
+    # Static inputs.
+    static_signal_source_statements = "\n".join(
+        (
+            create_voltage_source_statement(net, voltage)
+            for net, voltage in input_voltages_static.items()
+        )
+    )
+
+    # Initial node voltages.
+    initial_conditions = {
+        supply_net: supply_voltage,
+        data_out: 0 if rising_data_edge else supply_voltage
+    }
+    initial_conditions.update(input_voltages)
+
+    # Calculate initial conditions for all PWL sources.
+    for net, wave in input_voltages.items():
+        initial_conditions[net] = wave(0)
+
+    # Simulate only until output reaches threshold.
+    # Compute stopping voltages of the output signal.
+    if rising_data_edge:
+        # Rising edge.
+        # Add a margin on the threshold to simulate a bit longer.
+        threshold = 1-0.1*(1-trip_points.output_threshold_rise)
+        breakpoint_statement = f"stop when v({data_out}) > {supply_voltage * threshold}"
+    else:
+        # Falling edge.
+        # Subtract a margin on the threshold to simulate a bit longer.
+        threshold = 0.1*trip_points.output_threshold_fall
+        breakpoint_statement = f"stop when v({data_out}) < {supply_voltage * threshold}"
 
     # Simulation script file path.
     file_name = f"lctime_clock_to_output_delay_" \
@@ -191,21 +247,6 @@ def get_clock_to_output_delay(
     # File for debug plot of the waveforms.
     sim_plot_file = os.path.join(workingdir, f"{file_name}_plot.svg")
 
-    # TODO
-    initial_conditions = {
-        supply_net: supply_voltage,
-        data_out: 0 if rising_data_edge else supply_voltage
-    }
-    # Calculate initial conditions for all PWL sources.
-    for net, wave in input_voltages.items():
-        initial_conditions[net] = wave(0)
-
-    # TODO: Simulate only until output reaches threshold.
-    if rising_data_edge:
-        breakpoint_statement = f"stop when v({data_out}) > {supply_voltage * 0.99}"
-    else:
-        breakpoint_statement = f"stop when v({data_out}) < {supply_voltage * 0.01}"
-
     # Create ngspice simulation script.
     sim_netlist = f"""* librecell {__name__}
 .title Measure constraint '{data_in}'-'{clock_input}'->'{data_out}', rising_clock_edge={rising_clock_edge}.
@@ -222,10 +263,10 @@ Cload {data_out} {ground_net} {output_load_capacitance}
 Vsupply {supply_net} {ground_net} {supply_voltage}
 
 * Static input voltages.
-* TODO {{static_supply_voltage_statements}}
+{static_signal_source_statements}
 
 * Active input signals (clock & data_in).
-{source_statements}
+{active_signal_source_statements}
 
 * Initial conditions.
 * Also all voltages of DC sources must be here if they are needed to compute the initial conditions.
@@ -251,7 +292,6 @@ exit
 
 .end
 """
-    # logger.debug(sim_netlist)
 
     # Dump simulation script to the file.
     logger.info(f"Write simulation netlist: {sim_file}")
@@ -290,15 +330,14 @@ exit
         plt.close()
 
     # Start of interesting interval
+    samples_per_period = int(period / time_step)
     start = int((t_clock_edge - period / 2) / period * samples_per_period)
 
+    # Cut away initialization signals.
     time = time[start:]
     clock_voltage = clock_voltage[start:]
     input_voltage = input_voltage[start:]
     output_voltage = output_voltage[start:]
-
-    if not rising_data_edge:
-        output_voltage = 1 - output_voltage
 
     # Normalize
     logger.debug("Normalize voltages (divide by VDD).")
@@ -306,19 +345,28 @@ exit
     input_voltage /= supply_voltage
     output_voltage /= supply_voltage
 
+    # Turn a falling edge into a rising edge by flipping the signal.
+    # This makes measurement of the delay easier.
+    if not rising_data_edge:
+        output_voltage = 1 - output_voltage
+
+    # Get decision thresholds.
     if rising_data_edge:
         output_threshold = trip_points.output_threshold_rise
     else:
         output_threshold = trip_points.output_threshold_fall
 
-    q0 = output_voltage[0] > output_threshold
-    q1 = output_voltage[-1] > output_threshold
+    # Get logical values at start and end.
+    logic_out_start = output_voltage[0] > output_threshold
+    logic_out_end = output_voltage[-1] > output_threshold
 
-    if not q0 and q1:
+    # The delay can only be measured if there is a rising edge in the output.
+    if not logic_out_start and logic_out_end:
         # Output has rising edge
         delay = get_input_to_output_delay(time=time, input_signal=clock_voltage,
                                           output_signal=output_voltage, trip_points=trip_points)
     else:
+        # There's no edge in the output. Delay is infinite.
         delay = float('Inf')
 
     return delay
