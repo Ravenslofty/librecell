@@ -565,6 +565,7 @@ def test_plot_flipflop_setup_behavior():
 
         xtol = 1e-20
         min_hold_time_indep = optimize.brentq(f, shortest, longest, xtol=xtol)
+        assert isinstance(min_hold_time_indep, float)
         delay = f(min_hold_time_indep)
         print(delay)
         # Check if we really found the root of `f`.
