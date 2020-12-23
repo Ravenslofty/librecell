@@ -247,6 +247,7 @@ exit
             transition_time2 = transition_time(input_voltage, time, threshold=thresh2, assert_one_crossing=True)
             assert transition_time2 > transition_time1
 
+            # Compute deltas of time and voltage between the crossing of the two thresholds.
             f_input_voltage = interpolate.interp1d(x=time, y=input_voltage)
             dt = transition_time2 - transition_time1
             dv = f_input_voltage(transition_time2) - f_input_voltage(transition_time1)
