@@ -17,8 +17,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+
+"""
+Characterization functions for sequential cells.
+"""
+
+import os
 import tempfile
-import matplotlib.pyplot as plt
 from itertools import count
 
 from .ngspice_subprocess import run_simulation
@@ -30,7 +35,7 @@ from .piece_wise_linear import *
 from scipy import optimize
 from math import isclose
 
-from typing import List
+from typing import List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -55,32 +60,44 @@ def get_clock_to_output_delay(
         time_step: float = 100.0e-12,
         simulation_duration_hint: float = 200.0e-12,
         spice_include_files: List[str] = None,
+        workingdir: Optional[str] = None,
+        ground_net: str = 'GND',
+        supply_net: str = 'VDD',
+        debug: bool = False,
 ) -> float:
-    """Get the delay from rising clock edge to rising output `Q` edge.
+    """Get the delay from the clock edge to the output edge.
 
-    :param circuit:
-    :param clock_input:
-    :param data_in:
-    :param data_out:
+    :param cell_name: Name of the cell to be characterized. Must match with the name used in netlist and liberty.
+    :param cell_ports: All circuit pins/ports in the same ordering as used in the SPICE circuit model.
+    :param clock_input: Name of the clock pin.
+    :param data_in: Name of the data-in pin.
+    :param data_out: Name of the data-out pin.
     :param setup_time: Delay from data input `D` edge to rising clock edge.
     :param hold_time: Delay from clock edge to data input edge.
-    :param rising_clock_edge:
-    :param rising_data_edge:
-    :param supply_voltage:
-    :param input_rise_time:
-    :param input_fall_time:
+    :param rising_clock_edge: `True` = use rising clock edge, `False` = use falling clock edge.
+    :param rising_data_edge: `True` = use rising data edge, `False` = use falling data edge.
+    :param supply_voltage: Supply voltage in volts.
+    :param input_rise_time: Rise time of the input signal (clock and data).
+    :param input_fall_time: Fall time of the input signal (clock and data).
     :param trip_points:
-    :param temperature:
-    :param output_load_capacitance:
+    :param temperature: Temperature of the simulation.
+    :param output_load_capacitance: Attached capacitive load at the output pin.
     :param time_step: Simulation time step.
-    Very strange results when using too large time steps
-    :param simulation_duration_hint:
+    :param simulation_duration_hint: Run the simulation for at least this amount of time.
+    :param spice_include_files: List of include files (such as transistor models).
+    :param ground_net: The name of the ground net.
+    :param supply_net: The name of the supply net.
+    :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
+    :param debug: Enable more verbose debugging output such as plots of the simulations.
     :return:
     """
 
-    # TODO: No hardcoded netnames!
-    ground = 'GND'
-    supply = 'VDD'
+    # Create temporary working directory.
+    if workingdir is None:
+        workingdir = tempfile.mkdtemp("lctime-")
+
+    logger.debug("Ground net: {}".format(ground_net))
+    logger.debug("Supply net: {}".format(supply_net))
 
     logger.info("get_clock_to_output_delay() ...")
 
@@ -147,19 +164,28 @@ def get_clock_to_output_delay(
 
     # Create SPICE description of the input voltage sources.
     source_statements = "\n".join(
-        (f"V{net} {net} {ground} PWL({wave.to_spice_pwl_string()}) DC=0"
+        (f"V{net} {net} {ground_net} PWL({wave.to_spice_pwl_string()}) DC=0"
          for net, wave in input_voltages.items())
     )
 
     samples_per_period = int(period / time_step)
     logger.debug("Run simulation.")
 
-    sim_file = tempfile.mktemp(prefix='lctime-', suffix='.sp', dir='/dev/shm')
-    sim_output_file = tempfile.mktemp(prefix='lctime-out-', suffix='.txt', dir='/dev/shm')
+    # Simulation script file path.
+    file_name = f"lctime_clock_to_output_delay_" \
+                f"{''.join((f'{net}={v}' for net, v in input_voltages.items()))}_" \
+                f"{'clk_rising' if rising_clock_edge else 'clk_falling'}_" \
+                f"{'data_rising' if rising_data_edge else 'data_falling'}"
+    sim_file = os.path.join(workingdir, f"{file_name}.sp")
+
+    # Output file for simulation results.
+    sim_output_file = os.path.join(workingdir, f"{file_name}_output.txt")
+    # File for debug plot of the waveforms.
+    sim_plot_file = os.path.join(workingdir, f"{file_name}_plot.svg")
 
     # TODO
     initial_conditions = {
-        supply: supply_voltage,
+        supply_net: supply_voltage,
         data_out: 0 if rising_data_edge else supply_voltage
     }
     # Calculate initial conditions for all PWL sources.
@@ -183,9 +209,9 @@ def get_clock_to_output_delay(
 Xcircuit_under_test {" ".join(cell_ports)} {cell_name}
 
 * Output load.
-Cload {data_out} {ground} {output_load_capacitance}
+Cload {data_out} {ground_net} {output_load_capacitance}
 
-Vsupply {supply} {ground} {supply_voltage}
+Vsupply {supply_net} {ground_net} {supply_voltage}
 
 * Static input voltages.
 * TODO {{static_supply_voltage_statemets}}
@@ -218,7 +244,7 @@ exit
     # logger.debug(sim_netlist)
 
     # Dump simulation script to the file.
-    print(f"Write simulation netlist: {sim_file}")
+    logger.info(f"Write simulation netlist: {sim_file}")
     open(sim_file, "w").write(sim_netlist)
 
     logger.info("Run simulation.")
@@ -227,21 +253,27 @@ exit
     logger.debug("Load simulation output.")
     sim_data = np.loadtxt(sim_output_file, skiprows=1)
 
-    # os.remove(sim_file)
-    # os.remove(sim_output_file)
-
-    # Retreive data.
+    # Retrieve data.
     time = sim_data[:, 0]
     supply_current = sim_data[:, 1]
     input_voltage = sim_data[:, 3]
     clock_voltage = sim_data[:, 5]
     output_voltage = sim_data[:, 7]
 
-    # plt.plot(time, clock_voltage, label='clk')
-    # plt.plot(time, input_voltage, label='din')
-    # plt.plot(time, output_voltage, label='dout')
-    # plt.legend()
-    # plt.show()
+    if debug:
+        logger.debug("Create plot of waveforms: {}".format(sim_plot_file))
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        plt.close()
+        plt.title("Clock to output delay")
+        plt.plot(time, clock_voltage, label='clock')
+        plt.plot(time, input_voltage, label='data_in')
+        plt.plot(time, output_voltage, label='data_out')
+        plt.plot(time, supply_current, label='supply_current')
+        plt.legend()
+        plt.savefig(sim_plot_file)
+        plt.close()
 
     # Start of interesting interval
     start = int((t_clock_edge - period / 2) / period * samples_per_period)

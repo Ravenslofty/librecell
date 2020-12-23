@@ -51,10 +51,12 @@ def main():
         description='Characterize the timing of a combinatorial cell based on a SPICE netlist. '
                     'The resulting liberty file will contain the data of the input liberty file '
                     'plus the updated characteristics of the selected cell.',
-        epilog='Example: lctime --liberty specification.lib --cell INVX1 AND2X1 --spice netlists.sp -I transistor_model.m --output mylib.lib')
+        epilog='Example: lctime --liberty specification.lib --cell INVX1 AND2X1 --spice netlists.sp -I '
+               'transistor_model.m --output mylib.lib')
 
     parser.add_argument('-l', '--liberty', required=True, metavar='LIBERTY', type=str,
-                        help='Liberty file. This must contain all necessary specifications needed to characterize the cell.')
+                        help='Liberty file. This must contain all necessary specifications '
+                             'needed to characterize the cell.')
 
     parser.add_argument('--cell', required=True, metavar='CELL_NAME', type=str,
                         action='append',
@@ -71,14 +73,16 @@ def main():
 
     parser.add_argument('--calc-mode', metavar='CALC_MODE', type=str, choices=['worst', 'typical', 'best'],
                         default='typical',
-                        help='Calculation mode for computing the default timing arc based on the conditional timing arcs. "worst", "typical" (average) or "best".')
+                        help='Calculation mode for computing the default timing arc'
+                             ' based on the conditional timing arcs. "worst", "typical" (average) or "best".')
 
     parser.add_argument('-o', '--output', required=True, metavar='LIBERTY_OUT', type=str, help='Output liberty file.')
 
     parser.add_argument('--workingdir', required=False, metavar='WORKDIR', type=str,
                         help="Directory for ngspice simulation scripts and raw results.")
 
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode.')
+    parser.add_argument('--debug', action='store_true',
+                        help='Enable debug mode (more verbose logging and plotting waveforms).')
 
     # Parse arguments
     args = parser.parse_args()
@@ -205,8 +209,8 @@ def main():
         logger.warning("No transistor model supplied. Use --include or -I.")
 
     # TODO: No hardcoded data here!
-    output_capacitances = np.array([0.05, 0.1, 0.2, 0.4, 0.8, 1.6])*1e-12 # pf
-    input_transition_times = np.array([0.1, 0.2, 0.4, 0.8, 1.6, 3.2])*1e-9 # ns
+    output_capacitances = np.array([0.05, 0.1, 0.2, 0.4, 0.8, 1.6]) * 1e-12  # pf
+    input_transition_times = np.array([0.1, 0.2, 0.4, 0.8, 1.6, 3.2]) * 1e-9  # ns
 
     # Characterize all cells in the list.
     def characterize_cell(cell_name: str) -> Group:
@@ -273,7 +277,9 @@ def main():
                 time_resolution=time_resolution_seconds,
                 temperature=temperature,
 
-                workingdir=cell_workingdir
+                workingdir=cell_workingdir,
+
+                debug=args.debug
             )
 
             input_pin_group['rise_capacitance'] = result['rise_capacitance'] * capacitance_unit_scale_factor
@@ -310,7 +316,9 @@ def main():
                     time_resolution=time_resolution_seconds,
                     temperature=temperature,
 
-                    workingdir=cell_workingdir
+                    workingdir=cell_workingdir,
+
+                    debug=args.debug
                 )
 
                 # TODO: get correct index/variable mapping from liberty file.

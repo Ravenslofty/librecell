@@ -52,7 +52,8 @@ def characterize_input_capacitances(cell_name: str,
                                     temperature=27,
                                     workingdir: Optional[str] = None,
                                     ground_net: str = 'GND',
-                                    supply_net: str = 'VDD'
+                                    supply_net: str = 'VDD',
+                                    debug: bool = False
                                     ):
     """
     Estimate the input capacitance of the `active_pin`.
@@ -75,6 +76,7 @@ def characterize_input_capacitances(cell_name: str,
     :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
     :param ground_net: The name of the ground net.
     :param supply_net: The name of the supply net.
+    :param debug: Enable more verbose debugging output such as plots of the simulations.
     """
 
     # Create temporary working directory.
@@ -145,6 +147,8 @@ def characterize_input_capacitances(cell_name: str,
 
             # Output file for simulation results.
             sim_output_file = os.path.join(workingdir, f"{file_name}_output.txt")
+            # File for debug plot of the waveforms.
+            sim_plot_file = os.path.join(workingdir, f"{file_name}_plot.svg")
 
             # Switch polarity of current for falling edges.
             _input_current = input_current if input_rising else -input_current
@@ -167,7 +171,6 @@ def characterize_input_capacitances(cell_name: str,
                 supply_net: supply_voltage
             }
             initial_conditions.update(input_voltages)
-
 
             # Create ngspice simulation script.
             sim_netlist = f"""* librecell {__name__}
@@ -225,9 +228,17 @@ exit
             time = sim_data[:, 0]
             input_voltage = sim_data[:, 1]
 
-            # plt.title(f"Measure input capacitance of pin {active_pin}.")
-            # plt.plot(time, input_voltage, active_pin)
-            # plt.show()
+            if debug:
+                logger.debug("Create plot of waveforms: {}".format(sim_plot_file))
+                import matplotlib
+                matplotlib.use('Agg')
+                import matplotlib.pyplot as plt
+                plt.close()
+                plt.title(f"Measure input capacitance of pin {active_pin}.")
+                plt.plot(time, input_voltage, label=active_pin)
+                plt.legend()
+                plt.savefig(sim_plot_file)
+                plt.close()
 
             # Calculate average derivative of voltage by finding the slope of the line
             # through the crossing point of the voltage with the two thresholds.

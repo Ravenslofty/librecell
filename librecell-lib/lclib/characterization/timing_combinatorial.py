@@ -48,7 +48,8 @@ def characterize_comb_cell(cell_name: str,
                            spice_include_files: List[str] = None,
                            time_resolution=1e-12,
                            temperature=27,
-                           workingdir: Optional[str] = None
+                           workingdir: Optional[str] = None,
+                           debug: bool = False,
                            ) -> Dict[str, np.ndarray]:
     """
     Calculate the NDLM timing table of a cell for a given timing arc.
@@ -70,6 +71,7 @@ def characterize_comb_cell(cell_name: str,
     :param spice_include_files: SICE include files such as transistor models.
     :param time_resolution: Time step of simulation in Pyspice.Units.Seconds.
     :param temperature: Simulation temperature in celsius.
+    :param debug: Enable more verbose debugging output such as plots of the simulations.
     :return: Returns the NDLM timing tables wrapped in a dict:
     {'cell_rise': 2d-np.ndarray, 'cell_fall': 2d-np.ndarray, ... }
     """
@@ -169,6 +171,8 @@ def characterize_comb_cell(cell_name: str,
 
                 # Output file for simulation results.
                 sim_output_file = os.path.join(workingdir, f"{file_name}_output.txt")
+                # File for debug plot of the waveforms.
+                sim_plot_file = os.path.join(workingdir, f"{file_name}_plot.svg")
 
                 bool_inputs[related_pin] = input_rising
                 expected_output = output_function(**bool_inputs)
@@ -266,12 +270,19 @@ exit
                 input_voltage = sim_data[:, 3]
                 output_voltage = sim_data[:, 5]
 
-                # plt.title(f"")
-                # plt.plot(time, input_voltage, 'x-', label='input voltage')
-                # plt.plot(time, output_voltage, label='output voltage')
-                # plt.plot(time, supply_current, label='supply current')
-                # plt.legend()
-                # plt.show()
+                if debug:
+                    logger.debug("Create plot of waveforms: {}".format(sim_plot_file))
+                    import matplotlib
+                    matplotlib.use('Agg')
+                    import matplotlib.pyplot as plt
+                    plt.close()
+                    plt.title(f"")
+                    plt.plot(time, input_voltage, 'x-', label='input voltage')
+                    plt.plot(time, output_voltage, label='output voltage')
+                    plt.plot(time, supply_current, label='supply current')
+                    plt.legend()
+                    plt.savefig(sim_plot_file)
+                    plt.close()
 
                 # TODO: What unit does rise_power/fall_power have in liberty files???
                 # Is it really power or energy?
