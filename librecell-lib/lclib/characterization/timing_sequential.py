@@ -336,7 +336,7 @@ def test_plot_flipflop_setup_behavior():
     )
 
     subckt_name = 'DFFPOSX1'
-    import os
+
     include_file = f'../../test_data/freepdk45/netlists_pex/{subckt_name}.pex.netlist'
     model_file = f'../../test_data/freepdk45/gpdk45nm.m'
 

@@ -321,12 +321,14 @@ def main():
                     debug=args.debug
                 )
 
+                # Get the table indices.
                 # TODO: get correct index/variable mapping from liberty file.
                 index_1 = result['total_output_net_capacitance'] * capacitance_unit_scale_factor
                 index_2 = result['input_net_transition'] * time_unit_scale_factor
                 # TODO: remember all necessary templates and create template tables.
                 table_template_name = 'delay_template_{}x{}'.format(len(index_1), len(index_2))
 
+                # Create liberty timing tables.
                 timing_tables = []
                 for table_name in ['cell_rise', 'cell_fall', 'rise_transition', 'fall_transition']:
                     table = Group(
@@ -340,6 +342,7 @@ def main():
 
                     timing_tables.append(table)
 
+                # Create the liberty timing group.
                 timing_group = Group(
                     'timing',
                     attributes={
