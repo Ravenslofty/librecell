@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
+
 def test_simple_simulation():
     """Run a simple transient simulation in a ngspice subprocess and retreive the results from a file."""
 
@@ -42,7 +43,7 @@ exit
     assert ret.returncode == 0
 
     print(f"Read output data: {sim_output_file}")
-    data = np.loadtxt(sim_output_file, skiprows=1) # Skip the header.
+    data = np.loadtxt(sim_output_file, skiprows=1)  # Skip the header.
 
     a_time = data[:, 0]
     a = data[:, 1]
@@ -58,10 +59,3 @@ exit
 
     os.remove(sim_output_file)
     os.remove(sim_file)
-
-
-
-
-
-
-
