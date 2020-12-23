@@ -89,7 +89,8 @@ def get_clock_to_output_delay(
     :param supply_net: The name of the supply net.
     :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
     :param debug: Enable more verbose debugging output such as plots of the simulations.
-    :return:
+    :return: Returns the delay from the clock edge to the data edge.
+     Returns `Inf` if the output does not toggle within the maximum simulation time.
     """
 
     # Create temporary working directory.
@@ -111,6 +112,7 @@ def get_clock_to_output_delay(
 
     period = max(simulation_duration_hint, input_rise_time + input_fall_time)
 
+    # Generate the wave form of the clock.
     clock_pulse1 = PulseWave(
         start_time=period,
         duration=period,
@@ -130,6 +132,8 @@ def get_clock_to_output_delay(
         rise_threshold=trip_points.input_threshold_rise,
         fall_threshold=trip_points.input_threshold_fall
     )
+
+    # Sanity check:
     assert isclose(clock_edge(t_clock_edge),
                    trip_points.input_threshold_rise if rising_clock_edge
                    else trip_points.input_threshold_fall)
@@ -249,15 +253,18 @@ exit
 
     # Dump simulation script to the file.
     logger.info(f"Write simulation netlist: {sim_file}")
+    if os.path.exists(sim_file):
+        logger.warning("Simulation file already exists: {}".format(sim_file))
     open(sim_file, "w").write(sim_netlist)
 
+    # Start ngspice.
     logger.info("Run simulation.")
     run_simulation(sim_file)
 
+    # Retrieve data.
     logger.debug("Load simulation output.")
     sim_data = np.loadtxt(sim_output_file, skiprows=1)
 
-    # Retrieve data.
     time = sim_data[:, 0]
     supply_current = sim_data[:, 1]
     input_voltage = sim_data[:, 3]
@@ -265,6 +272,7 @@ exit
     output_voltage = sim_data[:, 7]
 
     if debug:
+        # Plot data in debug mode.
         logger.debug("Create plot of waveforms: {}".format(sim_plot_file))
         import matplotlib
         matplotlib.use('Agg')
@@ -384,13 +392,12 @@ def test_plot_flipflop_setup_behavior():
         :param rising_data_edge:
         :return:
         """
-        print(f"evaluate delay_f({setup_time}, {hold_time}, {rising_clock_edge}, {rising_data_edge})")
+        logger.debug(f"evaluate delay_f({setup_time}, {hold_time}, {rising_clock_edge}, {rising_data_edge})")
 
         cache_tag = (setup_time, hold_time, rising_clock_edge, rising_data_edge)
         result = cache.get(cache_tag)
         if result is None:
             result = get_clock_to_output_delay(
-
                 cell_name=subckt_name,
                 cell_ports=ports,
                 clock_input=clock,
@@ -408,15 +415,22 @@ def test_plot_flipflop_setup_behavior():
                 output_load_capacitance=output_load_capacitance,
                 time_step=time_step,
                 simulation_duration_hint=simulation_duration_hint,
-                spice_include_files=includes)
+                spice_include_files=includes,
+                ground_net=ground,
+                supply_net=supply
+            )
             cache[cache_tag] = result
         else:
-            print('Cache hit.')
+            logger.debug('Cache hit.')
         return result
 
     def find_min_data_delay(rising_data_edge: bool) -> Tuple[float, Tuple[float, float]]:
         """ Find minimum clock->data delay (with large setup/hold window).
+
+        Procedure is as follows: Setup and hold time are increased until the data delay reaches a stable value.
         """
+
+        # Find a estimate start value for setup and hold times.
         setup_time_guess = input_rise_time
         hold_time_guess = input_fall_time
 
@@ -506,6 +520,7 @@ def test_plot_flipflop_setup_behavior():
 
         xtol = 1e-20
         min_setup_time_indep = optimize.brentq(f, shortest, longest, xtol=xtol)
+        assert isinstance(min_setup_time_indep, float)
         delay = f(min_setup_time_indep)
         # Check if we really found the root of `f`.
         assert np.allclose(0, delay, atol=xtol * 1000), "Failed to find solution for minimal setup time."
