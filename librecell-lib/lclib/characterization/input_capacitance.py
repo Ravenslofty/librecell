@@ -45,8 +45,34 @@ def characterize_input_capacitances(cell_name: str,
                                     spice_include_files: List[str] = None,
                                     time_resolution: float = 1e-12,
                                     temperature=27,
-                                    workingdir: Optional[str] = None
+                                    workingdir: Optional[str] = None,
+                                    ground_net: str = 'GND',
+                                    supply_net: str = 'VDD'
                                     ):
+    """
+    Estimate the input capacitance of the `active_pin`.
+    The estimation is done by simulating a constant current flowing into an input and measuring the
+    time it takes for the input to go from high to low or low to high. This time multiplied by the current
+    yields the transported charge which together with the voltage difference tells the capacitance.
+    The measurement is done for all combinations of static inputs (all other inputs that are not measured).
+
+    :param cell_name: Name of the cell to be measured. This must match with the names used in the netlist and liberty file.
+    :param input_pins: List of all input pin names.
+    :param active_pin: Name of the pin to be measured.
+    :param output_pins: List of cell output pins.
+    :param supply_voltage: VDD.
+    :param trip_points: Trip-point object which specifies the voltage thresholds of the logical values.
+    :param timing_corner: Specify whether to take the maximum, minimum or average capacitance value. (Over all static input combinations).
+    :param spice_netlist_file: The file containing the netlist of this cell.
+    :param spice_include_files: Optional include files for transistor models etc.
+    :param time_resolution: Time resolution of the simulation.
+    :param temperature: Temperature of the simulated circuit.
+    :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
+    :param ground_net: The name of the ground net.
+    :param supply_net: The name of the supply net.
+    """
+
+    # Create temporary working directory.
     if workingdir is None:
         workingdir = tempfile.mkdtemp("lctime-")
 
@@ -55,12 +81,13 @@ def characterize_input_capacitances(cell_name: str,
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
     logger.info("Subcircuit ports: {}".format(", ".join(ports)))
 
-    # TODO: find correct names for GND/VDD from netlist.
-    ground = 'GND'
-    supply = 'VDD'
+    logger.debug("Ground net: {}".format(ground_net))
+    logger.debug("Supply net: {}".format(supply_net))
 
     vdd = supply_voltage
+    logger.debug("Vdd: {} V".format(vdd))
 
+    # Create a list of include files.
     if spice_include_files is None:
         spice_include_files = []
     spice_include_files = spice_include_files + [spice_netlist_file]
@@ -127,12 +154,12 @@ def characterize_input_capacitances(cell_name: str,
                 breakpoint_statement = f"stop when v({active_pin}) < {vdd * 0.1}"
 
             static_supply_voltage_statemets = "\n".join(
-                (f"Vinput_{net} {ground} {voltage}" for net, voltage in input_voltages.items()))
+                (f"Vinput_{net} {ground_net} {voltage}" for net, voltage in input_voltages.items()))
 
             # Initial node voltages.
             initial_conditions = {
                 active_pin: initial_voltage,
-                supply: supply_voltage
+                supply_net: supply_voltage
             }
             initial_conditions.update(input_voltages)
 
@@ -149,8 +176,8 @@ Xcircuit_under_test {" ".join(ports)} {cell_name}
 
 {output_load_statements}
 
-Vsupply {supply} {ground} {supply_voltage}
-Iinput {ground} {active_pin} {_input_current}
+Vsupply {supply_net} {ground_net} {supply_voltage}
+Iinput {ground_net} {active_pin} {_input_current}
 
 * Static input voltages.
 {static_supply_voltage_statemets}
@@ -176,14 +203,18 @@ exit
 .end
 """
 
+            # Dump netlist.
             logger.debug(sim_netlist)
+
             # Dump simulation script to the file.
             logger.info(f"Write simulation netlist: {sim_file}")
             open(sim_file, "w").write(sim_netlist)
 
+            # Run simulation.
             logger.info("Run simulation.")
             run_simulation(sim_file)
 
+            # Fetch simulation results.
             logger.debug("Load simulation output.")
             sim_data = np.loadtxt(sim_output_file, skiprows=1)
             time = sim_data[:, 0]
@@ -217,7 +248,7 @@ exit
             # dv = input_voltage[-1] - input_voltage[0]
             # dt = time[-1] - time[0]
 
-            # Compute capacitance
+            # Compute capacitance.
             capacitance = float(_input_current) / (float(dv) / float(dt))
 
             logger.debug("dV: {}".format(dv))

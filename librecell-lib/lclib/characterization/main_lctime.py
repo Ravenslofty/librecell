@@ -210,24 +210,31 @@ def main():
 
     # Characterize all cells in the list.
     def characterize_cell(cell_name: str) -> Group:
+
+        # Create working directory if it does not exist yet.
         cell_workingdir = os.path.join(workingdir, cell_name)
         if not os.path.exists(cell_workingdir):
             os.mkdir(cell_workingdir)
 
+        # Get netlist and liberty group.
         netlist_file = netlist_file_table[cell_name]
         cell_group = select_cell(library, cell_name)
+        # Check that the name matches.
         assert cell_group.args[0] == cell_name
+
         logger.info("Cell: {}".format(cell_name))
         logger.info("Netlist: {}".format(netlist_file))
 
         # Get information on pins
         input_pins, output_pins, output_functions = get_pin_information(cell_group)
 
+        # Sanity check.
         if len(input_pins) == 0:
             msg = "Cell has no input pins."
             logger.error(msg)
             assert False, msg
 
+        # Sanity check.
         if len(output_pins) == 0:
             msg = "Cell has no output pins."
             logger.error(msg)
@@ -235,12 +242,14 @@ def main():
 
         # Add groups for the cell to be characterized.
         new_cell_group = deepcopy(select_cell(library, cell_name))
-        # Strip away timing groups.
+
+        # Strip away timing groups. They will be replaced by the new characterization.
         for pin_group in new_cell_group.get_groups('pin'):
             pin_group.groups = [g for g in pin_group.groups if g.group_name != 'timing']
 
-        logger.info("Run characterization")
+        logger.info("Run characterization.")
 
+        # TODO: Make time resolutin parametrizable.
         time_resolution_seconds = 50e-12
         logger.info("Time resolution = {}s".format(time_resolution_seconds))
 
