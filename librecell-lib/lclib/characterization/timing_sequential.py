@@ -466,7 +466,7 @@ def test_plot_flipflop_setup_behavior():
         assert a > 0
         # Make sure f(longest) is larger than zero.
         while not b < 0:
-            longest = longest*2
+            longest = longest * 2
             b = f(longest)
 
         xtol = 1e-20
@@ -510,7 +510,7 @@ def test_plot_flipflop_setup_behavior():
         assert a > 0
         # Make sure f(longest) is larger than zero.
         while not b < 0:
-            longest = longest*2
+            longest = longest * 2
             b = f(longest)
 
         xtol = 1e-20
@@ -545,7 +545,6 @@ def test_plot_flipflop_setup_behavior():
     print(f"unconditional min. hold time fall: {min_hold_time_uncond_fall}")
     print(f"max delays (rise): {min_hold_delay_rise}")
     print(f"max delays (fall): {min_hold_delay_fall}")
-
 
     # # Find dependent setup time.
     dependent_setup_time_rise, dependent_setup_delay_rise = \
