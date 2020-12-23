@@ -29,7 +29,7 @@ import os
 import tempfile
 from .util import *
 from .piece_wise_linear import *
-from .ngspice_subprocess import run_simulation
+from .ngspice_subprocess import simulate_cell
 from lccommon.net_util import get_subcircuit_ports
 
 import logging
@@ -113,7 +113,6 @@ def characterize_comb_cell(cell_name: str,
 
     for inc in spice_include_files:
         logger.info("Include '{}'".format(inc))
-    include_statements = "\n".join((f".include {i}" for i in spice_include_files))
 
     # Get all input nets that are not toggled during a simulation run.
     logger.debug("Get all input nets that are not toggled during a simulation run.")
@@ -170,7 +169,7 @@ def characterize_comb_cell(cell_name: str,
                 file_name = f"lctime_combinational_" \
                             f"slew={input_transition_time}_" \
                             f"load={output_cap}" \
-                            f"{''.join((f'{net}={v}' for net, v in input_voltages.items()))}_" \
+                            f"{''.join((f'{net}={v}' for net, v in input_voltages.items() if isinstance(v, float)))}_" \
                             f"{'rising' if input_rising else 'falling'}"
                 sim_file = os.path.join(workingdir, f"{file_name}.sp")
 
@@ -185,6 +184,8 @@ def characterize_comb_cell(cell_name: str,
 
                 # Get voltages at static inputs.
                 input_voltages = {net: vdd * value for net, value in zip(static_input_nets, static_input)}
+                # Add supply voltage.
+                input_voltages[supply] = supply_voltage
                 logger.debug("Voltages at static inputs: {}".format(input_voltages))
 
                 # Get stimulus signal for related pin.
@@ -194,86 +195,45 @@ def characterize_comb_cell(cell_name: str,
                                       transition_time=input_transition_time)
                 input_wave.y = input_wave.y * vdd
 
-                # Create SPICE format of the piece wise linear source.
-                input_source_statement = f"Vdata_in {related_pin} {ground} PWL({input_wave.to_spice_pwl_string()}) DC=0"
+                input_voltages[related_pin] = input_wave
 
-                # Get initial voltage of active pin.
-                initial_voltage = 0 if input_rising else vdd
-
-                # # Get the breakpoint condition.
+                # Get the breakpoint condition.
                 if expected_output:
                     breakpoint_statement = f"stop when v({output_pin}) > {vdd * 0.99}"
                 else:
                     breakpoint_statement = f"stop when v({output_pin}) < {vdd * 0.01}"
-
-                static_supply_voltage_statemets = "\n".join(
-                    (f"Vinput_{net} {net} {ground} {voltage}" for net, voltage in input_voltages.items()))
+                breakpoint_statements = [breakpoint_statement]
 
                 # Initial node voltages.
                 initial_conditions = {
-                    related_pin: initial_voltage,
-                    supply: supply_voltage,
                     output_pin: initial_output_voltage
                 }
-                initial_conditions.update(input_voltages)
+                simulation_title = f"Timing simulation for pin '{related_pin}', input_rising={input_rising}."
 
-                # Create ngspice simulation script.
-                sim_netlist = f"""* librecell {__name__}
-.title Timing simulation for pin '{related_pin}', input_rising={input_rising}.
+                time, voltages, currents = simulate_cell(
+                    cell_name=cell_name,
+                    cell_ports=ports,
+                    input_voltages=input_voltages,
+                    initial_voltages=initial_conditions,
+                    breakpoint_statements=breakpoint_statements,
+                    output_voltages=[related_pin, output_pin],
+                    output_currents=[supply],
+                    simulation_file=sim_file,
+                    simulation_output_file=sim_output_file,
+                    max_simulation_time=time_max,
+                    simulation_title=simulation_title,
+                    temperature=temperature,
+                    output_load_capacitances={output_pin: output_cap},
+                    time_step=time_resolution,
+                    spice_include_files=spice_include_files,
+                    ground_net=ground,
+                    debug=debug,
+                )
 
-.option TEMP={temperature}
-
-{include_statements}
-
-Xcircuit_under_test {" ".join(ports)} {cell_name}
-
-* Output load.
-Cload {output_pin} {ground} {output_cap}
-
-Vsupply {supply} {ground} {supply_voltage}
-
-* Static input voltages.
-{static_supply_voltage_statemets}
-
-* Active input signal.
-{input_source_statement}
-
-* Initial conditions.
-* Also all voltages of DC sources must be here if they are needed to compute the initial conditions.
-.ic {" ".join((f"v({net})={v}" for net, v in initial_conditions.items()))}
-
-.control
-
-set filetype=ascii
-set wr_vecnames
-
-* Breakpoints
-{breakpoint_statement}
-
-* Transient simulation, use initial conditions.
-tran {time_resolution} {time_max} uic
-wrdata {sim_output_file} i(vsupply) v({related_pin}) v({output_pin})
-exit
-.endc
-
-.end
-"""
-
-                logger.debug(sim_netlist)
-                # Dump simulation script to the file.
-                logger.debug(f"Write simulation netlist: {sim_file}")
-                open(sim_file, "w").write(sim_netlist)
-                logger.debug("Run simulation.")
-                run_simulation(sim_file)
-
-                logger.debug("Load simulation output.")
-                sim_data = np.loadtxt(sim_output_file, skiprows=1)
-
-                # Retreive data.
-                time = sim_data[:, 0]
-                supply_current = sim_data[:, 1]
-                input_voltage = sim_data[:, 3]
-                output_voltage = sim_data[:, 5]
+                # Retrieve data.
+                supply_current = currents[supply]
+                input_voltage = voltages[related_pin]
+                output_voltage = voltages[output_pin]
 
                 if debug:
                     logger.debug("Create plot of waveforms: {}".format(sim_plot_file))
