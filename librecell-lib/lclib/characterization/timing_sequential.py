@@ -69,8 +69,8 @@ def get_clock_to_output_delay(
 
     :param cell_name: Name of the cell to be characterized. Must match with the name used in netlist and liberty.
     :param cell_ports: All circuit pins/ports in the same ordering as used in the SPICE circuit model.
-    :param clock_input: Name of the clock pin.
-    :param data_in: Name of the data-in pin.
+    :param clock_input: Name of the clock pin ('related pin').
+    :param data_in: Name of the data-in pin ('constrained pin').
     :param data_out: Name of the data-out pin.
     :param setup_time: Delay from data input `D` edge to rising clock edge.
     :param hold_time: Delay from clock edge to data input edge.
