@@ -222,7 +222,7 @@ Cload {data_out} {ground_net} {output_load_capacitance}
 Vsupply {supply_net} {ground_net} {supply_voltage}
 
 * Static input voltages.
-* TODO {{static_supply_voltage_statemets}}
+* TODO {{static_supply_voltage_statements}}
 
 * Active input signals (clock & data_in).
 {source_statements}
@@ -243,7 +243,9 @@ set wr_vecnames
 
 * Transient simulation, use initial conditions.
 tran {time_step} {simulation_end} uic
+* Write selected signals to the output file.
 wrdata {sim_output_file} i(vsupply) v({data_in}) v({clock_input}) v({data_out})
+* Exit ngspice.
 exit
 .endc
 
@@ -534,7 +536,7 @@ def test_plot_flipflop_setup_behavior():
         Set `setup_time` to a very large value to find the independent minimal hold time.
         :param rising_data_edge: True = rising data edge, False = falling data edge.
         :param setup_time: Fixed setup time.
-        :return:
+        :return: Minimal hold time.
         """
         max_delay = max_rise_delay if rising_data_edge else max_fall_delay
         hold_guess = hold_guess_rise if rising_data_edge else hold_guess_fall
