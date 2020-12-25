@@ -95,6 +95,7 @@ def simulate_circuit(circuit: Circuit,
     logger.info("Transient analysis done.")
     return analysis
 
+
 def piece_wise_linear_voltage_source(circuit: Circuit, name: str, plus, minus, wave: PieceWiseLinear,
                                      repeat=None, time_delay=None):
     """ Create a piece wise linear voltage source.

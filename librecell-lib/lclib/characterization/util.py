@@ -28,6 +28,7 @@ from enum import Enum
 from collections import namedtuple
 from liberty.types import Group
 import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -85,14 +86,14 @@ def is_falling_edge(voltage: np.ndarray, threshold: float = 0.5) -> bool:
 
 def transition_time(voltage: np.ndarray, time: np.ndarray,
                     threshold: float, n: int = -1,
-                    assert_one_crossing: bool = False) -> float:
+                    assert_one_crossing: bool = False) -> Optional[float]:
     """ Find time of the n-th event when the signal crosses the threshold.
     :param voltage: np.ndarray holding voltage values.
     :param time: np.ndarray holding time values.
     :param threshold:
     :param n: Selects the event if there are multiple. 0: first event, -1: last event.
     :param assert_one_crossing: If set, then assert that the signal crosses the threshold exactly once.
-    :return: Time when the signal crosses the threshold for the n-th time.
+    :return: Time when the signal crosses the threshold for the n-th time or `None` if there's no crossing.
     """
 
     y_shifted = voltage - threshold
@@ -105,6 +106,10 @@ def transition_time(voltage: np.ndarray, time: np.ndarray,
     index = np.arange(len(transitions))
     # Get indices of crossings.
     transition_indices = index[transitions != 0]
+
+    if n >= len(transition_indices):
+        # There's no such crossing.
+        return None
 
     transition_idx = transition_indices[n]
 

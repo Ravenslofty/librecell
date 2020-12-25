@@ -94,7 +94,12 @@ def simulate_cell(
     The output voltages and currents correspond to the values specified in `output_voltages` and `output_currents`.
     """
 
-    logger.debug("Ground net: {}".format(ground_net))
+    logger.debug(f"Simulate cell: {cell_name}")
+    logger.debug(f"Cell ports: {cell_ports}")
+    logger.debug(f"Initial voltages: {initial_voltages} [V]")
+    logger.debug(f"Ground net: {ground_net}")
+    logger.debug(f"Temperature: {temperature} C")
+    logger.debug(f"Max. simulation time: {max_simulation_time} s")
 
     # Load include files.
     if spice_include_files is None:

@@ -33,12 +33,345 @@ from lccommon.net_util import get_subcircuit_ports
 from .piece_wise_linear import *
 
 from scipy import optimize
-from math import isclose
+import math
 
 from typing import Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def find_minimum_pulse_width(
+        cell_name: str,
+        cell_ports: List[str],
+        clock_input: str,
+        data_in: str,
+        data_out: str,
+        supply_voltage: float,
+        setup_time: float,
+        clock_pulse_polarity: bool,
+        rising_data_edge: bool,
+        input_rise_time: float,
+        input_fall_time: float,
+        trip_points: TripPoints,
+        temperature: float = 25,
+        output_load_capacitances: Dict[str, float] = None,
+        clock_pulse_width_guess: float = 1e-9,
+        time_step: float = 100.0e-12,
+        max_simulation_time: float = 1e-7,
+        spice_include_files: List[str] = None,
+        workingdir: Optional[str] = None,
+        ground_net: str = 'GND',
+        supply_net: str = 'VDD',
+        debug: bool = False,
+) -> float:
+    """Find the minimum clock pulse width such that the data is sampled.
+
+    :param cell_name: Name of the cell to be characterized. Must match with the name used in netlist and liberty.
+    :param cell_ports: All circuit pins/ports in the same ordering as used in the SPICE circuit model.
+    :param clock_input: Name of the clock pin ('related pin').
+    :param data_in: Name of the data-in pin ('constrained pin').
+    :param data_out: Name of the data-out pin.
+    :param supply_voltage: Supply voltage in volts.
+    :param input_rise_time: Rise time of the input signal (clock and data).
+    :param input_fall_time: Fall time of the input signal (clock and data).
+    :param trip_points:
+    :param temperature: Temperature of the simulation.
+    :param output_load_capacitances: A dict with (net, capacitance) pairs which defines the load capacitances attached to certain nets.
+    :param time_step: Simulation time step.
+    :param spice_include_files: List of include files (such as transistor models).
+    :param ground_net: The name of the ground net.
+    :param supply_net: The name of the supply net.
+    :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
+    :param debug: Enable more verbose debugging output such as plots of the simulations.
+    :return: Returns the minimal clock pulse width such that the data signal is sampled.
+    """
+
+    # Create temporary working directory.
+    if workingdir is None:
+        workingdir = tempfile.mkdtemp("lctime-")
+
+    logger.debug("Ground net: {}".format(ground_net))
+    logger.debug("Supply net: {}".format(supply_net))
+
+    logger.info("Find minimum clock pulse width.")
+
+    # Load include files.
+    if spice_include_files is None:
+        spice_include_files = []
+
+    # Load capacitance statements.
+    if output_load_capacitances is None:
+        output_load_capacitances = dict()
+    else:
+        assert isinstance(output_load_capacitances, dict)
+
+    def delay_function(clock_pulse_width: float) -> float:
+        """
+        Compute the delay from the clock edge to the data output edge.
+        If there's no edge at the data output within the maximal simulation time 'Inf' is returned.
+        :param clock_pulse_width: Width of the clock pulse.
+        :return: Returns the delay from the clock edge to the data output edge or `Inf` if the data edge does not come
+        during the maximal simulation time.
+        """
+
+        # Generate the pulse waveform of the clock.
+        clock_pulse = PulseWave(
+            start_time=setup_time,
+            duration=clock_pulse_width,
+            polarity=clock_pulse_polarity,
+            rise_time=input_rise_time,
+            fall_time=input_fall_time,
+            rise_threshold=trip_points.input_threshold_rise,
+            fall_threshold=trip_points.input_threshold_fall
+        )
+
+        # All input voltage signals.
+        input_voltages = {
+            supply_net: supply_voltage,
+            clock_input: clock_pulse,
+            data_in: supply_voltage if rising_data_edge else 0.0  # Data-in is constant.
+        }
+
+        # Initial voltages of output nodes.
+        initial_conditions = {
+            data_out: 0.0 if rising_data_edge else supply_voltage  # The inverse of data_in.
+        }
+
+        # Simulate only until output reaches threshold.
+        # Compute stopping voltages of the output signal.
+        if rising_data_edge:
+            # Rising edge.
+            # Add a margin on the threshold to simulate a bit longer.
+            threshold = 1 - 0.1 * (1 - trip_points.output_threshold_rise)
+            breakpoint_statement = f"stop when v({data_out}) > {supply_voltage * threshold}"
+        else:
+            # Falling edge.
+            # Subtract a margin on the threshold to simulate a bit longer.
+            threshold = 0.1 * trip_points.output_threshold_fall
+            breakpoint_statement = f"stop when v({data_out}) < {supply_voltage * threshold}"
+        breakpoints = [breakpoint_statement]
+
+        # Simulation script file path.
+        file_name = f"lctime_min_clk_pulse_width_" \
+                    f"{'pos_pulse' if clock_pulse_polarity else 'neg_pulse'}_" \
+                    f"{'data_rising' if rising_data_edge else 'data_falling'}"
+        sim_file = os.path.join(workingdir, f"{file_name}.sp")
+
+        # Output file for simulation results.
+        sim_output_file = os.path.join(workingdir, f"{file_name}_output.txt")
+        # File for debug plot of the waveforms.
+        sim_plot_file = os.path.join(workingdir, f"{file_name}_plot.svg")
+
+        simulation_title = f"Find minimum clock pulse width: '{data_in}'-'{clock_input}'->'{data_out}', pulse polarity={clock_pulse_polarity}."
+
+        time, voltages, currents = simulate_cell(
+            cell_name=cell_name,
+            cell_ports=cell_ports,
+            input_voltages=input_voltages,
+            initial_voltages=initial_conditions,
+            breakpoint_statements=breakpoints,
+            output_voltages=[data_in, clock_input, data_out],
+            output_currents=[supply_net],
+            simulation_file=sim_file,
+            simulation_output_file=sim_output_file,
+            max_simulation_time=max_simulation_time,
+            simulation_title=simulation_title,
+            temperature=temperature,
+            output_load_capacitances=output_load_capacitances,
+            time_step=time_step,
+            spice_include_files=spice_include_files,
+            ground_net=ground_net,
+            debug=debug,
+        )
+
+        supply_current = currents[supply_net]
+        input_voltage = voltages[data_in]
+        clock_voltage = voltages[clock_input]
+        output_voltage = voltages[data_out]
+
+        if debug:
+            # Plot data in debug mode.
+            logger.debug("Create plot of waveforms: {}".format(sim_plot_file))
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            plt.close()
+            plt.title("Clock to output delay")
+            plt.plot(time, clock_voltage, label='clock')
+            plt.plot(time, input_voltage, label='data_in')
+            plt.plot(time, output_voltage, label='data_out')
+            plt.plot(time, supply_current, label='supply_current')
+            plt.legend()
+            plt.savefig(sim_plot_file)
+            plt.close()
+
+        # Normalize
+        clock_voltage /= supply_voltage
+        input_voltage /= supply_voltage
+        output_voltage /= supply_voltage
+
+        # Turn a falling edge into a rising edge by flipping the signal.
+        # This makes measurement of the delay easier.
+        if not rising_data_edge:
+            output_voltage = 1 - output_voltage
+
+        # Get decision thresholds.
+        if rising_data_edge:
+            output_threshold = trip_points.output_threshold_rise
+        else:
+            output_threshold = trip_points.output_threshold_fall
+
+        # Get logical values at start and end.
+        logic_out_start = output_voltage[0] > output_threshold
+        logic_out_end = output_voltage[-1] > output_threshold
+
+        print(output_voltage[0])
+        print(output_voltage[-1])
+
+        # The delay can only be measured if there is a rising edge in the output.
+        if not logic_out_start and logic_out_end:
+            # Output has rising edge
+            # Get first clock edge.
+            thresh_clk = trip_points.input_threshold_rise if clock_pulse_polarity else trip_points.input_threshold_fall
+            t_active_clock_edge = transition_time(voltage=clock_voltage, time=time, n=0,
+                                                  threshold=thresh_clk)
+
+            # Get first output data edge.
+            thresh_data = trip_points.input_threshold_rise if rising_data_edge else trip_points.input_threshold_fall
+            t_output_data_edge = transition_time(voltage=output_voltage, time=time, n=0,
+                                                 threshold=thresh_data)
+
+            # Compute the delay from the clock edge to the output data edge.
+            delay = t_output_data_edge - t_active_clock_edge
+        else:
+            # There's no edge in the output.
+            delay = float('Inf')
+
+        return delay
+
+    pulse_width = clock_pulse_width_guess
+    # Find a pulse width that is long enough.
+    while True:
+        delay = delay_function(pulse_width)
+        print(f"Pulse width = {pulse_width}, Delay = {delay}")
+        if math.isinf(delay):
+            pulse_width = pulse_width * 2
+        else:
+            break
+    # Remember the upper bound of the pulse width.
+    upper_bound = pulse_width
+
+    # Find a pulse width that is too short.
+    while True:
+        delay = delay_function(pulse_width)
+        print(f"Pulse width = {pulse_width}, Delay = {delay}")
+        if not math.isinf(delay):
+            pulse_width = pulse_width / 2
+        else:
+            break
+    lower_bound = pulse_width
+
+    print(f"Minimal clock pulse is between: {lower_bound} s and {upper_bound} s")
+
+    # Find the minimal clock pulse with a simple binary search.
+    for i in range(16):
+        # lower bound: This pulse width does not sample the data anymore.
+        # upper bound: This pulse width samples the data.
+        middle = (lower_bound + upper_bound) / 2
+
+        delay = delay_function(middle)
+        if math.isinf(delay):
+            # Data not sampled.
+            lower_bound = middle
+        else:
+            # Data was sampled.
+            upper_bound = middle
+
+        print(f"Minimal clock pulse: {upper_bound}")
+
+
+
+def test_find_min_pulse_width():
+    trip_points = TripPoints(
+        input_threshold_rise=0.5,
+        input_threshold_fall=0.5,
+        output_threshold_rise=0.5,
+        output_threshold_fall=0.5,
+
+        slew_lower_threshold_rise=0.2,
+        slew_upper_threshold_rise=0.8,
+        slew_lower_threshold_fall=0.2,
+        slew_upper_threshold_fall=0.8
+    )
+
+    subckt_name = 'DFFPOSX1'
+
+    include_file = f'../../test_data/freepdk45/netlists_pex/{subckt_name}.pex.netlist'
+    model_file = f'../../test_data/freepdk45/gpdk45nm.m'
+
+    ports = get_subcircuit_ports(include_file, subckt_name)
+    print("Ports: ", ports)
+    data_in = 'D'
+    clock = 'CLK'
+    data_out = 'Q'
+    ground = 'GND'
+    supply = 'VDD'
+
+    input_rise_time = 0.000e-9
+    input_fall_time = 0.000e-9
+
+    temperature = 27
+    logger.info(f"Temperature: {temperature} C")
+
+    output_load_capacitances = {data_out: 0.06e-12}
+    logger.info(f"Output load capacitance: {output_load_capacitances} [F]")
+
+    time_step = 10e-12
+    logger.info(f"Time step: {time_step} s")
+
+    # TODO: find appropriate simulation_duration_hint
+    simulation_duration_hint = 250e-12
+
+    # SPICE include files.
+    includes = [include_file, model_file]
+
+    vdd = 1.1
+    logger.info(f"Supply voltage: {vdd} V")
+
+    setup_time = 1e-9  # Choose big enough such that initial disturbances settle down.
+    clock_pulse_polarity = True
+    rising_data_edge = True
+
+    # Voltage sources for input signals.
+    # input_sources = [circuit.V('in_{}'.format(inp), inp, circuit.gnd, 'dc 0 external') for inp in inputs]
+
+    pos_edge_flipflop = True
+
+    result = find_minimum_pulse_width(
+        cell_name=subckt_name,
+        cell_ports=ports,
+        clock_input=clock,
+        data_in=data_in,
+        data_out=data_out,
+        setup_time=setup_time,
+        clock_pulse_polarity=clock_pulse_polarity,
+        rising_data_edge=rising_data_edge,
+        supply_voltage=vdd,
+        input_rise_time=input_rise_time,
+        input_fall_time=input_fall_time,
+        trip_points=trip_points,
+        temperature=temperature,
+        output_load_capacitances=output_load_capacitances,
+        time_step=time_step,
+        spice_include_files=includes,
+        ground_net=ground,
+        supply_net=supply,
+        # debug=True
+    )
+
+    print(result)
+    # assert result is not None
 
 
 def get_clock_to_output_delay(
@@ -132,9 +465,9 @@ def get_clock_to_output_delay(
     )
 
     # Sanity check:
-    assert isclose(clock_edge(t_clock_edge),
-                   trip_points.input_threshold_rise if rising_clock_edge
-                   else trip_points.input_threshold_fall)
+    assert math.isclose(clock_edge(t_clock_edge),
+                        trip_points.input_threshold_rise if rising_clock_edge
+                        else trip_points.input_threshold_fall)
 
     clk_wave = clock_pulse1 + clock_edge
 
