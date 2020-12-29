@@ -41,6 +41,92 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def ff_find_stabilization_time(
+        cell_name: str,
+        cell_ports: List[str],
+        clock_input: str,
+        data_in: str,
+        data_out: str,
+        supply_voltage: float,
+        setup_time: float,
+        clock_edge_polarity: bool,
+        rising_data_edge: bool,
+        clock_rise_time: float,
+        clock_fall_time: float,
+        trip_points: TripPoints,
+        temperature: float = 25,
+        output_load_capacitances: Dict[str, float] = None,
+        time_step: float = 100.0e-12,
+        max_simulation_time: float = 1e-7,
+        spice_include_files: List[str] = None,
+        workingdir: Optional[str] = None,
+        ground_net: str = 'GND',
+        supply_net: str = 'VDD',
+        debug: bool = False,
+) -> float:
+    """Find the time it takes for the data output signal of a flip-flop to stabilize after an active clock edge.
+    This is used to estimate the order of magnitude of the switching speed which will be used in subsequent simulations.
+    
+    :param cell_name: Name of the cell to be characterized. Must match with the name used in netlist and liberty.
+    :param cell_ports: All circuit pins/ports in the same ordering as used in the SPICE circuit model.
+    :param clock_input: Name of the clock pin ('related pin').
+    :param data_in: Name of the data-in pin ('constrained pin').
+    :param data_out: Name of the data-out pin.
+    :param supply_voltage: Supply voltage in volts.
+    :param clock_rise_time: Rise time of the clock signal.
+    :param clock_fall_time: Fall time of the clock signal.
+    :param trip_points:
+    :param temperature: Temperature of the simulation.
+    :param output_load_capacitances: A dict with (net, capacitance) pairs which defines the load capacitances attached to certain nets.
+    :param time_step: Simulation time step.
+    :param spice_include_files: List of include files (such as transistor models).
+    :param ground_net: The name of the ground net.
+    :param supply_net: The name of the supply net.
+    :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
+    :param debug: Enable more verbose debugging output such as plots of the simulations.
+    """
+
+    t_clock_edge = time_step * 16  # Rough estimate of when to start the clock edge.
+
+    # Generate the clock edge relative to which the delay will be measured.
+    clock_edge = StepWave(
+        start_time=t_clock_edge,
+        polarity=clock_edge_polarity,
+        transition_time=clock_rise_time if clock_edge_polarity else clock_fall_time,
+        rise_threshold=trip_points.input_threshold_rise,
+        fall_threshold=trip_points.input_threshold_fall
+    )
+    clock_edge *= supply_voltage
+
+    threshold = 0.5
+    breakpoint = f"stop when v({data_out}) > {supply_voltage * threshold} after {t_clock_edge}"
+    breakpoints = [breakpoint]
+
+    simulation_title = "Estimate flip-flop propagation speed (CLK->D_Out)."
+
+    time, voltages, currents = simulate_cell(
+        cell_name=cell_name,
+        cell_ports=cell_ports,
+        input_voltages=input_voltages,
+        initial_voltages=initial_conditions,
+        breakpoint_statements=breakpoints,
+        output_voltages=[data_in, clock_input, data_out],
+        output_currents=[supply_net],
+        simulation_file=sim_file,
+        simulation_output_file=sim_output_file,
+        max_simulation_time=max_simulation_time,
+        simulation_title=simulation_title,
+        temperature=temperature,
+        output_load_capacitances=output_load_capacitances,
+        time_step=time_step,
+        spice_include_files=spice_include_files,
+        ground_net=ground_net,
+        debug=debug,
+    )
+
+    raise NotImplementedError()
+
+
 def find_minimum_pulse_width(
         cell_name: str,
         cell_ports: List[str],
@@ -125,6 +211,7 @@ def find_minimum_pulse_width(
             rise_threshold=trip_points.input_threshold_rise,
             fall_threshold=trip_points.input_threshold_fall
         )
+        clock_pulse *= supply_voltage
 
         # All input voltage signals.
         input_voltages = {
@@ -275,7 +362,10 @@ def find_minimum_pulse_width(
     print(f"Minimal clock pulse is between: {lower_bound} s and {upper_bound} s")
 
     # Find the minimal clock pulse with a simple binary search.
-    for i in range(16):
+    # The search is stopped when the lower bound and upper bound are sufficiently close.
+    abs_tolerance = 0.1e-12  # [seconds] Absolute tolerance. Used as stopping condition for the binary search.
+    for i in count(0):
+        print(f"Binary search. Iteration {i}.")
         # lower bound: This pulse width does not sample the data anymore.
         # upper bound: This pulse width samples the data.
         middle = (lower_bound + upper_bound) / 2
@@ -288,8 +378,16 @@ def find_minimum_pulse_width(
             # Data was sampled.
             upper_bound = middle
 
-        print(f"Minimal clock pulse: {upper_bound}")
+        if upper_bound - lower_bound <= abs_tolerance:
+            # Reached tolerance. Stop the search.
+            print("Reached tolerance.")
+            break
 
+        print(f"Minimal clock pulse bounds: {lower_bound}s {upper_bound}s")
+
+    print(f"Minimal clock pulse: {upper_bound}s")
+
+    return upper_bound
 
 
 def test_find_min_pulse_width():
@@ -348,30 +446,37 @@ def test_find_min_pulse_width():
 
     pos_edge_flipflop = True
 
-    result = find_minimum_pulse_width(
-        cell_name=subckt_name,
-        cell_ports=ports,
-        clock_input=clock,
-        data_in=data_in,
-        data_out=data_out,
-        setup_time=setup_time,
-        clock_pulse_polarity=clock_pulse_polarity,
-        rising_data_edge=rising_data_edge,
-        supply_voltage=vdd,
-        input_rise_time=input_rise_time,
-        input_fall_time=input_fall_time,
-        trip_points=trip_points,
-        temperature=temperature,
-        output_load_capacitances=output_load_capacitances,
-        time_step=time_step,
-        spice_include_files=includes,
-        ground_net=ground,
-        supply_net=supply,
-        # debug=True
-    )
+    def _min_pulse_width(pulse_polarity: bool) -> float:
+        return find_minimum_pulse_width(
+            cell_name=subckt_name,
+            cell_ports=ports,
+            clock_input=clock,
+            data_in=data_in,
+            data_out=data_out,
+            setup_time=setup_time,
+            clock_pulse_polarity=pulse_polarity,
+            rising_data_edge=rising_data_edge,
+            supply_voltage=vdd,
+            input_rise_time=input_rise_time,
+            input_fall_time=input_fall_time,
+            trip_points=trip_points,
+            temperature=temperature,
+            output_load_capacitances=output_load_capacitances,
+            time_step=time_step,
+            spice_include_files=includes,
+            ground_net=ground,
+            supply_net=supply,
+            # debug=True
+        )
 
-    print(result)
-    # assert result is not None
+    clock_pulse_polarity = False
+    min_pulse_width_low = _min_pulse_width(pulse_polarity=clock_pulse_polarity)
+    clock_pulse_polarity = True
+    min_pulse_width_high = _min_pulse_width(pulse_polarity=clock_pulse_polarity)
+
+    print(f"min_pulse_width_high = {min_pulse_width_high}")
+    print(f"min_pulse_width_low = {min_pulse_width_low}")
+    assert isinstance(min_pulse_width_high, float)
 
 
 def get_clock_to_output_delay(

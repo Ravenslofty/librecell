@@ -250,14 +250,17 @@ exit
     logger.debug("Load simulation output.")
     sim_data = np.loadtxt(simulation_output_file, skiprows=1)
 
+    # Extract data from the numpy array.
     time = sim_data[:, 0]
     index = 1
 
+    # Put voltages into a dict.
     voltages = dict()
     for v_out in output_voltages:
         voltages[v_out] = sim_data[:, index]
         index = index + 2
 
+    # Put currents into a dict.
     currents = dict()
     for i_out in output_currents:
         currents[i_out] = sim_data[:, index]
