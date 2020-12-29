@@ -48,6 +48,7 @@ def _boolean_to_lambda(boolean: sympy.boolalg.Boolean):
     f = sympy.lambdify(boolean.atoms(), simple)
     return f
 
+
 from PySpice.Spice.Parser import SpiceParser
 import logging
 
@@ -186,8 +187,6 @@ def main():
     }
     """
 
-
-
     def _transistors2multigraph(transistors) -> nx.MultiGraph:
         """ Create a graph representing the transistor network.
             Each edge corresponds to a transistor, each node to a net.
@@ -223,7 +222,6 @@ def main():
     spice_includes = args.include if args.include else []
     if len(spice_includes) == 0:
         logger.warning("No transistor model supplied. Use --include or -I.")
-
 
     # Characterize all cells in the list.
     for cell_name in cell_names:
