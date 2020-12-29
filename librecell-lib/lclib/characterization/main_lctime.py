@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-from liberty.parser import parse_liberty
+import liberty.parser as liberty_parser
 from liberty.types import *
 
 from ..logic.util import is_unate_in_xi
@@ -30,7 +30,6 @@ from .input_capacitance import characterize_input_capacitances
 import argparse
 
 from copy import deepcopy
-from PySpice.Unit import *
 
 from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
