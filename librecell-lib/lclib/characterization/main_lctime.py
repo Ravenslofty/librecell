@@ -20,6 +20,8 @@
 import liberty.parser as liberty_parser
 from liberty.types import *
 
+from PySpice.Unit import *
+
 from ..logic.util import is_unate_in_xi
 from ..liberty import util as liberty_util
 from ..logic import functional_abstraction
@@ -193,7 +195,7 @@ def main():
         """
         G = nx.MultiGraph()
         for t in transistors:
-            G.add_edge(t.left, t.right, (t.gate, t.channel_type))
+            G.add_edge(t.source_net, t.drain_net, (t.gate_net, t.channel_type))
         assert nx.is_connected(G)
         return G
 

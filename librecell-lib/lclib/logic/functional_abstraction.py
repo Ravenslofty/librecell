@@ -238,7 +238,7 @@ def _get_conductivity_conditions(cmos_graph: nx.MultiGraph,
         return f
 
     def remove_nodes(graph: nx.MultiGraph, delete_nodes: Set) -> nx.MultiGraph:
-        remaining_nodes = graph.node - delete_nodes
+        remaining_nodes = graph.nodes() - delete_nodes
         return graph.subgraph(remaining_nodes)
 
     # Calculate conductivity conditions from each input-pin (i.e. power pins and inputs to transmission gates) to output.
@@ -285,7 +285,7 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
     """
 
     for n in output_nodes:
-        assert n in cmos_graph.node, "Output node is not in the graph: {}".format(n)
+        assert n in cmos_graph.nodes(), "Output node is not in the graph: {}".format(n)
 
     assert len(input_pins) >= 2, "`input_pins` must at least contain 2 nodes (GND, VDD). Found: {}".format(input_pins)
     input_pins = input_pins.copy()
@@ -501,7 +501,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         constant_input_pins = dict()
 
     gate_nets = _get_gate_nets(graph)
-    nets = set(graph.nodes)
+    nets = set(graph.nodes())
     all_nets = gate_nets | nets
 
     # Sanity check for the inputs.
