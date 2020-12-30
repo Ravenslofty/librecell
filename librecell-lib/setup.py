@@ -54,7 +54,7 @@ setup(name='librecell-lib',
           ]
       },
       install_requires=[
-          'librecell-common==0.0.7',
+          'librecell-common>=0.0.8',
           'numpy==1.*',  # BSD
           'sympy==1.6.*',  # BSD
           'matplotlib==3.*',
