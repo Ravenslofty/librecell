@@ -23,8 +23,8 @@ setup(name='librecell',
       author_email='code@tkramer.ch',
       license='',  # ???
       install_requires=[
-          'librecell-common==0.0.7',
-          'librecell-layout==0.0.7',
-          'librecell-lib==0.0.7',
+          'librecell-common==0.0.8',
+          'librecell-layout==0.0.8',
+          'librecell-lib==0.0.8',
       ],
       zip_safe=False)
