@@ -106,7 +106,7 @@ def simulate_cell(
         spice_include_files = []
 
     for inc in spice_include_files:
-        logger.info("Include '{}'".format(inc))
+        logger.debug("Include '{}'".format(inc))
     include_statements = "\n".join((f".include {i}" for i in spice_include_files))
 
     input_voltages_static = dict()
@@ -237,13 +237,13 @@ exit
 """
 
     # Dump simulation script to the file.
-    logger.info(f"Write simulation netlist: {simulation_file}")
+    logger.debug(f"Write simulation netlist: {simulation_file}")
     if os.path.exists(simulation_file):
         logger.warning("Simulation file already exists: {}".format(simulation_file))
     open(simulation_file, "w").write(sim_netlist)
 
     # Start ngspice.
-    logger.info("Run simulation.")
+    logger.debug("Run simulation.")
     run_simulation(simulation_file)
 
     # Retrieve data.
