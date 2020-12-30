@@ -26,7 +26,7 @@ def readme():
 
 
 setup(name='librecell-lib',
-      version='0.0.6',
+      version='0.0.7',
       description='CMOS standard cell characterization kit.',
       long_description=readme(),
       long_description_content_type="text/markdown",
@@ -54,7 +54,7 @@ setup(name='librecell-lib',
           ]
       },
       install_requires=[
-          'librecell-common==0.0.6',
+          'librecell-common==0.0.7',
           'numpy==1.*',  # BSD
           'sympy==1.6.*',  # BSD
           'matplotlib==3.*',
