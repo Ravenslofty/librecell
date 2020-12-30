@@ -6,6 +6,10 @@ Characterization kit for CMOS cells.
 See install instructions in top-project.
 
 ### Characterize a cell
+
+An ready-to-run example can be found in the `examples` folder.
+The script `run_example.sh` should characterize the `INVX1` inverter.
+
 The following example determines the input capacitances and timing delays of a combinational cell.
 
 It is assumed that `FreePDK45` is installed in the users home directory.
