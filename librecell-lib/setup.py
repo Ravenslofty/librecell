@@ -61,6 +61,6 @@ setup(name='librecell-lib',
           'networkx==2.5',  # BSD
           'pyspice==1.4.3',  # GPLv3
           'scipy>=1.5.*',  # BSD
-          'liberty-parser==0.0.7',  # GPLv3
+          'liberty-parser==0.0.8',  # GPLv3
       ],
       zip_safe=False)
