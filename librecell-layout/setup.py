@@ -45,7 +45,7 @@ setup(name='librecell-layout',
           ]
       },
       install_requires=[
-          'librecell-common',
+          'librecell-common==0.0.6',
           'toml==0.10.*',
           'klayout==0.26.*',  # GPLv3
           'numpy==1.*',  # BSD
