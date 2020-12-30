@@ -448,8 +448,8 @@ def main():
                         groups=timing_tables
                     )
 
-            # Attach timing group to output pin group.
-            output_pin_group.groups.append(timing_group)
+                    # Attach timing group to output pin group.
+                    output_pin_group.groups.append(timing_group)
 
         assert isinstance(new_cell_group, Group)
         return new_cell_group
