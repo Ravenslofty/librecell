@@ -351,8 +351,8 @@ def main():
                 timing_group = Group(
                     'timing',
                     attributes={
-                        'related_pin': EscapedString(related_pin),
-                        'timing_sense': timing_sense
+                        'related_pin': [EscapedString(related_pin)],
+                        'timing_sense': [timing_sense]
                     },
                     groups=timing_tables
                 )
