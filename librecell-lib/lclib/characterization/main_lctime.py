@@ -27,17 +27,39 @@ import argparse
 import joblib
 import tempfile
 
-from liberty.parser import parse_liberty
+import liberty.parser as liberty_parser
 from liberty.types import *
 
+from PySpice.Unit import *
+
 from ..logic.util import is_unate_in_xi
-from ..liberty.util import get_pin_information
+from ..liberty import util as liberty_util
+from ..logic import functional_abstraction
 
 from .util import *
 from .timing_combinatorial import characterize_comb_cell
 from .input_capacitance import characterize_input_capacitances
 
 from copy import deepcopy
+
+from lccommon import net_util
+from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
+import networkx as nx
+import sympy
+from typing import Iterable
+
+
+def _boolean_to_lambda(boolean: sympy.boolalg.Boolean):
+    """
+    Convert a sympy.boolalg.Boolean expression into a Python lambda function.
+    :param boolean:
+    :return:
+    """
+    simple = sympy.simplify(boolean)
+    f = sympy.lambdify(boolean.atoms(), simple)
+    return f
+
+
 from PySpice.Spice.Parser import SpiceParser
 import logging
 
@@ -137,7 +159,7 @@ def main():
     logger.info("Reading liberty: {}".format(lib_file))
     with open(lib_file) as f:
         data = f.read()
-    library = parse_liberty(data)
+    library = liberty_parser.parse_liberty(data)
 
     # Check if the delay model is supported.
     delay_model = library['delay_model']
@@ -167,7 +189,6 @@ def main():
     time_unit_scale_factor = 1e9
 
     # Get timing corner from liberty file.
-
     # Find definitions of operating conditions and sort them by name.
     operating_conditions_list = library.get_groups('operating_conditions')
     # Put into a dict by name.
@@ -188,6 +209,17 @@ def main():
     }
     """
 
+    def _transistors2multigraph(transistors) -> nx.MultiGraph:
+        """ Create a graph representing the transistor network.
+            Each edge corresponds to a transistor, each node to a net.
+        """
+        G = nx.MultiGraph()
+        for t in transistors:
+            G.add_edge(t.source_net, t.drain_net, (t.gate_net, t.channel_type))
+        assert nx.is_connected(G)
+        return G
+
+    # Get timing corner from liberty file.
     # TODO: let user overwrite it.
     calc_modes = {
         'typical': CalcMode.TYPICAL,
@@ -235,7 +267,62 @@ def main():
         logger.info("Netlist: {}".format(netlist_file))
 
         # Get information on pins
-        input_pins, output_pins, output_functions = get_pin_information(cell_group)
+        input_pins, output_pins, output_functions_user = liberty_util.get_pin_information(cell_group)
+
+        # Load netlist of cell
+        # TODO: Load all netlists at the beginning.
+        logger.info('Load netlist: %s', netlist_file)
+        transistors_abstract, cell_pins = load_transistor_netlist(netlist_file, cell_name)
+        io_pins = net_util.get_io_pins(cell_pins)
+
+        # Detect power pins.
+        # TODO: don't decide based only on net name.
+        power_pins = [p for p in cell_pins if net_util.is_power_net(p)]
+        assert len(power_pins) == 2, "Expected to have 2 power pins."
+        vdd_pins = [p for p in power_pins if net_util.is_supply_net(p)]
+        gnd_pins = [p for p in power_pins if net_util.is_ground_net(p)]
+        assert len(vdd_pins) == 1, "Expected to find one VDD pin but found: {}".format(vdd_pins)
+        assert len(gnd_pins) == 1, "Expected to find one GND pin but found: {}".format(gnd_pins)
+        vdd_pin = vdd_pins[0]
+        gnd_pin = gnd_pins[0]
+
+        # Derive boolean functions for the outputs from the netlist.
+        logger.info("Derive boolean functions for the outputs based on the netlist.")
+        transistor_graph = _transistors2multigraph(transistors_abstract)
+        output_functions_deduced = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
+                                                                                pins_of_interest=io_pins,
+                                                                                constant_input_pins={vdd_pin: True,
+                                                                                                     gnd_pin: False},
+                                                                                user_input_nets=input_pins)
+        # Convert keys into strings (they are `sympy.Symbol`s now)
+        output_functions_deduced = {output.name: function for output, function in output_functions_deduced.items()}
+        output_functions_symbolic = output_functions_deduced
+
+        # Log deduced output functions.
+        for output_name, function in output_functions_deduced.items():
+            logger.info("Deduced output function: {} = {}".format(output_name, function))
+
+        # Merge deduced output functions with the ones read from the liberty file and perform consistency check.
+        for output_name, function in output_functions_user.items():
+            logger.info("User supplied output function: {} = {}".format(output_name, function))
+            assert output_name in output_functions_deduced, "No function has been deduced for output pin '{}'.".format(
+                output_name)
+            # Consistency check: verify that the deduced output formula is equal to the one defined in the liberty file.
+            equal = functional_abstraction.bool_equals(function, output_functions_deduced[output_name])
+            if not equal:
+                msg = "User supplied function does not match the deduced function for pin '{}'".format(output_name)
+                logger.error(msg)
+
+            if equal:
+                # Take the function defined by the liberty file.
+                # This might be desired because it is in another form (CND, DNF,...).
+                output_functions_symbolic[output_name] = function
+
+        # Convert deduced output functions into Python lambda functions.
+        output_functions = {
+            name: _boolean_to_lambda(f)
+            for name, f in output_functions_symbolic.items()
+        }
 
         # Sanity check.
         if len(input_pins) == 0:
@@ -295,6 +382,10 @@ def main():
         logger.debug("Measuring timing.")
         for output_pin in output_pins:
             output_pin_group = new_cell_group.get_group('pin', output_pin)
+
+            # Insert boolean function of output.
+            output_pin_group.set_boolean_function('function', output_functions_symbolic[output_pin])
+
             for related_pin in input_pins:
                 logger.info("Timing arc: {} -> {}".format(related_pin, output_pin))
 
@@ -347,18 +438,18 @@ def main():
 
                     timing_tables.append(table)
 
-                # Create the liberty timing group.
-                timing_group = Group(
-                    'timing',
-                    attributes={
-                        'related_pin': [EscapedString(related_pin)],
-                        'timing_sense': [timing_sense]
-                    },
-                    groups=timing_tables
-                )
+                    # Create the liberty timing group.
+                    timing_group = Group(
+                        'timing',
+                        attributes={
+                            'related_pin': [EscapedString(related_pin)],
+                            'timing_sense': [timing_sense]
+                        },
+                        groups=timing_tables
+                    )
 
-                # Attach timing group to output pin group.
-                output_pin_group.groups.append(timing_group)
+            # Attach timing group to output pin group.
+            output_pin_group.groups.append(timing_group)
 
         assert isinstance(new_cell_group, Group)
         return new_cell_group

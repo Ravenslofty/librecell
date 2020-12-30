@@ -43,21 +43,14 @@ def get_pin_information(cell_group: Group):
         direction = pin_group.get('direction', None)
 
         # Get boolean function of pin (for outputs).
-        function_str = pin_group.get('function', None)
-        if function_str is not None:
-            expr = parse_boolean_function(function_str.value)
-            # Convert expression into a Python lambda function.
-            # ! `lambdify` calls eval in the background. `expr` should never come from
-            # some where else than `parse_boolean_function`.
-            simple = sympy.simplify(expr)
-            f = lambdify(expr.atoms(), simple)
-            output_functions[pin_name] = f
+        expr = pin_group.get_boolean_function('function')
+        if expr is not None:
+            output_functions[pin_name] = expr
         else:
             # Assert that for all output pins the logic function is defined.
             if direction == 'output':
                 msg = 'Output pin has no function defined: {}'.format(pin_name)
-                logger.error(msg)
-                assert False, msg
+                logger.info(msg)
             expr = ''
 
         logger.info("Pin '{}' {} {}".
