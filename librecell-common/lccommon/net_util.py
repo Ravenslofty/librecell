@@ -17,16 +17,15 @@
 ## You should have received a copy of the GNU General Public License
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 ##
-from . import spice_parser
-from PySpice.Spice.Parser import SpiceParser
 
-from PySpice.Spice.Parser import SubCircuitStatement
-
-from copy import copy
 from lclayout.data_types import *
 import networkx as nx
 from typing import Tuple, List, Set, Iterable
 import klayout.db as db
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_subcircuit_ports(file: str, subckt_name: str) -> List[str]:
@@ -36,35 +35,39 @@ def get_subcircuit_ports(file: str, subckt_name: str) -> List[str]:
     :return: List of node names.
     """
 
-    sc = load_subcircuit(file, subckt_name)
-    return sc.nodes
+    _, sc = load_subcircuit(file, subckt_name)
+
+    pins = [p.name() for p in sc.each_pin()]
+
+    return pins
 
 
-def load_subcircuit(file: str, subckt_name: str) -> SubCircuitStatement:
+def load_subcircuit(path: str, circuit_name: str) -> Tuple[db.Netlist, db.Circuit]:
     """ Load a sub circuit from a SPICE file.
-    :param file: Path to the spice file containing the subcircuit.
-    :param subckt_name: Name of the subcircuit.
-    :return: The subcircuit.
+    :param path: Path to the spice file containing the subcircuit.
+    :param circuit_name: Name of the subcircuit.
+    :return: A tuple with the netlist and the circuit. Returns none if there's no subcircuit with this name.
     """
 
-    parser = SpiceParser(path=file)
-    name_match = [s for s in parser.subcircuits if s.name == subckt_name]
+    netlist = db.Netlist()
+    netlist.read(path, db.NetlistSpiceReader())
+    if not circuit_name.isupper():
+        # KLayout converts cell names to uppercase.
+        # Check if that is still true:
+        assert netlist.circuit_by_name(circuit_name) is None, "KLayout did not convert cell names to upper case."
+        logger.info(f"Convert non-upper case cellname to upper case: '{circuit_name}' -> '{circuit_name.upper()}'")
+        circuit_name = circuit_name.upper()
 
-    if not name_match:
-        raise Exception("No such sub circuit: {}".format(subckt_name))
+    circuit: db.Circuit = netlist.circuit_by_name(circuit_name)
 
-    if len(name_match) == 1:
-        return copy(name_match[0])
-
-    raise Exception("Multiple definitions of sub circuit: {}".format(subckt_name))
+    # Have to return the netlist too. Otherwise it is deconstructed already.
+    return netlist, circuit
 
 
-def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transistor], Set[str]]:
-    """ Load a subcircuit from a spice netlist.
+def load_transistor_netlist(path: str, circuit_name: str) -> Tuple[List[Transistor], Set[str]]:
+    """ Load a transistor level circuit from a spice netlist.
 
-    Parameters
-    ----------
-    path: The path to the netlist.
+    :param path: The path to the netlist.
 
     Returns
     -------
@@ -73,12 +76,10 @@ def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transisto
     """
 
     # Read netlist. TODO: take netlist object as argument.
-    netlist = db.Netlist()
-    netlist.read(path, db.NetlistSpiceReader())
-    circuit: db.Circuit = netlist.circuit_by_name(subckt_name)
+    netlist, circuit = load_subcircuit(path, circuit_name)
 
     if circuit is None:
-        raise Exception("No such circuit: {}".format(subckt_name))
+        raise Exception("No such circuit: {}".format(circuit_name))
 
     pins = [p.name() for p in circuit.each_pin()]
 
@@ -99,7 +100,7 @@ def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transisto
                    d.net_for_terminal(id_source_4).name,
                    d.net_for_terminal(id_gate_4).name,
                    d.net_for_terminal(id_drain_4).name,
-                   channel_width=d.parameter('W') * 1e-6, # Convert into micrometers.
+                   channel_width=d.parameter('W') * 1e-6,  # Convert into micrometers.
                    name=d.name
                    )
         for d in circuit.each_device()

@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='librecell-common',
-      version='0.0.7',
+      version='0.0.9',
       description='Common utility functions for LibreCell suite.',
       long_description=readme(),
       long_description_content_type="text/markdown",
@@ -26,6 +26,5 @@ setup(name='librecell-common',
       packages=find_packages(),
       install_requires=[
           'networkx==2.5',  # BSD
-          'pyspice==1.4.3',  # GPLv3
       ],
       zip_safe=False)

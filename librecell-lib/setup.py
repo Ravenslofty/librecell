@@ -26,7 +26,7 @@ def readme():
 
 
 setup(name='librecell-lib',
-      version='0.0.7',
+      version='0.0.9',
       description='CMOS standard cell characterization kit.',
       long_description=readme(),
       long_description_content_type="text/markdown",
@@ -48,13 +48,13 @@ setup(name='librecell-lib',
           'console_scripts': [
               'libertyviz = lclib.liberty.visualize:main_plot_timing',
               'libertymerge = lclib.liberty.merge:main',
-              'lcsize = lclib.transistor_sizing.width_opt:main',
+              # 'lcsize = lclib.transistor_sizing.width_opt:main',
               'lctime = lclib.characterization.main_lctime:main',
               'sp2bool = lclib.characterization.main_sp2bool:main'
           ]
       },
       install_requires=[
-          'librecell-common==0.0.7',
+          'librecell-common>=0.0.9',
           'numpy==1.*',  # BSD
           'sympy==1.6.*',  # BSD
           'matplotlib==3.*',
