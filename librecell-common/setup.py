@@ -26,6 +26,5 @@ setup(name='librecell-common',
       packages=find_packages(),
       install_requires=[
           'networkx==2.5',  # BSD
-          'pyspice==1.4.3',  # GPLv3
       ],
       zip_safe=False)

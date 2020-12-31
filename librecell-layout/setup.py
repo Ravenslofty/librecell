@@ -50,7 +50,6 @@ setup(name='librecell-layout',
           'klayout==0.26.*',  # GPLv3
           'numpy==1.*',  # BSD
           'networkx==2.5',  # BSD
-          'pyspice==1.4.3',  # GPLv3
           'scipy>=1.5.*',  # BSD
           'liberty-parser==0.0.8',  # GPLv3
           'pysmt==0.9.*',  # Apache-2.0
