@@ -28,6 +28,9 @@ import networkx as nx
 from typing import Tuple, List, Set, Iterable
 import klayout.db as db
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_subcircuit_ports(file: str, subckt_name: str) -> List[str]:
     """ Find port names of a subcircuit.
@@ -75,6 +78,12 @@ def load_transistor_netlist(path: str, subckt_name: str) -> Tuple[List[Transisto
     # Read netlist. TODO: take netlist object as argument.
     netlist = db.Netlist()
     netlist.read(path, db.NetlistSpiceReader())
+    if not subckt_name.isupper():
+        # KLayout converts cell names to uppercase.
+        # Check if that is still true:
+        assert netlist.circuit_by_name(subckt_name) is None, "KLayout did not convert cell names to upper case."
+        logger.info(f"Convert non-upper case cellname to upper case: '{subckt_name}' -> '{subckt_name.upper()}'")
+        subckt_name = subckt_name.upper()
     circuit: db.Circuit = netlist.circuit_by_name(subckt_name)
 
     if circuit is None:
