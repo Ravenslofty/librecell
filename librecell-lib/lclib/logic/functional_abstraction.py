@@ -28,7 +28,6 @@ from sympy.logic import boolalg
 
 from lclayout.data_types import ChannelType
 import logging
-import sys
 
 # logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)

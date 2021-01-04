@@ -45,11 +45,11 @@ from copy import deepcopy
 from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
 import networkx as nx
-import sympy
+import sympy.logic.boolalg
 from typing import Iterable
 
 
-def _boolean_to_lambda(boolean: sympy.boolalg.Boolean):
+def _boolean_to_lambda(boolean: boolalg.Boolean):
     """
     Convert a sympy.boolalg.Boolean expression into a Python lambda function.
     :param boolean:
