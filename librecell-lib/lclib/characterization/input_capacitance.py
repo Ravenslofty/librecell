@@ -47,7 +47,7 @@ def characterize_input_capacitances(cell_name: str,
                                     trip_points: TripPoints,
                                     timing_corner: CalcMode,
                                     spice_netlist_file: str,
-                                    spice_include_files: List[str] = None,
+                                    setup_statements: List[str] = None,
                                     time_resolution: float = 1e-12,
                                     temperature=27,
                                     workingdir: Optional[str] = None,
@@ -70,7 +70,8 @@ def characterize_input_capacitances(cell_name: str,
     :param trip_points: Trip-point object which specifies the voltage thresholds of the logical values.
     :param timing_corner: Specify whether to take the maximum, minimum or average capacitance value. (Over all static input combinations).
     :param spice_netlist_file: The file containing the netlist of this cell.
-    :param spice_include_files: Optional include files for transistor models etc.
+    :param setup_statements: SPICE statements that are included at the beginning of the simulation.
+        This should be used for .INCLUDE and .LIB statements.
     :param time_resolution: Time resolution of the simulation.
     :param temperature: Temperature of the simulated circuit.
     :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
@@ -95,14 +96,14 @@ def characterize_input_capacitances(cell_name: str,
     logger.debug("Vdd: {} V".format(vdd))
 
     # Create a list of include files.
-    if spice_include_files is None:
-        spice_include_files = []
-    spice_include_files = spice_include_files + [spice_netlist_file]
+    if setup_statements is None:
+        setup_statements = []
+    setup_statements = setup_statements + [f".include {spice_netlist_file}"]
 
     # Load include files.
-    for inc in spice_include_files:
-        logger.info("Include '{}'".format(inc))
-    include_statements = "\n".join((f".include {i}" for i in spice_include_files))
+    for setup in setup_statements:
+        logger.debug("Setup statement: ", setup)
+    setup_statements_string = "\n".join(setup_statements)
 
     # Add output load capacitance. Right now this is 0F.
     output_load_statements = "\n".join((f"Cload_{p} {p} GND 0" for p in output_pins))
@@ -178,7 +179,7 @@ def characterize_input_capacitances(cell_name: str,
 
 .option TEMP={temperature}
 
-{include_statements}
+{setup_statements_string}
 
 Xcircuit_under_test {" ".join(ports)} {cell_name}
 

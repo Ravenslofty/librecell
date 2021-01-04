@@ -25,6 +25,6 @@ setup(name='librecell',
       install_requires=[
           'librecell-common==0.0.9',
           'librecell-layout==0.0.9',
-          'librecell-lib==0.0.9',
+          'librecell-lib==0.0.10',
       ],
       zip_safe=False)
