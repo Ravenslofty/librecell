@@ -87,7 +87,7 @@ def characterize_input_capacitances(cell_name: str,
     logger.debug("characterize_input_capacitances()")
     # Find ports of the SPICE netlist.
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
-    logger.info("Subcircuit ports: {}".format(", ".join(ports)))
+    logger.debug("Subcircuit ports: {}".format(", ".join(ports)))
 
     logger.debug("Ground net: {}".format(ground_net))
     logger.debug("Supply net: {}".format(supply_net))
@@ -119,7 +119,7 @@ def characterize_input_capacitances(cell_name: str,
     }[timing_corner]
     logger.info("Reduction function for summarizing multiple timing arcs: {}".format(reduction_function.__name__))
 
-    logger.info("Measuring input capactiance.")
+    logger.debug("Measuring input capactiance.")
 
     # Generate all possible input combinations for the static input pins.
     static_input_nets = [i for i in input_pins if i != active_pin]
@@ -220,7 +220,7 @@ exit
             open(sim_file, "w").write(sim_netlist)
 
             # Run simulation.
-            logger.info("Run simulation.")
+            logger.debug("Run simulation.")
             run_simulation(sim_file)
 
             # Fetch simulation results.
@@ -272,14 +272,14 @@ exit
             logger.debug("dV: {}".format(dv))
             logger.debug("dt: {}".format(dt))
             logger.debug("I: {}".format(input_current))
-            logger.info("Capacitance: {}".format(capacitance))
+            logger.info("Input capacitance {}: {} F".format(active_pin, capacitance))
 
             if input_rising:
                 capacitances_rising.append(capacitance)
             else:
                 capacitances_falling.append(capacitance)
 
-    logger.info("Characterizing input capacitances: Done")
+    logger.debug("Characterizing input capacitances: Done")
 
     # Find max, min or average depending on 'reduction_function'.
     logger.debug(

@@ -391,9 +391,9 @@ def main():
         logger.info("Time resolution = {}s".format(time_resolution_seconds))
 
         # Measure input pin capacitances.
-        logger.debug("Measuring input pin capacitances.")
+        logger.debug(f"Measuring input pin capacitances of cell {cell_name}.")
         for input_pin in input_pins:
-            logger.info("Measuring input capacitance: {}".format(input_pin))
+            logger.info("Measuring input capacitance: {} {}".format(cell_name, input_pin))
             input_pin_group = new_cell_group.get_group('pin', input_pin)
 
             result = characterize_input_capacitances(
@@ -455,7 +455,7 @@ def main():
                     temperature=temperature,
 
                     workingdir=cell_workingdir,
-                    
+
                     ground_net=gnd_pin,
                     supply_net=vdd_pin,
 

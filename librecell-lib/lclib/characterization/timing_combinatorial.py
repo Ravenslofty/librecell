@@ -91,7 +91,7 @@ def characterize_comb_cell(cell_name: str,
 
     # Find ports of the SPICE netlist.
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
-    logger.info("Subcircuit ports: {}".format(", ".join(ports)))
+    logger.debug("Subcircuit ports: {}".format(", ".join(ports)))
 
     vdd = supply_voltage
 
