@@ -411,7 +411,8 @@ def main():
                 temperature=temperature,
 
                 workingdir=cell_workingdir,
-
+                ground_net=gnd_pin,
+                supply_net=vdd_pin,
                 debug=args.debug
             )
 
@@ -454,6 +455,9 @@ def main():
                     temperature=temperature,
 
                     workingdir=cell_workingdir,
+                    
+                    ground_net=gnd_pin,
+                    supply_net=vdd_pin,
 
                     debug=args.debug
                 )
