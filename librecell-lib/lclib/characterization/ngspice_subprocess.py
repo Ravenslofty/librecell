@@ -43,8 +43,9 @@ def run_simulation(sim_file: str, ngspice_executable: str = 'ngspice'):
         # proc = subprocess.Popen([ngspice_executable, sim_file])
         # logger.debug(f"Subprocess return value: {ret}")
         if ret.returncode != 0:
-            logger.error(f"ngspice simulation failed: {ret}")
-            raise Exception(f"ngspice simulation failed: {ret}")
+            ngspice_err_message = ret.stderr.decode("utf-8")
+            logger.error(f"ngspice simulation failed: {ngspice_err_message}")
+            raise Exception(f"ngspice simulation failed: {ngspice_err_message}")
     except FileNotFoundError as e:
         msg = f"SPICE simulator executable not found. Make sure it is in the current path: {ngspice_executable}"
         logger.error(msg)
@@ -66,7 +67,7 @@ def simulate_cell(
         temperature: float = 25,
         output_load_capacitances: Dict[str, float] = None,
         time_step: float = 100.0e-12,
-        spice_include_files: List[str] = None,
+        setup_statements: List[str] = None,
         ground_net: str = 'GND',
         debug: bool = False,
 ) -> Tuple[np.ndarray, Dict[str, np.ndarray], Dict[str, np.ndarray]]:
@@ -87,7 +88,8 @@ def simulate_cell(
     :param temperature: Temperature of the simulation.
     :param output_load_capacitances: A dict with (net, capacitance) pairs which defines the load capacitances attached to certain nets.
     :param time_step: Simulation time step.
-    :param spice_include_files: List of include files (such as transistor models).
+    :param setup_statements: SPICE statements that are included at the beginning of the simulation.
+        This should be used for .INCLUDE and .LIB statements.
     :param ground_net: The name of the ground net.
     :param debug: Enable more verbose debugging output such as plots of the simulations.
     :return: Returns tuple (time, Dict[net, voltage], Dict[source, current]).
@@ -101,13 +103,12 @@ def simulate_cell(
     logger.debug(f"Temperature: {temperature} C")
     logger.debug(f"Max. simulation time: {max_simulation_time} s")
 
-    # Load include files.
-    if spice_include_files is None:
-        spice_include_files = []
+    # Create a list of include files.
+    if setup_statements is None:
+        setup_statements = []
 
-    for inc in spice_include_files:
-        logger.debug("Include '{}'".format(inc))
-    include_statements = "\n".join((f".include {i}" for i in spice_include_files))
+    # Load include files.
+    setup_statements_string = "\n".join(setup_statements)
 
     input_voltages_static = dict()
     input_voltages_active = dict()
@@ -198,7 +199,7 @@ def simulate_cell(
 
 .option TEMP={temperature}
 
-{include_statements}
+{setup_statements_string}
 
 Xcircuit_under_test {" ".join(cell_ports)} {cell_name}
 

@@ -50,9 +50,11 @@ def characterize_comb_cell(cell_name: str,
                            input_net_transition: np.ndarray,
 
                            spice_netlist_file: str,
-                           spice_include_files: List[str] = None,
+                           setup_statements: List[str] = None,
                            time_resolution=1e-12,
                            temperature=27,
+                           ground_net: str = 'GND',
+                           supply_net: str = 'VDD',
                            workingdir: Optional[str] = None,
                            debug: bool = False,
                            ) -> Dict[str, np.ndarray]:
@@ -73,9 +75,12 @@ def characterize_comb_cell(cell_name: str,
         BEST: min
         TYPICAL: np.mean
     :param spice_netlist_file: Path to SPICE netlist containing the subcircuit of the cell.
-    :param spice_include_files: SICE include files such as transistor models.
+    :param setup_statements: SPICE statements that are included at the beginning of the simulation.
+        This should be used for .INCLUDE and .LIB statements.
     :param time_resolution: Time step of simulation in Pyspice.Units.Seconds.
     :param temperature: Simulation temperature in celsius.
+    :param ground_net: The name of the ground net.
+    :param supply_net: The name of the supply net.
     :param debug: Enable more verbose debugging output such as plots of the simulations.
     :return: Returns the NDLM timing tables wrapped in a dict:
     {'cell_rise': 2d-np.ndarray, 'cell_fall': 2d-np.ndarray, ... }
@@ -86,11 +91,7 @@ def characterize_comb_cell(cell_name: str,
 
     # Find ports of the SPICE netlist.
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
-    logger.info("Subcircuit ports: {}".format(", ".join(ports)))
-
-    # TODO: find correct names for GND/VDD from netlist.
-    ground = 'GND'
-    supply = 'VDD'
+    logger.debug("Subcircuit ports: {}".format(", ".join(ports)))
 
     vdd = supply_voltage
 
@@ -106,13 +107,10 @@ def characterize_comb_cell(cell_name: str,
         CalcMode.TYPICAL: np.mean
     }[timing_corner]
 
-    # Load include files.
-    if spice_include_files is None:
-        spice_include_files = []
-    spice_include_files = spice_include_files + [spice_netlist_file]
-
-    for inc in spice_include_files:
-        logger.info("Include '{}'".format(inc))
+    # Create a list of include files.
+    if setup_statements is None:
+        setup_statements = []
+    setup_statements = setup_statements + [f".include {spice_netlist_file}"]
 
     # Get all input nets that are not toggled during a simulation run.
     logger.debug("Get all input nets that are not toggled during a simulation run.")
@@ -185,7 +183,7 @@ def characterize_comb_cell(cell_name: str,
                 # Get voltages at static inputs.
                 input_voltages = {net: vdd * value for net, value in zip(static_input_nets, static_input)}
                 # Add supply voltage.
-                input_voltages[supply] = supply_voltage
+                input_voltages[supply_net] = supply_voltage
                 logger.debug("Voltages at static inputs: {}".format(input_voltages))
 
                 # Get stimulus signal for related pin.
@@ -217,7 +215,7 @@ def characterize_comb_cell(cell_name: str,
                     initial_voltages=initial_conditions,
                     breakpoint_statements=breakpoint_statements,
                     output_voltages=[related_pin, output_pin],
-                    output_currents=[supply],
+                    output_currents=[supply_net],
                     simulation_file=sim_file,
                     simulation_output_file=sim_output_file,
                     max_simulation_time=time_max,
@@ -225,13 +223,13 @@ def characterize_comb_cell(cell_name: str,
                     temperature=temperature,
                     output_load_capacitances={output_pin: output_cap},
                     time_step=time_resolution,
-                    spice_include_files=spice_include_files,
-                    ground_net=ground,
+                    setup_statements=setup_statements,
+                    ground_net=ground_net,
                     debug=debug,
                 )
 
                 # Retrieve data.
-                supply_current = currents[supply]
+                supply_current = currents[supply_net]
                 input_voltage = voltages[related_pin]
                 output_voltage = voltages[output_pin]
 

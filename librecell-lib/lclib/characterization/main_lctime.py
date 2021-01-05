@@ -45,11 +45,11 @@ from copy import deepcopy
 from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
 import networkx as nx
-import sympy
+import sympy.logic.boolalg
 from typing import Iterable
 
 
-def _boolean_to_lambda(boolean: sympy.boolalg.Boolean):
+def _boolean_to_lambda(boolean: boolalg.Boolean):
     """
     Convert a sympy.boolalg.Boolean expression into a Python lambda function.
     :param boolean:
@@ -97,6 +97,10 @@ def main():
 
     parser.add_argument('-I', '--include', required=False, action='append', metavar='SPICE_INCLUDE', type=str,
                         help='SPICE files to include such as transistor models.')
+
+    parser.add_argument('-L', '--library', required=False, action='append', metavar='SPICE_LIB', type=str,
+                        help='SPICE .LIB statements defining each a path to the library and a library name.'
+                             'Example: --library "/path/to/lib libraryName".')
 
     parser.add_argument('--calc-mode', metavar='CALC_MODE', type=str, choices=['worst', 'typical', 'best'],
                         default='typical',
@@ -245,6 +249,43 @@ def main():
     if len(spice_includes) == 0:
         logger.warning("No transistor model supplied. Use --include or -I.")
 
+    # Sanitize include paths.
+    input_argument_error = False
+    for path in spice_includes:
+        if not os.path.isfile(path):
+            logger.error(f"Include file does not exist: {path}")
+            input_argument_error = True
+
+    spice_libraries_raw: List[str] = args.library if args.library else []
+    # Split library statements into path and library name.
+    spice_libraries: List[Tuple[str, str]] = [tuple(s.strip() for s in l.split(" ", maxsplit=2))
+                                              for l in spice_libraries_raw
+                                              ]
+    # Sanitize the library arguments.
+    for lib, raw in zip(spice_libraries, spice_libraries_raw):
+        if len(lib) != 2 or not lib[0] or not lib[1]:
+            logger.error('Library statements must be of the format "/path/to/library libraryName". Found: "{}".'
+                         .format(raw))
+            exit(1)
+
+        path, name = lib
+        if not os.path.isfile(path):
+            logger.error(f"Library file does not exist: {path}")
+            input_argument_error = True
+
+    # Exit if some input arguments were obviously invalid.
+    if input_argument_error:
+        logger.info("Exit because of invalid arguments.")
+        exit(1)
+
+    # .LIB statements
+    library_statements = [f".LIB {path} {name}" for path, name in spice_libraries]
+
+    # .INCLUDE statements
+    include_statements = [f".include {i}" for i in spice_includes]
+
+    setup_statements = library_statements + include_statements
+
     # TODO: No hardcoded data here!
     output_capacitances = np.array([0.05, 0.1, 0.2, 0.4, 0.8, 1.6]) * 1e-12  # pf
     input_transition_times = np.array([0.1, 0.2, 0.4, 0.8, 1.6, 3.2]) * 1e-9  # ns
@@ -350,9 +391,9 @@ def main():
         logger.info("Time resolution = {}s".format(time_resolution_seconds))
 
         # Measure input pin capacitances.
-        logger.debug("Measuring input pin capacitances.")
+        logger.debug(f"Measuring input pin capacitances of cell {cell_name}.")
         for input_pin in input_pins:
-            logger.info("Measuring input capacitance: {}".format(input_pin))
+            logger.info("Measuring input capacitance: {} {}".format(cell_name, input_pin))
             input_pin_group = new_cell_group.get_group('pin', input_pin)
 
             result = characterize_input_capacitances(
@@ -364,13 +405,14 @@ def main():
                 trip_points=trip_points,
                 timing_corner=calc_mode,
                 spice_netlist_file=netlist_file_table[cell_name],
-                spice_include_files=spice_includes,
+                setup_statements=setup_statements,
 
                 time_resolution=time_resolution_seconds,
                 temperature=temperature,
 
                 workingdir=cell_workingdir,
-
+                ground_net=gnd_pin,
+                supply_net=vdd_pin,
                 debug=args.debug
             )
 
@@ -407,12 +449,15 @@ def main():
                     input_net_transition=input_transition_times,
 
                     spice_netlist_file=netlist_file_table[cell_name],
-                    spice_include_files=spice_includes,
+                    setup_statements=setup_statements,
 
                     time_resolution=time_resolution_seconds,
                     temperature=temperature,
 
                     workingdir=cell_workingdir,
+
+                    ground_net=gnd_pin,
+                    supply_net=vdd_pin,
 
                     debug=args.debug
                 )

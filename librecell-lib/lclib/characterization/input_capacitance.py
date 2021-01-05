@@ -47,7 +47,7 @@ def characterize_input_capacitances(cell_name: str,
                                     trip_points: TripPoints,
                                     timing_corner: CalcMode,
                                     spice_netlist_file: str,
-                                    spice_include_files: List[str] = None,
+                                    setup_statements: List[str] = None,
                                     time_resolution: float = 1e-12,
                                     temperature=27,
                                     workingdir: Optional[str] = None,
@@ -70,7 +70,8 @@ def characterize_input_capacitances(cell_name: str,
     :param trip_points: Trip-point object which specifies the voltage thresholds of the logical values.
     :param timing_corner: Specify whether to take the maximum, minimum or average capacitance value. (Over all static input combinations).
     :param spice_netlist_file: The file containing the netlist of this cell.
-    :param spice_include_files: Optional include files for transistor models etc.
+    :param setup_statements: SPICE statements that are included at the beginning of the simulation.
+        This should be used for .INCLUDE and .LIB statements.
     :param time_resolution: Time resolution of the simulation.
     :param temperature: Temperature of the simulated circuit.
     :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
@@ -86,7 +87,7 @@ def characterize_input_capacitances(cell_name: str,
     logger.debug("characterize_input_capacitances()")
     # Find ports of the SPICE netlist.
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
-    logger.info("Subcircuit ports: {}".format(", ".join(ports)))
+    logger.debug("Subcircuit ports: {}".format(", ".join(ports)))
 
     logger.debug("Ground net: {}".format(ground_net))
     logger.debug("Supply net: {}".format(supply_net))
@@ -95,14 +96,14 @@ def characterize_input_capacitances(cell_name: str,
     logger.debug("Vdd: {} V".format(vdd))
 
     # Create a list of include files.
-    if spice_include_files is None:
-        spice_include_files = []
-    spice_include_files = spice_include_files + [spice_netlist_file]
+    if setup_statements is None:
+        setup_statements = []
+    setup_statements = setup_statements + [f".include {spice_netlist_file}"]
 
     # Load include files.
-    for inc in spice_include_files:
-        logger.info("Include '{}'".format(inc))
-    include_statements = "\n".join((f".include {i}" for i in spice_include_files))
+    for setup in setup_statements:
+        logger.debug("Setup statement: ", setup)
+    setup_statements_string = "\n".join(setup_statements)
 
     # Add output load capacitance. Right now this is 0F.
     output_load_statements = "\n".join((f"Cload_{p} {p} GND 0" for p in output_pins))
@@ -118,7 +119,7 @@ def characterize_input_capacitances(cell_name: str,
     }[timing_corner]
     logger.info("Reduction function for summarizing multiple timing arcs: {}".format(reduction_function.__name__))
 
-    logger.info("Measuring input capactiance.")
+    logger.debug("Measuring input capactiance.")
 
     # Generate all possible input combinations for the static input pins.
     static_input_nets = [i for i in input_pins if i != active_pin]
@@ -178,7 +179,7 @@ def characterize_input_capacitances(cell_name: str,
 
 .option TEMP={temperature}
 
-{include_statements}
+{setup_statements_string}
 
 Xcircuit_under_test {" ".join(ports)} {cell_name}
 
@@ -219,7 +220,7 @@ exit
             open(sim_file, "w").write(sim_netlist)
 
             # Run simulation.
-            logger.info("Run simulation.")
+            logger.debug("Run simulation.")
             run_simulation(sim_file)
 
             # Fetch simulation results.
@@ -271,14 +272,14 @@ exit
             logger.debug("dV: {}".format(dv))
             logger.debug("dt: {}".format(dt))
             logger.debug("I: {}".format(input_current))
-            logger.info("Capacitance: {}".format(capacitance))
+            logger.info("Input capacitance {}: {} F".format(active_pin, capacitance))
 
             if input_rising:
                 capacitances_rising.append(capacitance)
             else:
                 capacitances_falling.append(capacitance)
 
-    logger.info("Characterizing input capacitances: Done")
+    logger.debug("Characterizing input capacitances: Done")
 
     # Find max, min or average depending on 'reduction_function'.
     logger.debug(
