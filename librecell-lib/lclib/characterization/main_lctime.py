@@ -112,6 +112,16 @@ def main():
     parser.add_argument('--workingdir', required=False, metavar='WORKDIR', type=str,
                         help="Directory for ngspice simulation scripts and raw results.")
 
+    parser.add_argument('--output-loads', required=True, metavar='CAPACITANCES', type=str,
+                        help="List of output load capacitances for the cells. In pico Farads."
+                             " List must be quoted, elements must be separated by a comma."
+                             " Example: '0.05, 0.1, 0.2'")
+
+    parser.add_argument('--slew-times', required=True, metavar='SLEWTIMES', type=str,
+                        help="List of slew times of the input signals nano seconds."
+                             " List must be quoted, elements must be separated by a comma."
+                             " Example: '0.05, 0.1, 0.2'")
+
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug mode (more verbose logging and plotting waveforms).')
 
@@ -287,8 +297,13 @@ def main():
     setup_statements = library_statements + include_statements
 
     # TODO: No hardcoded data here!
-    output_capacitances = np.array([0.05, 0.1, 0.2, 0.4, 0.8, 1.6]) * 1e-12  # pf
-    input_transition_times = np.array([0.1, 0.2, 0.4, 0.8, 1.6, 3.2]) * 1e-9  # ns
+    output_capacitances = np.array([float(s.strip()) for s in args.output_loads.split(",")]) * 1e-12  # pF
+    input_transition_times = np.array([float(s.strip()) for s in args.output_loads.split(",")]) * 1e-9  # ns
+    # output_capacitances = np.array([0.05, 0.1, 0.2, 0.4, 0.8, 1.6]) * 1e-12  # pf
+    # input_transition_times = np.array([0.1, 0.2, 0.4, 0.8, 1.6, 3.2]) * 1e-9  # ns
+
+    logger.info(f"Output capacitances [pF]: {output_capacitances * 1e12}")
+    logger.info(f"Input slew times [ns]: {input_transition_times * 1e9}")
 
     # Characterize all cells in the list.
     def characterize_cell(cell_name: str) -> Group:
