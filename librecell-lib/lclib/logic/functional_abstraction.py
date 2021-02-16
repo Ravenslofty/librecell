@@ -34,6 +34,12 @@ logger = logging.getLogger(__name__)
 
 
 def simplify_logic(f: boolalg.Boolean, force: bool = True) -> boolalg.Boolean:
+    """
+    Simplify a boolean formula.
+    :param f:
+    :param force:
+    :return:
+    """
     return sympy_simplify_logic(f, force=force)
 
 
@@ -52,13 +58,20 @@ class CombinationalOutput:
 
 class Memory:
     """
-    Data structure for a memory loop.
+    Data structure for a memory loop (latch).
     """
 
     def __init__(self,
                  data: boolalg.Boolean,
                  write_condition: boolalg.Boolean,
                  oscillation_condition: boolalg.Boolean):
+        """
+
+        :param data: The input data signal.
+        :param write_condition: The condition that makes this loop transparent for new input data.
+        When the write condition is `False` then the loop stores the input data.
+        :param oscillation_condition: When the oscillation condition is met the loop oscillates or causes a short circuit.
+        """
         self.data = data
         self.write_condition = write_condition
         self.oscillation_condition = oscillation_condition
@@ -106,6 +119,7 @@ def boolean_derivatives(f: boolalg.Boolean, x: sympy.Symbol) \
 def _get_gate_nets(graph: nx.MultiGraph) -> Set:
     """
     Return a set of all net names that connect to a transistor gate.
+    Gate net names are stored as keys of the edges in the multi-graph.
     :param graph:
     :return: Set of net names.
     """
@@ -146,40 +160,68 @@ def _all_simple_paths_multigraph(graph: nx.MultiGraph, source, target, cutoff=No
     Enumerate all simple paths (no node occurs more than once) from source to target.
     Yields edges inclusive keys of all simple paths in a multi graph.
     :param graph: 
-    :param source:
-    :param target:
-    :param cutoff:
+    :param source: Source node.
+    :param target: Target node.
+    :param cutoff: Stopping condition. Maximal length of the path.
     :return: Generator object.
     """
 
+    # Sanity check: source and target node must be in the graph.
     if source not in graph:
         raise nx.NodeNotFound('source node %s not in graph' % source)
     if target not in graph:
         raise nx.NodeNotFound('target node %s not in graph' % target)
+
+    # Trivial solution.
     if source == target:
         return []
+
+    # Set the cutoff to the number of nodes in the graph minus 1.
     if cutoff is None:
         cutoff = len(graph) - 1
+
+    # If the cutoff is 0, return an empty list.
     if cutoff < 1:
         return []
+
+    # Set of nodes that have been visited already.
+    # An ordered dict is used such that nodes can be removed from the set
+    # according to the reversed insertion order.
+    # This works basically as a stack but allows for faster membership test than a list.
     visited = collections.OrderedDict.fromkeys([source])
+
     edges = list()  # Store sequence of edges.
-    stack = [(((u, v), key) for u, v, key in graph.edges(source, keys=True))]
+
+    # Put on the stack an iterator over all edges adjacent to the source node.
+    stack = [
+        (((u, v), key) for u, v, key in graph.edges(source, keys=True))
+    ]
     while stack:
-        children = stack[-1]
+        children = stack[-1]  # Take the top of the stack.
+        # Take the next element of the iterator.
         (child_source, child), child_key = next(children, ((None, None), None))
         if child is None:
-            stack.pop()
+            # The iterator on top of the stack is empty.
+            stack.pop()  # Drop the empty iterator.
+            # Rewind to the previous 'recursion' level.
             visited.popitem()
             edges = edges[:-1]
         elif len(visited) < cutoff:
             if child == target:
+                # Target has been found.
                 yield list(edges) + [((child_source, child), child_key)]
             elif child not in visited:
-                visited[child] = None
+                # Child node is not yet in the current path.
+                visited[child] = None  # Mark as visited.
+                # Append child node to the current path.
                 edges.append(((child_source, child), child_key))
-                stack.append((((u, v), k) for u, v, k in graph.edges(child, keys=True)))
-        else:  # len(visited) == cutoff:
+                # Put on the stack an iterator over all edges adjacent to the child node.
+                stack.append(
+                    (((u, v), k) for u, v, k in graph.edges(child, keys=True))
+                )
+        else:
+            assert len(visited) == cutoff
+            # TODO: Is this correct?
             count = (list(children) + [child]).count(target)
             for i in range(count):
                 yield list(edges) + [((child_source, child), child_key)]
@@ -193,6 +235,15 @@ def _get_conductivity_conditions(cmos_graph: nx.MultiGraph,
                                  output_node) -> Dict[sympy.Symbol, boolalg.Boolean]:
     """
     For each input-output pair find the condition that there is a conductive path.
+
+    For example an inverter with input A and output Y could be represented as a multi-graph:
+    `VDD--[A]--Y--[A]--GND`
+
+    The only output node would be 'Y', inputs would be the set {'A'}.
+    The returned dictionary should then contain the condition that there is a conductive path from
+    Y to VDD (A == 0) as well as the condition that there is a conductive path from Y to GND (A == 1).
+
+
     :param cmos_graph:
     :param vdd_node: Name of VDD supply node.
     :param gnd_node: Name of GND supply node.
@@ -240,7 +291,8 @@ def _get_conductivity_conditions(cmos_graph: nx.MultiGraph,
         remaining_nodes = graph.nodes() - delete_nodes
         return graph.subgraph(remaining_nodes)
 
-    # Calculate conductivity conditions from each input-pin (i.e. power pins and inputs to transmission gates) to output.
+    # Calculate conductivity conditions from each input-pin
+    # (i.e. power pins and inputs to transmission gates) to output.
     conductivity_conditions = {
         sympy.Symbol(i):
             conductivity_condition(
@@ -265,7 +317,7 @@ def _is_complementary(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
     Check if two formulas are complementary.
     :param f1:
     :param f2:
-    :return:
+    :return: Returns true iff `f1` and `f1` are complementary.
     """
     return bool_equals(f1, ~f2)
 
@@ -276,17 +328,20 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
         -> Tuple[Dict[Any, Dict[sympy.Symbol, boolalg.Boolean]], set]:
     """
     Iteratively find formulas of intermediate nodes in complex gates which consist of multiple pull-up/pull-down networks.
-    :param cmos_graph:
-    :param output_nodes:
+    :param cmos_graph: The CMOS transistor network represented as a multi-graph.
+    :param output_nodes: Set of output nodes. This corresponds to the output nets/pins of the cell.
     :param input_pins: Specify additional input pins that could otherwise not be deduced.
         This is mainly meant for power supply pins and inputs that connect not only to transistor gates but also source or drain.
     :return: (Dict[intermediate variable, expression for it], Set[input variables of the circuit])
     """
 
+    # Sanity check: all output nodes must be in the graph.
     for n in output_nodes:
         assert n in cmos_graph.nodes(), "Output node is not in the graph: {}".format(n)
 
+    # Sanity check: There must be at least two input pins.
     assert len(input_pins) >= 2, "`input_pins` must at least contain 2 nodes (GND, VDD). Found: {}".format(input_pins)
+    # Make an independent copy that can be modified without causing side effects.
     input_pins = input_pins.copy()
 
     # Consider all nodes as input variables that are either connected to transistor
@@ -296,8 +351,11 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
     inputs = deduced_input_pins | input_pins
     logger.info("All input pins: {}".format(deduced_input_pins))
 
+    # Set of nodes where there is no boolean formula known yet.
     unknown_nodes = {n for n in output_nodes}
+    # Set of nodes for which a boolean expression is known.
     known_nodes = {i for i in inputs}
+    # Boolean formulas for the outputs.
     output_formulas = dict()
 
     # Loop as long as there is a intermediary node with unknown value.
@@ -305,6 +363,9 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
         # Grab a node with unknown boolean expression.
         temp_output_node = unknown_nodes.pop()
         assert temp_output_node not in known_nodes
+        # Follow the pull-up and pull-down paths to find the boolean conditions that
+        # tell when there is a conductive path to nodes like VDD, GND (or inputs and internal nodes in case
+        # of transmission gates).
         logger.debug("Find conductivity conditions for: {}".format(temp_output_node))
         conductivity_conditions = _get_conductivity_conditions(cmos_graph, input_pins, temp_output_node)
 
@@ -391,6 +452,8 @@ def _resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean
     :param formula: The start.
     :return: Return the formula with all substitutions applied.
     """
+
+    # Set of symbols that will not be substituted.
     stop_atoms = set(inputs)
 
     while formula.atoms() - stop_atoms:
@@ -451,7 +514,7 @@ def test_resolve_intermediate_variables():
 def _formula_dependency_graph(formulas: Dict[sympy.Symbol, boolalg.Boolean]) -> nx.DiGraph:
     """
     Create a graph representing the dependencies of the variables/expressions.
-    Used to detect feedback loop.
+    Used to detect feedback loops.
     :param formulas:
     :return:
     """
@@ -475,7 +538,11 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                           user_input_nets: Set = None
                           ) -> Dict[sympy.Symbol, boolalg.Boolean]:
     """
+    Analyze a CMOS transistor network and find boolean expressions for the output signals of the `pins_of_interest`.
 
+    The transistor network is represented as a multi-graph, where nodes represent nets and edges represent transistors.
+    The end points of an edge correspond to drain and source of the transistor. The label of the edge corresponds to the
+    gate net of the transistor.
 
     :param graph:
     :type graph: nx.MultiGraph
@@ -486,7 +553,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         Some inputs cannot automatically be found and must be provided by the user.
         Input nets that connect not only to transistor gates but also source or drains need to be specified manually.
         This can happen for cells containing transmission gates.
-    :return: Dict['output pin', ]
+    :return: Dict['output pin', boolean formula]
     """
     #
     # import matplotlib.pyplot as plt
@@ -767,6 +834,8 @@ def test_analyze_circuit_graph():
     pins_of_interest = {'output'}
     known_pins = {'vdd': True, 'gnd': False}
     result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+
+    print(result)
 
     # Verify that the deduced boolean function is equal to the AND function.
     a, b = sympy.symbols('a, b')
