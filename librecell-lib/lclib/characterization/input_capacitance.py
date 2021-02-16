@@ -163,7 +163,7 @@ def characterize_input_capacitances(cell_name: str,
             else:
                 breakpoint_statement = f"stop when v({active_pin}) < {vdd * 0.1}"
 
-            static_supply_voltage_statemets = "\n".join(
+            static_supply_voltage_statements = "\n".join(
                 (f"Vinput_{net} {ground_net} {voltage}" for net, voltage in input_voltages.items()))
 
             # Initial node voltages.
@@ -189,7 +189,7 @@ Vsupply {supply_net} {ground_net} {supply_voltage}
 Iinput {ground_net} {active_pin} {_input_current}
 
 * Static input voltages.
-{static_supply_voltage_statemets}
+{static_supply_voltage_statements}
 
 * Initial conditions.
 * Also all voltages of DC sources must be here if they are needed to compute the initial conditions.
