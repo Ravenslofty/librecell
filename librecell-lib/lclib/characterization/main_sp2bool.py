@@ -88,6 +88,9 @@ def main():
     vdd_pin = vdd_pins[0]
     gnd_pin = gnd_pins[0]
 
+    logger.info(f"Supply net: {vdd_pin}")
+    logger.info(f"Ground net: {gnd_pin}")
+
     def _transistors2multigraph(transistors) -> nx.MultiGraph:
         """ Create a graph representing the transistor network.
             Each edge corresponds to a transistor, each node to a net.

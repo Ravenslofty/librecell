@@ -373,7 +373,12 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
         known_nodes.add(temp_output_node)
 
         # Find all variables that occur in the conductivity conditions to later resolve them too.
-        inputs_to_f = {a.name for f in conductivity_conditions.values() for a in f.atoms()}
+        inputs_to_f = {a.name
+                       for f in conductivity_conditions.values()
+                       for a in f.atoms()
+                       # Boolean constants don not need to be resolved further.
+                       if not isinstance(a, boolalg.BooleanTrue) and not isinstance(a, boolalg.BooleanFalse)
+                       }
 
         # Update the set of unknown variables.
         unknown_nodes = (unknown_nodes | inputs_to_f) - known_nodes
@@ -865,7 +870,8 @@ def test_analyze_circuit_graph_transmission_gate_xor():
     # and therefore cannot be deduced to be an input pin.
     pins_of_interest = {'a', 'b', 'c'}
     known_pins = {'vdd': True, 'gnd': False}
-    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins,
+    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest,
+                                   constant_input_pins=known_pins,
                                    user_input_nets={'a', 'b'})
 
     print(result)
