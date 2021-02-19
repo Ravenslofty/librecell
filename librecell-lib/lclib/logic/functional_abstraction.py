@@ -739,7 +739,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             print("Write data for all write conditions:")
             model, _ = mem_data[0]
             vars = list(model.keys())
-            print("\t", "\t".join((str(v) for v in vars)), "\t:", "data")
+            print("\t", "\t".join((str(v) for v in vars)), "\t:", f"data ({memory_output_net})")
             for model, data in mem_data:
                 print("\t", "\t".join((str(model[var]) for var in vars)), "\t:", data)
             print()
