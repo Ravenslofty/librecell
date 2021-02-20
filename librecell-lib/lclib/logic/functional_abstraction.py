@@ -18,6 +18,7 @@
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 ##
 
+import itertools
 import networkx as nx
 from typing import Any, Dict, List, Iterable, Tuple, Set
 from enum import Enum
@@ -110,9 +111,9 @@ def boolean_derivatives(f: boolalg.Boolean, x: sympy.Symbol) \
     negative_derivative = simplify_logic(f0 & ~f1)
 
     derivative = simplify_logic(positive_derivative | negative_derivative)  # == f0 ^ f1
-    print('calculate derivative: d/d{} ({})) = {}'.format(x, f, derivative))
-    print('calculate pos. derivative: d+/d{} ({})) = {}'.format(x, f, positive_derivative))
-    print('calculate neg. derivative: d-/d{} ({})) = {}'.format(x, f, negative_derivative))
+    logger.debug('calculate derivative: d/d{} ({})) = {}'.format(x, f, derivative))
+    logger.debug('calculate pos. derivative: d+/d{} ({})) = {}'.format(x, f, positive_derivative))
+    logger.debug('calculate neg. derivative: d-/d{} ({})) = {}'.format(x, f, negative_derivative))
     return derivative, positive_derivative, negative_derivative
 
 
@@ -679,7 +680,10 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         print(' ', net, ':', condition)
 
     # Create dependency graph to detect feedback loops.
-    dependency_graph = _formula_dependency_graph(formulas_high)
+    dependency_graph_high = _formula_dependency_graph(formulas_high)
+    dependency_graph_low = _formula_dependency_graph(formulas_low)
+    # dependency_graph = nx.DiGraph(itertools.chain(dependency_graph_high.edges, dependency_graph_low.edges))
+    dependency_graph = dependency_graph_high
 
     # import matplotlib.pyplot as plt
     # nx.draw_networkx(dependency_graph)
@@ -810,9 +814,11 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             else:
                 # Resolve memory.
                 assert out in nets_of_memory_cycles
+                # Output net of the memory loop.
                 memory_net = out
                 _this_memory_cycle = [c for c in cycles if memory_net in c]
-                assert len(_this_memory_cycle) == 1
+                # assert len(_this_memory_cycle) == 1
+                print(out, " - memory cycle: ", _this_memory_cycle)
                 _this_memory_cycle = set(_this_memory_cycle[0])
 
                 # Find inputs into the memory cycle.
