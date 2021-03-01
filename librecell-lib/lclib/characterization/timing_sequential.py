@@ -58,7 +58,7 @@ def ff_find_stabilization_time(
         output_load_capacitances: Dict[str, float] = None,
         time_step: float = 100.0e-12,
         max_simulation_time: float = 1e-7,
-        spice_include_files: List[str] = None,
+        setup_statements: List[str] = None,
         workingdir: Optional[str] = None,
         ground_net: str = 'GND',
         supply_net: str = 'VDD',
@@ -79,7 +79,7 @@ def ff_find_stabilization_time(
     :param temperature: Temperature of the simulation.
     :param output_load_capacitances: A dict with (net, capacitance) pairs which defines the load capacitances attached to certain nets.
     :param time_step: Simulation time step.
-    :param spice_include_files: List of include files (such as transistor models).
+    :param setup_statements: List of include files (such as transistor models).
     :param ground_net: The name of the ground net.
     :param supply_net: The name of the supply net.
     :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
@@ -119,7 +119,7 @@ def ff_find_stabilization_time(
         temperature=temperature,
         output_load_capacitances=output_load_capacitances,
         time_step=time_step,
-        spice_include_files=spice_include_files,
+        setup_statements=setup_statements,
         ground_net=ground_net,
         debug=debug,
     )
@@ -145,7 +145,7 @@ def find_minimum_pulse_width(
         clock_pulse_width_guess: float = 1e-9,
         time_step: float = 100.0e-12,
         max_simulation_time: float = 1e-7,
-        spice_include_files: List[str] = None,
+        setup_statements: List[str] = None,
         workingdir: Optional[str] = None,
         ground_net: str = 'GND',
         supply_net: str = 'VDD',
@@ -165,7 +165,8 @@ def find_minimum_pulse_width(
     :param temperature: Temperature of the simulation.
     :param output_load_capacitances: A dict with (net, capacitance) pairs which defines the load capacitances attached to certain nets.
     :param time_step: Simulation time step.
-    :param spice_include_files: List of include files (such as transistor models).
+    :param setup_statements: SPICE statements that are included at the beginning of the simulation.
+        This should be used for .INCLUDE and .LIB statements.
     :param ground_net: The name of the ground net.
     :param supply_net: The name of the supply net.
     :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
@@ -183,8 +184,8 @@ def find_minimum_pulse_width(
     logger.info("Find minimum clock pulse width.")
 
     # Load include files.
-    if spice_include_files is None:
-        spice_include_files = []
+    if setup_statements is None:
+        setup_statements = []
 
     # Load capacitance statements.
     if output_load_capacitances is None:
@@ -267,7 +268,7 @@ def find_minimum_pulse_width(
             temperature=temperature,
             output_load_capacitances=output_load_capacitances,
             time_step=time_step,
-            spice_include_files=spice_include_files,
+            setup_statements=setup_statements,
             ground_net=ground_net,
             debug=debug,
         )
@@ -463,7 +464,7 @@ def test_find_min_pulse_width():
             temperature=temperature,
             output_load_capacitances=output_load_capacitances,
             time_step=time_step,
-            spice_include_files=includes,
+            setup_statements=includes,
             ground_net=ground,
             supply_net=supply,
             # debug=True
@@ -497,7 +498,7 @@ def get_clock_to_output_delay(
         output_load_capacitances: Dict[str, float] = None,
         time_step: float = 100.0e-12,
         clock_cycle_hint: float = 200.0e-12,
-        spice_include_files: List[str] = None,
+        setup_statements: List[str] = None,
         workingdir: Optional[str] = None,
         ground_net: str = 'GND',
         supply_net: str = 'VDD',
@@ -522,7 +523,8 @@ def get_clock_to_output_delay(
     :param output_load_capacitances: A dict with (net, capacitance) pairs which defines the load capacitances attached to certain nets.
     :param time_step: Simulation time step.
     :param clock_cycle_hint: Run the simulation for at least this amount of time.
-    :param spice_include_files: List of include files (such as transistor models).
+    :param setup_statements: SPICE statements that are included at the beginning of the simulation.
+        This should be used for .INCLUDE and .LIB statements.
     :param ground_net: The name of the ground net.
     :param supply_net: The name of the supply net.
     :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
@@ -541,8 +543,8 @@ def get_clock_to_output_delay(
     logger.info("get_clock_to_output_delay() ...")
 
     # Load include files.
-    if spice_include_files is None:
-        spice_include_files = []
+    if setup_statements is None:
+        setup_statements = []
 
     period = max(clock_cycle_hint, input_rise_time + input_fall_time)
 
@@ -661,7 +663,7 @@ def get_clock_to_output_delay(
         temperature=temperature,
         output_load_capacitances=output_load_capacitances,
         time_step=time_step,
-        spice_include_files=spice_include_files,
+        setup_statements=setup_statements,
         ground_net=ground_net,
         debug=debug,
     )
@@ -731,6 +733,7 @@ def get_clock_to_output_delay(
 
 
 def test_plot_flipflop_setup_behavior():
+
     trip_points = TripPoints(
         input_threshold_rise=0.5,
         input_threshold_fall=0.5,
@@ -748,6 +751,7 @@ def test_plot_flipflop_setup_behavior():
     include_file = f'../../test_data/freepdk45/netlists_pex/{subckt_name}.pex.netlist'
     model_file = f'../../test_data/freepdk45/gpdk45nm.m'
 
+    print("Read:", include_file)
     ports = get_subcircuit_ports(include_file, subckt_name)
     print("Ports: ", ports)
     data_in = 'D'
@@ -773,6 +777,7 @@ def test_plot_flipflop_setup_behavior():
 
     # SPICE include files.
     includes = [include_file, model_file]
+    includes = [f".INCLUDE {i}" for i in includes]
 
     vdd = 1.1
     logger.info(f"Supply voltage: {vdd} V")
@@ -823,7 +828,7 @@ def test_plot_flipflop_setup_behavior():
                 output_load_capacitances=output_load_capacitances,
                 time_step=time_step,
                 clock_cycle_hint=simulation_duration_hint,
-                spice_include_files=includes,
+                setup_statements=includes,
                 ground_net=ground,
                 supply_net=supply
             )
