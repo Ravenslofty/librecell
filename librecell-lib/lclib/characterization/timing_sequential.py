@@ -149,10 +149,15 @@ def find_minimum_pulse_width(
         workingdir: Optional[str] = None,
         ground_net: str = 'GND',
         supply_net: str = 'VDD',
+        default_input_voltages: Dict[str, float] = None,
         debug: bool = False,
 ) -> float:
     """Find the minimum clock pulse width such that the data is sampled.
 
+    :param clock_pulse_width_guess: Initial value for the minimal clock-pulse length.
+        The search for the minimum will be started from there. The closer the guess is, the
+        faster the search will terminate.
+    :param max_simulation_time: Abort the simulation after this simulation time elapses.
     :param cell_name: Name of the cell to be characterized. Must match with the name used in netlist and liberty.
     :param cell_ports: All circuit pins/ports in the same ordering as used in the SPICE circuit model.
     :param clock_input: Name of the clock pin ('related pin').
@@ -169,6 +174,8 @@ def find_minimum_pulse_width(
         This should be used for .INCLUDE and .LIB statements.
     :param ground_net: The name of the ground net.
     :param supply_net: The name of the supply net.
+    :param default_input_voltages: Static input voltages.
+        This can be used to set the voltage of static input signals such as scan-enable.
     :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
     :param debug: Enable more verbose debugging output such as plots of the simulations.
     :return: Returns the minimal clock pulse width such that the data signal is sampled.
@@ -193,6 +200,11 @@ def find_minimum_pulse_width(
     else:
         assert isinstance(output_load_capacitances, dict)
 
+    if default_input_voltages is None:
+        default_input_voltages = dict()
+    else:
+        default_input_voltages = default_input_voltages.copy()
+
     def delay_function(clock_pulse_width: float) -> float:
         """
         Compute the delay from the clock edge to the data output edge.
@@ -215,11 +227,11 @@ def find_minimum_pulse_width(
         clock_pulse *= supply_voltage
 
         # All input voltage signals.
-        input_voltages = {
+        input_voltages = default_input_voltages.copy().update({
             supply_net: supply_voltage,
             clock_input: clock_pulse,
             data_in: supply_voltage if rising_data_edge else 0.0  # Data-in is constant.
-        }
+        })
 
         # Initial voltages of output nodes.
         initial_conditions = {
@@ -502,10 +514,13 @@ def get_clock_to_output_delay(
         workingdir: Optional[str] = None,
         ground_net: str = 'GND',
         supply_net: str = 'VDD',
+        input_voltages: Dict[str, float] = None,
         debug: bool = False,
 ) -> float:
     """Get the delay from the clock edge to the output edge.
 
+    :param input_voltages: Static input voltages.
+        This can be used to set the voltage of static input signals such as scan-enable.
     :param cell_name: Name of the cell to be characterized. Must match with the name used in netlist and liberty.
     :param cell_ports: All circuit pins/ports in the same ordering as used in the SPICE circuit model.
     :param clock_input: Name of the clock pin ('related pin').
@@ -599,11 +614,17 @@ def get_clock_to_output_delay(
     input_wave *= supply_voltage
     clk_wave *= supply_voltage
 
-    input_voltages = {
+    if input_voltages is None:
+        input_voltages = dict()
+    else:
+        input_voltages = input_voltages.copy()
+
+    # Set the data and clock signals.
+    input_voltages.update({
         supply_net: supply_voltage,
         clock_input: clk_wave,
         data_in: input_wave
-    }
+    })
 
     # Load capacitance statements.
     if output_load_capacitances is None:
@@ -733,7 +754,6 @@ def get_clock_to_output_delay(
 
 
 def test_plot_flipflop_setup_behavior():
-
     trip_points = TripPoints(
         input_threshold_rise=0.5,
         input_threshold_fall=0.5,
