@@ -38,6 +38,7 @@ from ..logic import functional_abstraction
 
 from .util import *
 from .timing_combinatorial import characterize_comb_cell
+from .timing_sequential import *
 from .input_capacitance import characterize_input_capacitances
 
 from copy import deepcopy
