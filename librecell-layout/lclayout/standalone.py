@@ -632,6 +632,7 @@ class LcLayout:
         }
 
         data = {
+            "placement_file_version" : "0.0",
             "description": f"lclayout transistor placement of cell '{self.cell_name}'",
             "cell_name": self.cell_name,
             "transistor_locations": transistor_locations,
