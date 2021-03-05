@@ -632,7 +632,7 @@ class LcLayout:
         }
 
         data = {
-            "placement_file_version" : "0.0",
+            "placement_file_version": "0.0",
             "description": f"lclayout transistor placement of cell '{self.cell_name}'",
             "cell_name": self.cell_name,
             "transistor_locations": transistor_locations,
@@ -812,7 +812,7 @@ def main():
                         help='placement algorithm ({})'.format(', '.join(sorted(placers.keys()))))
 
     parser.add_argument('--placement-file', metavar='PLACEMENTFILE', type=str,
-                        help='Use this file to store the placement such that it can be reused between runs.')
+                        help='Use this file to store the placement such that it can be reused between runs. JSON format is used.')
 
     parser.add_argument('--signal-router', default='dijkstra', metavar='SIGNAL_ROUTER', type=str,
                         choices=signal_routers.keys(),
