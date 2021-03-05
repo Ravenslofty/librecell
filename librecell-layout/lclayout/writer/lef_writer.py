@@ -13,7 +13,7 @@
 #
 import logging
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from klayout import db
 import os
 
@@ -53,11 +53,13 @@ def generate_lef_macro(cell_name: str,
                        pin_geometries: Dict[str, List[Tuple[str, db.Shape]]],
                        pin_direction: Dict[str, lef.Direction],
                        pin_use: Dict[str, lef.Use],
+                       site: str = "CORE",
                        scaling_factor: float = 1,
                        use_rectangles_only: bool = False,
                        ) -> lef.Macro:
     """
     Assemble a LEF MACRO structure containing the pin shapes.
+    :param site: SITE name. Default is 'CORE'.
     :param cell_name: Name of the cell as it will appear in the LEF file.
     :param pin_geometries: A dictionary mapping pin names to geometries: Dict[pin name, List[(layer name, klayout Shape)]]
     :param pin_direction:
@@ -137,7 +139,7 @@ def generate_lef_macro(cell_name: str,
         foreign=lef.Foreign(cell_name, lef.Point(0, 0)),
         origin=lef.Point(0, 0),
         symmetry={lef.Symmetry.X, lef.Symmetry.Y, lef.Symmetry.R90},
-        site="CORE",
+        site=site,
         pins=pins,
         obstructions=[]
     )
@@ -149,11 +151,13 @@ class LefWriter(Writer):
 
     def __init__(self,
                  output_map: Dict[str, Tuple[int, int]],
+                 site: str = "CORE",
                  db_unit: float = 1e-6,
                  use_rectangles_only: bool = False):
         """
 
         :param output_map:
+        :param site: SITE name.
         :param db_unit: Database unit in meters. Default is 1um (1e-6 m)
         :param use_rectangles_only: Convert all polygons into rectangles. Non-rectilinear shapes are dropped.
         """
@@ -161,6 +165,7 @@ class LefWriter(Writer):
         self.output_map = output_map
         self.scaling_factor = 1
         self.use_rectangles_only = use_rectangles_only
+        self.site = site
 
     def write_layout(self,
                      layout: db.Layout,
@@ -184,6 +189,7 @@ class LefWriter(Writer):
                                        pin_geometries=pin_geometries,
                                        pin_use=None,
                                        pin_direction=None,
+                                       site=self.site,
                                        scaling_factor=scaling_factor,
                                        use_rectangles_only=self.use_rectangles_only)
 

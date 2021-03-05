@@ -90,7 +90,8 @@ output_writers = [
 
     LefWriter(
         db_unit=1e-6, # microns
-        output_map=output_map
+        output_map=output_map,
+        site="CORE"
     ),
 
     GdsWriter(
