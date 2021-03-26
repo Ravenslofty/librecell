@@ -17,6 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+
+"""
+Classes for handling piece-wise linear waveforms.
+"""
+
 import numpy as np
 from scipy import interpolate
 from typing import Tuple, Sequence, Iterable, Union
@@ -143,6 +148,18 @@ class PieceWiseLinear:
 
     def __call__(self, x):
         return self.interpolated()(x)
+
+    def to_spice_pwl_string(self):
+        """
+        Format the signal as it is needed for describing a PWL source in SPICE.
+        The format is like: "T1 V1 T2 V2 ..." Where T is a time in seconds, V a voltage in volts.
+        :return:
+        """
+        pwl_string = ' '.join((
+            f'{time:0.20e}s {voltage:0.20e}V'
+            for time, voltage in zip(self.x, self.y)
+        ))
+        return pwl_string
 
 
 class StepWave(PieceWiseLinear):

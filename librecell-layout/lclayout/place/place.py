@@ -17,6 +17,9 @@ from typing import Iterable
 
 
 class TransistorPlacer:
+    """
+    Interface definition of a transistor placement algorithm.
+    """
 
     def place(self, transistors: Iterable[Transistor]) -> Cell:
         pass

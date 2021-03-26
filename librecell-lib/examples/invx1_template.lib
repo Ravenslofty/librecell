@@ -1,0 +1,152 @@
+library (gscl45nm) {
+  capacitive_load_unit (1.0, pf);
+  current_unit: "1uA";
+  default_operating_conditions: typical;
+  delay_model: table_lookup;
+  in_place_swap_mode: match_footprint;
+  input_threshold_pct_fall: 50.0;
+  input_threshold_pct_rise: 50.0;
+  leakage_power_unit: "1nW";
+  nom_process: 1.0;
+  nom_temperature: 27.0;
+  nom_voltage: 1.1;
+  output_threshold_pct_fall: 50.0;
+  output_threshold_pct_rise: 50.0;
+  pulling_resistance_unit: "1kohm";
+  slew_lower_threshold_pct_fall: 20.0;
+  slew_lower_threshold_pct_rise: 20.0;
+  slew_upper_threshold_pct_fall: 80.0;
+  slew_upper_threshold_pct_rise: 80.0;
+  time_unit: "1ns";
+  voltage_unit: "1V";
+  operating_conditions (typical) {
+    process: 1.0;
+    temperature: 27.0;
+    voltage: 1.1;
+  }
+  lu_table_template (delay_template_4x5) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0, 1003.0"
+    );
+    index_2 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0"
+    );
+    variable_1: total_output_net_capacitance;
+    variable_2: input_net_transition;
+  }
+  lu_table_template (delay_template_5x1) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0"
+    );
+    variable_1: input_net_transition;
+  }
+  lu_table_template (delay_template_6x1) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    variable_1: input_net_transition;
+  }
+  lu_table_template (delay_template_6x6) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    index_2 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    variable_1: total_output_net_capacitance;
+    variable_2: input_net_transition;
+  }
+  power_lut_template (energy_template_4x5) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0, 1003.0"
+    );
+    index_2 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0"
+    );
+    variable_1: total_output_net_capacitance;
+    variable_2: input_transition_time;
+  }
+  power_lut_template (energy_template_6x6) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    index_2 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    variable_1: total_output_net_capacitance;
+    variable_2: input_transition_time;
+  }
+  lu_table_template (hold_template_3x6) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0"
+    );
+    index_2 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    variable_1: related_pin_transition;
+    variable_2: constrained_pin_transition;
+  }
+  power_lut_template (passive_energy_template_5x1) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0"
+    );
+    variable_1: input_transition_time;
+  }
+  power_lut_template (passive_energy_template_6x1) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    variable_1: input_transition_time;
+  }
+  lu_table_template (recovery_template_3x6) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0"
+    );
+    index_2 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    variable_1: related_pin_transition;
+    variable_2: constrained_pin_transition;
+  }
+  lu_table_template (recovery_template_6x6) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    index_2 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    variable_1: related_pin_transition;
+    variable_2: constrained_pin_transition;
+  }
+  lu_table_template (removal_template_3x6) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0"
+    );
+    index_2 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    variable_1: related_pin_transition;
+    variable_2: constrained_pin_transition;
+  }
+  lu_table_template (setup_template_3x6) {
+    index_1 (
+      "1000.0, 1001.0, 1002.0"
+    );
+    index_2 (
+      "1000.0, 1001.0, 1002.0, 1003.0, 1004.0, 1005.0"
+    );
+    variable_1: related_pin_transition;
+    variable_2: constrained_pin_transition;
+  }
+  cell (INVX1) {
+    area: 1.4079;
+    cell_footprint: inv;
+    pin (A) {
+      direction: input;
+    }
+    pin (Y) {
+      direction: output;
+      function: "(!A)";
+    }
+  }
+}

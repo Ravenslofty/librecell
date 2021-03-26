@@ -17,10 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-import sympy
-from sympy.logic.boolalg import to_cnf, to_dnf
-from sympy.logic import POSform, SOPform
-from sympy.utilities.lambdify import lambdify
+# import sympy
+# from sympy.logic.boolalg import to_cnf, to_dnf
+# from sympy.logic import POSform, SOPform
+# from sympy.utilities.lambdify import lambdify
 
 from itertools import chain, product, count, combinations
 

@@ -17,24 +17,25 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-from typing import List, Dict
-from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit.SiUnits import Farad, Second
-from PySpice.Unit import *
-from PySpice.Logging import Logging
+
+"""
+Measurement of the input capacitance by driving the input pin with a constant current.
+"""
+
+import os
+from typing import List, Optional
 
 from itertools import product
 
 from .util import *
 from .piece_wise_linear import *
-from .ngspice_simulation import simulate_circuit
+from .ngspice_subprocess import run_simulation
 from lccommon.net_util import get_subcircuit_ports
-
+import tempfile
 import logging
 
 from scipy import interpolate
 
-pyspice_logger = Logging.setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -45,40 +46,70 @@ def characterize_input_capacitances(cell_name: str,
                                     supply_voltage: float,
                                     trip_points: TripPoints,
                                     timing_corner: CalcMode,
-
                                     spice_netlist_file: str,
-                                    spice_include_files: List[str] = None,
-                                    time_resolution=50 @ u_ps,
+                                    setup_statements: List[str] = None,
+                                    time_resolution: float = 1e-12,
                                     temperature=27,
+                                    workingdir: Optional[str] = None,
+                                    ground_net: str = 'GND',
+                                    supply_net: str = 'VDD',
+                                    debug: bool = False
                                     ):
+    """
+    Estimate the input capacitance of the `active_pin`.
+    The estimation is done by simulating a constant current flowing into an input and measuring the
+    time it takes for the input to go from high to low or low to high. This time multiplied by the current
+    yields the transported charge which together with the voltage difference tells the capacitance.
+    The measurement is done for all combinations of static inputs (all other inputs that are not measured).
+
+    :param cell_name: Name of the cell to be measured. This must match with the names used in the netlist and liberty file.
+    :param input_pins: List of all input pin names.
+    :param active_pin: Name of the pin to be measured.
+    :param output_pins: List of cell output pins.
+    :param supply_voltage: VDD.
+    :param trip_points: Trip-point object which specifies the voltage thresholds of the logical values.
+    :param timing_corner: Specify whether to take the maximum, minimum or average capacitance value. (Over all static input combinations).
+    :param spice_netlist_file: The file containing the netlist of this cell.
+    :param setup_statements: SPICE statements that are included at the beginning of the simulation.
+        This should be used for .INCLUDE and .LIB statements.
+    :param time_resolution: Time resolution of the simulation.
+    :param temperature: Temperature of the simulated circuit.
+    :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
+    :param ground_net: The name of the ground net.
+    :param supply_net: The name of the supply net.
+    :param debug: Enable more verbose debugging output such as plots of the simulations.
+    """
+
+    # Create temporary working directory.
+    if workingdir is None:
+        workingdir = tempfile.mkdtemp("lctime-")
+
     logger.debug("characterize_input_capacitances()")
     # Find ports of the SPICE netlist.
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
-    logger.info("Subcircuit ports: {}".format(", ".join(ports)))
+    logger.debug("Subcircuit ports: {}".format(", ".join(ports)))
 
-    # TODO: find correct names for GND/VDD from netlist.
-    ground = 'GND'
-    supply = 'VDD'
+    logger.debug("Ground net: {}".format(ground_net))
+    logger.debug("Supply net: {}".format(supply_net))
 
-    circuit = Circuit('Timing simulation of {}'.format(cell_name), ground=ground)
+    vdd = supply_voltage
+    logger.debug("Vdd: {} V".format(vdd))
 
-    if spice_include_files is None:
-        spice_include_files = []
-    spice_include_files = spice_include_files + [spice_netlist_file]
-    
+    # Create a list of include files.
+    if setup_statements is None:
+        setup_statements = []
+    setup_statements = setup_statements + [f".include {spice_netlist_file}"]
+
     # Load include files.
-    logger.info("Load SPICE include files.")
-    for inc in spice_include_files:
-        logger.info("Include '{}'".format(inc))
-        circuit.include(inc)
+    for setup in setup_statements:
+        logger.debug("Setup statement: ", setup)
+    setup_statements_string = "\n".join(setup_statements)
 
-    # Instantiate circuit under test.
-    logger.info("Instantiate circuit under test.")
-    circuit.X('circuit_unter_test', cell_name, *ports)
+    # Add output load capacitance. Right now this is 0F.
+    output_load_statements = "\n".join((f"Cload_{p} {p} GND 0" for p in output_pins))
 
-    # Power supply.
-    logger.info("Instantiate power supply: {} V".format(supply_voltage))
-    circuit.V('power_vdd', supply, circuit.gnd, supply_voltage @ u_V)
+    # Choose a maximum time to run the simulation.
+    time_max = time_resolution * 1e6
 
     # Find function to summarize different timing arcs.
     reduction_function = {
@@ -88,142 +119,127 @@ def characterize_input_capacitances(cell_name: str,
     }[timing_corner]
     logger.info("Reduction function for summarizing multiple timing arcs: {}".format(reduction_function.__name__))
 
-    logger.info("Measuring input capactiance.")
-    result = measure_input_capacitance(
-        circuit=circuit,
-        inputs_nets=input_pins,
-        active_pin=active_pin,
-        output_nets=output_pins,
-        vdd=supply_voltage,
-        trip_points=trip_points,
-        temperature=temperature,
-        output_load_capacitance=0 @ u_pF,
-        time_step=time_resolution,
-        simulation_duration_hint=1 @ u_ns,
-        reduction_function=reduction_function
-    )
+    logger.debug("Measuring input capactiance.")
 
-    logger.info("Characterizing input capacitances: Done")
-
-    return result
-
-
-def measure_input_capacitance(circuit: Circuit,
-                              inputs_nets: List[str],
-                              active_pin: str,
-                              output_nets: List[str],
-                              vdd: float,
-                              trip_points: TripPoints,
-                              temperature: float = 25,
-                              output_load_capacitance: Farad = 0.0 @ u_pF,
-                              time_step: Second = 100 @ u_ps,
-                              simulation_duration_hint: Second = 200 @ u_ns,
-                              reduction_function=max
-                              ) -> Dict[str, float]:
-    """ Measure the input capacitance of the `active_pin`.
-
-    :param circuit: Circuit to be characterized. (Without output load)
-    :param inputs_nets: Names of input signals.
-    :param active_pin: Name of the input signal to be toggled.
-    :param output_net: Name of the output signal.
-    :param vdd: Supply voltage.
-    :param trip_points: TripPoints object.
-    :param temperature:
-    :param output_load_capacitance:
-    :param time_step: Simulation time step.
-    :param simulation_duration_hint: A hint on how long to simulate the circuit.
-        This should be in the order of magnitude of propagation delays.
-        When chosen too short, the simulation time will be prolonged automatically.
-    :param reduction_function: Function used to create default timing arc from conditional timing arcs.
-        Should be one of {min, max, np.mean}
-    :return: A dict containing values of 'rise_capacitance' and 'fall_capacitance' in Farads.
-    """
-    logger.debug("measure_input_capacitance()")
-    # Create an independent copy of the circuit.
-    logger.debug("Create an independent copy of the circuit.")
-    circuit = circuit.clone(title='Input capacitance measurement for pin "{}"'.format(active_pin))
-
-    if float(output_load_capacitance) > 0:
-        # Add output capacitances.
-        for output_net in output_nets:
-            circuit.C('load', circuit.gnd, output_net, output_load_capacitance)
-
-    static_input_nets = [i for i in inputs_nets if i != active_pin]
-
+    # Generate all possible input combinations for the static input pins.
+    static_input_nets = [i for i in input_pins if i != active_pin]
     num_inputs = len(static_input_nets)
     static_inputs = list(product(*([[0, 1]] * num_inputs)))
 
-    # TODO: set initial voltage at active_pin.
-
-    input_current = 10000 @ u_nA
+    # TODO: How to choose input current?
+    input_current = 10000e-9  # A
     logger.info("Input current: {}".format(input_current))
 
-    time_step = 1 @ u_ps
-    # Guess of necessary simulation duration.
-    period = 1000 @ u_ps
-    logger.info("Guess of necessary simulation duration: {}".format(period))
     # Loop through all combinations of inputs.
     capacitances_rising = []
     capacitances_falling = []
     for static_input in static_inputs:
         for input_rising in [True, False]:
-            _circuit = circuit.clone()
 
             # Get voltages at static inputs.
-            input_voltages = {net: vdd * value @ u_V for net, value in zip(static_input_nets, static_input)}
+            input_voltages = {net: supply_voltage * value for net, value in zip(static_input_nets, static_input)}
             logger.debug("Static input voltages: {}".format(input_voltages))
+
+            # Simulation script file path.
+            file_name = f"lctime_input_capacitance_" \
+                        f"{''.join((f'{net}={v}' for net, v in input_voltages.items()))}_" \
+                        f"{'rising' if input_rising else 'falling'}"
+            sim_file = os.path.join(workingdir, f"{file_name}.sp")
+
+            # Output file for simulation results.
+            sim_output_file = os.path.join(workingdir, f"{file_name}_output.txt")
+            # File for debug plot of the waveforms.
+            sim_plot_file = os.path.join(workingdir, f"{file_name}_plot.svg")
 
             # Switch polarity of current for falling edges.
             _input_current = input_current if input_rising else -input_current
-            # Create constant current source to drive the active pin.
-            _circuit.I('src_{}'.format(active_pin), circuit.gnd, active_pin, dc_value=_input_current)
 
             # Get initial voltage of active pin.
-            initial_voltage = 0 @ u_V if input_rising else vdd @ u_V
+            initial_voltage = 0 if input_rising else vdd
 
-            # Run simulation
-            # Loop because it might be necessary to run a longer simulation.
-            logger.info("Run simulation.")
-            while True:
-                analysis = simulate_circuit(_circuit, input_voltages, step_time=time_step,
-                                            end_time=period, temperature=temperature,
-                                            initial_voltages={active_pin: initial_voltage @ u_V}
-                                            )
+            # Get the breakpoint condition.
+            if input_rising:
+                breakpoint_statement = f"stop when v({active_pin}) > {vdd * 0.9}"
+            else:
+                breakpoint_statement = f"stop when v({active_pin}) < {vdd * 0.1}"
 
-                time = np.array(analysis.time)
-                assert len(time) > 0
-                input_voltage = np.array(analysis[active_pin])
-                output_voltage = np.array(analysis[output_nets[0]])
-                logger.debug("Input voltage at start input_voltage[0]: {}".format(input_voltage[0]))
-                logger.debug("Input voltage at end input_voltage[-1]: {}".format(input_voltage[-1]))
+            static_supply_voltage_statements = "\n".join(
+                (f"Vinput_{net} {ground_net} {voltage}" for net, voltage in input_voltages.items()))
 
-                if input_voltage[0] < 0.1 * vdd and input_voltage[-1] > vdd or \
-                        input_voltage[0] > 0.9 * vdd and input_voltage[-1] < 0:
-                    # The input voltage spans the whole range from 0 to vdd.
-                    # So the simulation was long enough.
-                    break
-                else:
-                    # Simulation was not long enough, double it.
-                    period = period * 2
-                    logger.info("Simulation was not long enough. New simulation time: {}".format(period))
+            # Initial node voltages.
+            initial_conditions = {
+                active_pin: initial_voltage,
+                supply_net: supply_voltage
+            }
+            initial_conditions.update(input_voltages)
 
-                if period>100000 @ u_ps:
-                    logger.info("VDD: {}".format(vdd))
-                    logger.info("input_voltage[0]: {}".format(input_voltage[0]))
-                    logger.info("input_voltage[-1]: {}".format(input_voltage[-1]))
-                    logger.error("Error: Simulation took too long! It seems the input voltage did not span the whole range from 0 to vdd!")
-                    break
+            # Create ngspice simulation script.
+            sim_netlist = f"""* librecell {__name__}
+.title Measure input capacitance of pin {active_pin}
 
+.option TEMP={temperature}
 
-            # if input_rising:
-            #     input_condition = "B = {}".format(str(input_voltages['B']))
-            #     plt.plot(time*1e9, input_voltage, label='Input when {}'.format(input_condition))
-            #     plt.plot(time*1e9, output_voltage, label='Output when {}'.format(input_condition))
-            # plt.ylabel('input voltage [V]')
-            # plt.xlabel('time [ns]')
-            # plt.xlim(0, 0.3)
-            # plt.legend()
-            # plt.show()
+{setup_statements_string}
+
+Xcircuit_under_test {" ".join(ports)} {cell_name}
+
+{output_load_statements}
+
+Vsupply {supply_net} {ground_net} {supply_voltage}
+Iinput {ground_net} {active_pin} {_input_current}
+
+* Static input voltages.
+{static_supply_voltage_statements}
+
+* Initial conditions.
+* Also all voltages of DC sources must be here if they are needed to compute the initial conditions.
+.ic {" ".join((f"v({net})={v}" for net, v in initial_conditions.items()))}
+
+.control
+
+set filetype=ascii
+set wr_vecnames
+
+* Breakpoints
+{breakpoint_statement}
+
+* Transient simulation, use initial conditions.
+tran {time_resolution} {time_max} uic
+wrdata {sim_output_file} v({active_pin}) {" ".join((f"v({p})" for p in output_pins))}
+exit
+.endc
+
+.end
+"""
+
+            # Dump netlist.
+            logger.debug(sim_netlist)
+
+            # Dump simulation script to the file.
+            logger.info(f"Write simulation netlist: {sim_file}")
+            open(sim_file, "w").write(sim_netlist)
+
+            # Run simulation.
+            logger.debug("Run simulation.")
+            run_simulation(sim_file)
+
+            # Fetch simulation results.
+            logger.debug("Load simulation output.")
+            sim_data = np.loadtxt(sim_output_file, skiprows=1)
+            time = sim_data[:, 0]
+            input_voltage = sim_data[:, 1]
+
+            if debug:
+                logger.debug("Create plot of waveforms: {}".format(sim_plot_file))
+                import matplotlib
+                matplotlib.use('Agg')
+                import matplotlib.pyplot as plt
+                plt.close()
+                plt.title(f"Measure input capacitance of pin {active_pin}.")
+                plt.plot(time, input_voltage, label=active_pin)
+                plt.legend()
+                plt.savefig(sim_plot_file)
+                plt.close()
 
             # Calculate average derivative of voltage by finding the slope of the line
             # through the crossing point of the voltage with the two thresholds.
@@ -243,34 +259,31 @@ def measure_input_capacitance(circuit: Circuit,
             transition_time2 = transition_time(input_voltage, time, threshold=thresh2, assert_one_crossing=True)
             assert transition_time2 > transition_time1
 
+            # Compute deltas of time and voltage between the crossing of the two thresholds.
             f_input_voltage = interpolate.interp1d(x=time, y=input_voltage)
             dt = transition_time2 - transition_time1
             dv = f_input_voltage(transition_time2) - f_input_voltage(transition_time1)
             # dv = input_voltage[-1] - input_voltage[0]
             # dt = time[-1] - time[0]
 
-            # Compute capacitance
+            # Compute capacitance.
             capacitance = float(_input_current) / (float(dv) / float(dt))
 
             logger.debug("dV: {}".format(dv))
             logger.debug("dt: {}".format(dt))
             logger.debug("I: {}".format(input_current))
-            logger.info("Capacitance: {}".format(capacitance))
+            logger.info("Input capacitance {}: {} F".format(active_pin, capacitance))
 
             if input_rising:
                 capacitances_rising.append(capacitance)
             else:
                 capacitances_falling.append(capacitance)
 
-    # plt.ylabel('Input voltage [V]')
-    # plt.xlabel('Time [ns]')
-    # plt.ylim(0, vdd*1.1)
-    # plt.xlim(0, 0.25)
-    # plt.legend()
-    # plt.show()
+    logger.debug("Characterizing input capacitances: Done")
 
     # Find max, min or average depending on 'reduction_function'.
-    logger.debug("Convert capacitances of all timing arcs into the default capacitance ({})".format(reduction_function.__name__))
+    logger.debug(
+        "Convert capacitances of all timing arcs into the default capacitance ({})".format(reduction_function.__name__))
     final_capacitance_falling = reduction_function(capacitances_falling)
     final_capacitance_rising = reduction_function(capacitances_rising)
     final_capacitance = reduction_function([final_capacitance_falling, final_capacitance_rising])

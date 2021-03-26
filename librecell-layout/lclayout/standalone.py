@@ -15,6 +15,8 @@ from itertools import chain
 from collections import Counter, defaultdict
 import numpy
 import toml
+import json
+import os
 
 from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
@@ -610,8 +612,134 @@ class LcLayout:
             for net_name, pin_shapes in pin_shapes_by_net.items():
                 self.shapes[tech.pin_layer + '_pin'].insert(pin_shapes)
 
-    def create_cell_layout(self, cell_name: str, netlist_path: str) \
+    def store_placement(self, placement_path: str):
+        """
+        Dump the transistor placement to a file such that it can be loaded in a later run.
+        :param placement_path: Path to the output file.
+        """
+        logger.info(f"Store transistor placement: {placement_path}")
+        assert self._abstract_cell is not None, "No placement known yet."
+
+        transistors = [t for t in self._abstract_cell.lower + self._abstract_cell.upper if t is not None]
+        locations = self._abstract_cell.get_transistor_locations()
+
+        transistor_locations = {
+            t.name: (x, y) for t, (x, y) in locations
+        }
+
+        transistor_nets = {
+            t.name: (t.source_net, t.gate_net, t.drain_net) for t in transistors
+        }
+
+        data = {
+            "placement_file_version": "0.0",
+            "description": f"lclayout transistor placement of cell '{self.cell_name}'",
+            "cell_name": self.cell_name,
+            "transistor_locations": transistor_locations,
+            "transistor_nets": transistor_nets
+        }
+
+        with open(placement_path, "w") as f:
+            json.dump(data, f, indent=None, sort_keys=True)
+
+    def load_placement(self, placement_path: str):
+        """
+        Load the transistor placement from a file and write it into the `self._abstract_cell` variable.
+        :param placement_path: Path to the placement file.
+        """
+        logger.info(f"Load transistor placement: {placement_path}")
+
+        assert self._transistors_abstract is not None, "Netlist is not loaded yet."
+
+        data = None
+        with open(placement_path, "r") as f:
+            data = json.load(f)
+
+        cell_name = data["cell_name"]
+        if cell_name != self.cell_name:
+            logger.error(f"Placement file is for wrong cell: '{cell_name}' instead of '{self.cell_name}'")
+            exit(1)
+
+        transistor_locations = data["transistor_locations"]
+        assert isinstance(transistor_locations, dict), "'transistor_locations' must be a dictionary."
+
+        transistor_nets = data["transistor_nets"]
+        assert isinstance(transistor_nets, dict), "'transistor_nets' must be a dictionary."
+
+        transistors_by_name = {
+            t.name: t for t in self._transistors_abstract
+        }
+
+        # Do sanity checks.
+        present_transistor_names = set(transistor_locations.keys())
+        expected_transistor_names = set(transistors_by_name.keys())
+
+        missing_transistors = expected_transistor_names - present_transistor_names
+        excess_transistors = present_transistor_names - expected_transistor_names
+
+        # All required transistors should be given a placement.
+        if missing_transistors:
+            logger.error("Placement for some transistors is not defined: {}".format(", ".join(missing_transistors)))
+            exit(1)
+
+        if excess_transistors:
+            logger.error("Unknown transistor names in placement file: {}".format(", ".join(excess_transistors)))
+            exit(1)
+
+        # Find the width of the cell.
+        most_right_location = max((x for x, y in transistor_locations.values()))
+        max_y = max((y for x, y in transistor_locations.values()))
+        assert max_y <= 1
+
+        # Create Cell object that holds the placement of the transistors.
+        cell = Cell(width=most_right_location + 1)
+
+        # Assign transistor positions.
+        matrix = [cell.lower, cell.upper]
+        for transistor_name, (x, y) in transistor_locations.items():
+            # Get transistor.
+            t = transistors_by_name[transistor_name]
+
+            # Load the orientation of the transistor.
+            source, gate, drain = transistor_nets[transistor_name]
+            # Check that the nets are correct.
+            assert gate == t.gate_net, f"Gate net mismatch in transistor {transistor_name}."
+
+            # Check that the nets are correct.
+            assert {source, drain} == {t.source_net, t.drain_net}, \
+                f"Source/drain net mismatch in transistor {transistor_name}."
+
+            # Flip the transistor if necessary.
+            if source == t.source_net:
+                # No flipping necessary.
+                assert drain == t.drain_net
+            else:
+                t = t.flipped()
+
+            assert gate == t.gate_net
+            assert source == t.source_net
+            assert drain == t.drain_net
+
+            assert matrix[y][x] is None, f"Transistor position is used multiple times: {(x, y)}"
+            matrix[y][x] = t
+
+        # Store the cell with the placement.
+        self._abstract_cell = cell
+
+    def create_cell_layout(self,
+                           cell_name: str,
+                           netlist_path: str,
+                           placement_path: Optional[str]) \
             -> Tuple[pya.Cell, Dict[str, List[Tuple[str, pya.Shape]]]]:
+        """
+
+        :param cell_name: Name of the cell to be placed.
+        :param netlist_path: Path to the SPICE netlist containing the cell.
+        :param placement_path: Optional path to the JSON file containing the transistor placement.
+            If the file exists, it will be used as source for the placement.
+            If the file does not exist, the placement will be written into it.
+        :return: Layout cell, pin shapes
+        """
 
         self._00_00_check_tech()
         self._00_01_prepare_tech()
@@ -619,7 +747,23 @@ class LcLayout:
         self._01_load_netlist(netlist_path, cell_name)
 
         self._02_setup_layout()
-        self._03_place_transistors()
+
+        # Load or compute transistor placement.
+        # The placement is either computed or loaded from a file.
+        if placement_path is not None:
+            if os.path.exists(placement_path):
+                # Load placement from file.
+                self.load_placement(placement_path)
+                logger.info(f"Cell placement:\n\n{self._abstract_cell}\n")
+            else:
+                # Compute placement.
+                self._03_place_transistors()
+                # Store placement.
+                self.store_placement(placement_path)
+        else:
+            # Compute placement.
+            self._03_place_transistors()
+
         self._04_draw_transistors()
         self._05_draw_cell_template()
         self._06_route()
@@ -666,6 +810,9 @@ def main():
 
     parser.add_argument('--placer', default='flat', metavar='PLACER', type=str, choices=placers.keys(),
                         help='placement algorithm ({})'.format(', '.join(sorted(placers.keys()))))
+
+    parser.add_argument('--placement-file', metavar='PLACEMENTFILE', type=str,
+                        help='Use this file to store the placement such that it can be reused between runs. JSON format is used.')
 
     parser.add_argument('--signal-router', default='dijkstra', metavar='SIGNAL_ROUTER', type=str,
                         choices=signal_routers.keys(),
@@ -733,7 +880,7 @@ def main():
 
     # Run layout synthesis
     time_start = time.process_time()
-    cell, pin_geometries = layouter.create_cell_layout(cell_name, netlist_path)
+    cell, pin_geometries = layouter.create_cell_layout(cell_name, netlist_path, args.placement_file)
 
     # LVS check
     logger.info("Running LVS check")

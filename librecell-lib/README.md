@@ -6,6 +6,10 @@ Characterization kit for CMOS cells.
 See install instructions in top-project.
 
 ### Characterize a cell
+
+An ready-to-run example can be found in the `examples` folder.
+The script `run_example.sh` should characterize the `INVX1` inverter.
+
 The following example determines the input capacitances and timing delays of a combinational cell.
 
 It is assumed that `FreePDK45` is installed in the users home directory.
@@ -17,6 +21,7 @@ Required inputs are:
 * --cell: Name of the cell to be characterized.
 * --output: Output liberty file which will contain the characterization data.
 
+Characterize a single cell:
 ```sh
 lctime --liberty ~/FreePDK45/osu_soc/lib/files/gscl45nm.lib \
 	--include ~/FreePDK45/osu_soc/lib/files/gpdk45nm.m \
@@ -24,6 +29,16 @@ lctime --liberty ~/FreePDK45/osu_soc/lib/files/gscl45nm.lib \
 	--cell AND2X1 \
 	--output /tmp/and2x1.lib
 ```
+
+Characterize multiple cells in the same run:
+```sh
+lctime --liberty ~/FreePDK45/osu_soc/lib/files/gscl45nm.lib \
+	--include ~/FreePDK45/osu_soc/lib/files/gpdk45nm.m \
+	--spice ~/FreePDK45/osu_soc/lib/source/netlists/*.pex.netlist \
+	--cell INVX1 AND2X1 XOR2X1 \
+	--output /tmp/invx1_and2x1_xor2x1.lib
+```
+
 
 Vizualize the result:
 ```sh

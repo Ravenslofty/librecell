@@ -268,10 +268,10 @@ class Macro(LefContainer):
             "MACRO {}".format(self.name.upper()),
             [
                 self.macro_class,
-                Property("ORIGIN", self.origin.format()),
                 Property("FOREIGN", self.foreign.format()),
+                Property("ORIGIN", self.origin.format()),
+                Property("SYMMETRY", " ".join((s.name.upper() for s in self.symmetry))),
                 Property("SITE", self.site.upper()),
-                Property("SYMMETRY", " ".join((s.name.upper() for s in self.symmetry)))
             ],
             self.pins,
             self.obstructions,

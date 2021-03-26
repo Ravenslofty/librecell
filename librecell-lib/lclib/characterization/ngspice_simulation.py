@@ -18,6 +18,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 from PySpice.Probe.Plot import plot
+from PySpice.Probe.WaveForm import TransientAnalysis
 from PySpice.Spice.Netlist import Circuit
 from PySpice.Spice.NgSpice.Shared import NgSpiceShared
 from PySpice.Spice.Parser import SpiceParser
