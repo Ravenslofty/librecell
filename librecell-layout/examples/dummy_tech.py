@@ -86,7 +86,7 @@ output_writers = [
             l_pdiffusion: 'pdiffusion',
             l_metal2_pin: 'metal2',
             l_poly_contact: 'polycontact',
-            l_pdiff_contact: 'pdcontact'
+            l_pdiff_contact: 'pdcontact',
             l_ndiff_contact: 'ndcontact'
 
         }

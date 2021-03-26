@@ -128,16 +128,14 @@ def extract_netlist(layout: db.Layout, top_cell: db.Cell) -> db.Netlist:
     l2n.connect(rnsd)
     l2n.connect(rpoly)
     l2n.connect(rdiff_cont)
-    l2n.connect(rndiff_cont)
-    l2n.connect(rpdiff_cont)
     l2n.connect(rpoly_cont)
     l2n.connect(rmetal1)
     l2n.connect(rmetal2)
     # TODO: what if more than 2 metal layers?
 
     # Inter-layer
-    l2n.connect(rpsd, rpdiff_cont)
-    l2n.connect(rnsd, rndiff_cont)
+    l2n.connect(rpsd, rdiff_cont)
+    l2n.connect(rnsd, rdiff_cont)
     l2n.connect(rpoly, rpoly_cont)
     l2n.connect(rpoly_cont, rmetal1)
     l2n.connect(rdiff_cont, rmetal1)

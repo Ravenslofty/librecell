@@ -9,7 +9,8 @@ nwell2 = layer(2, 1)
 pwell = layer(2, 7)
 poly = layer(3, 0)
 poly_contact = layer(4, 0)
-diff_contact = layer(5, 0)
+pdiff_contact = layer(5, 0)
+ndiff_contact = layer(5, 1)
 metal1 = layer(6, 0)
 metal1_label = layer(6, 1)
 metal1_pin = layer(6, 2)
@@ -18,6 +19,8 @@ metal2 = layer(8, 0)
 metal2_label = layer(8, 1)
 metal2_pin = layer(8, 2)
 abutment_box = layer(200, 0)
+
+diff_contact = ndiff_contact + pdiff_contact
 
 # Define materials
 m_poly = Material("poly", color=(0.7, 0, 0))
