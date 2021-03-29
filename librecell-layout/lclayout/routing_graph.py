@@ -290,9 +290,10 @@ def embed_transistor_terminal_nodes(G: nx.Graph,
     :return: None
     """
     # Connect terminal nodes of transistor gates in G.
-    for t_layout in transistor_layouts.values():
+    for transistor, t_layout in transistor_layouts.items():
         terminals = t_layout.terminal_nodes()
         for net, ts in terminals.items():
+            coords = [] # Coordinates of inserted terminal nodes.
             for t in ts:
                 layer, (x, y) = t
 
@@ -310,12 +311,15 @@ def embed_transistor_terminal_nodes(G: nx.Graph,
                     _, (x2, y2) = b
                     return (x1 - x2) ** 2 + (y1 - y2) ** 2
 
-                neighbour_node = min(x_aligned_nodes, key=lambda n: dist(n, t))
+                if x_aligned_nodes:
+                    neighbour_node = min(x_aligned_nodes, key=lambda n: dist(n, t))
 
-                # TODO: weight proportional to gate width?
-                G.add_edge(t, neighbour_node, weight=1000, wire_width=tech.gate_length)
+                    # TODO: weight proportional to gate width?
+                    G.add_edge(t, neighbour_node, weight=1000, wire_width=tech.gate_length)
+                    coords.append((x, y))
+                else:
+                    logger.debug(f"No neighbour node for terminal with net `{net}` of transistor {transistor.name}.")
 
-            coords = [c for _, c in ts]
             terminals_by_net.append((net, layer, coords))
 
 
