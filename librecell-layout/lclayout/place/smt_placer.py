@@ -126,7 +126,7 @@ class SMTPlacer(TransistorPlacer):
                         l = t_left.flipped() if flip_l else t_left
                         r = t_right.flipped() if flip_r else t_right
 
-                        if l.right != r.left:
+                        if l.drain_net != r.source_net:
                             # Drain/Source net mismatch.
                             # In case the transistors are flipped that way,
                             # they are not allowed to be direct neighbors.
