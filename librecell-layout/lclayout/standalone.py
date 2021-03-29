@@ -25,6 +25,7 @@ from lclayout.data_types import Cell
 from .place.place import TransistorPlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer
+from .place import meta_placer
 
 from .graphrouter.graphrouter import GraphRouter
 from .graphrouter.hv_router import HVGraphRouter
@@ -784,6 +785,7 @@ def main():
 
     # List of available placer engines.
     placers = {
+        'meta': meta_placer.MetaTransistorPlacer,
         'flat': EulerPlacer,
         'hierarchical': HierarchicalPlacer,
         'smt': SMTPlacer
@@ -808,7 +810,7 @@ def main():
                         help='enable debug mode: display routing nodes in layout, \
                         show unsatisfiable core if SMT DRC cleaning fails.')
 
-    parser.add_argument('--placer', default='flat', metavar='PLACER', type=str, choices=placers.keys(),
+    parser.add_argument('--placer', default='meta', metavar='PLACER', type=str, choices=placers.keys(),
                         help='placement algorithm ({})'.format(', '.join(sorted(placers.keys()))))
 
     parser.add_argument('--placement-file', metavar='PLACEMENTFILE', type=str,

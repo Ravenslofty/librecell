@@ -14,7 +14,7 @@
 import networkx as nx
 from itertools import combinations, permutations, chain, product
 
-from typing import List, Set
+from typing import List, Set, Optional
 
 import logging
 
@@ -90,7 +90,8 @@ def construct_even_degree_graphs(G: nx.MultiGraph) -> List[nx.MultiGraph]:
     return even_degree_graphs
 
 
-def find_all_euler_tours(G: nx.MultiGraph, start_node=None, end_node=None, visited_edges: Set = None):
+def find_all_euler_tours(G: nx.MultiGraph, start_node=None, end_node=None, visited_edges: Set = None,
+                         limit: Optional[int] = None):
     """ Find some tour starting at `start_node`.
     If `end_node` is given the trace will end there. However, it will not be a full tour.
 
@@ -101,6 +102,8 @@ def find_all_euler_tours(G: nx.MultiGraph, start_node=None, end_node=None, visit
     start_node: Start of the tour.
 
     visited_edges: Edges that should not appear in the tour anymore.
+
+    limit: Find only the first N tours.
 
     Returns
     -------
@@ -126,6 +129,11 @@ def find_all_euler_tours(G: nx.MultiGraph, start_node=None, end_node=None, visit
     assert len(edges) > 0
 
     for e in edges:
+
+        # Terminate when limit is reached.
+        if limit is not None and len(tours) >= limit:
+            break
+
         a, b, c = e
         # Normalize edge by sorting start and end.
         ao, bo = tuple(sorted((a, b)))
@@ -139,9 +147,16 @@ def find_all_euler_tours(G: nx.MultiGraph, start_node=None, end_node=None, visit
                 assert len(visited_edges) < len(G.edges) - 1
                 visited_edges_sub = visited_edges | {e_norm}
                 start_sub = b
-                sub_tours = find_all_euler_tours(G, start_sub, end_node, visited_edges=visited_edges_sub)
+                if limit is None:
+                    sub_limit = None
+                else:
+                    sub_limit = max(0, limit - len(tours))
+                sub_tours = find_all_euler_tours(G, start_sub, end_node, visited_edges=visited_edges_sub, limit=sub_limit)
 
                 tours.extend([[(a, b, c)] + s for s in sub_tours])
+
+    if limit is not None:
+        tours = tours[:limit]
 
     return tours
 
