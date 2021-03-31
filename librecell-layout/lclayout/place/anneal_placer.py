@@ -51,15 +51,15 @@ def _legalise(lower_row: List[Transistor], upper_row: List[Transistor]) -> Tuple
     if len(lower_row) == 0:
         return upper_row, lower_row
 
-    # Constrain power rails to the correct row.
-    if lower_row[0] is not None and (lower_row[0].source_net == "VDD" or lower_row[0].drain_net == "VDD"):
-        if upper_row[0].source_net != "VDD" and upper_row[0].drain_net != "VDD":
+    # Constrain transistors to the correct row.
+    if lower_row[0] is not None and lower_row[0].channel_type == ChannelType.PMOS:
+        if upper_row[0] is not None and upper_row[0].channel_type != ChannelType.PMOS:
             return _legalise(upper_row, lower_row)
         else:
             return _legalise([None] + lower_row[1:], upper_row[0:1] + lower_row[0:1] + upper_row[1:])
 
-    if upper_row[0] is not None and (upper_row[0].source_net == "GND" or upper_row[0].drain_net == "GND"):
-        if lower_row[0].source_net != "GND" and lower_row[0].drain_net != "GND":
+    if upper_row[0] is not None and upper_row[0].channel_type == ChannelType.NMOS:
+        if lower_row[0] is not None and lower_row[0].channel_type != ChannelType.NMOS:
             return _legalise(upper_row, lower_row)
         else:
             return _legalise(lower_row[0:1] + upper_row[0:1] + lower_row[1:], [None] + upper_row[1:])
