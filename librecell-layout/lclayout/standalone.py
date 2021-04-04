@@ -23,7 +23,7 @@ from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_
 from lclayout.data_types import Cell
 
 from .place.place import TransistorPlacer
-from .place.anneal_placer import RandomPlacer
+from .place.anneal_placer import RandomPlacer, HillClimbPlacer, ThresholdAcceptancePlacer
 from .place.euler_placer import EulerPlacer, HierarchicalPlacer
 from .place.smt_placer import SMTPlacer
 from .place import meta_placer
@@ -790,7 +790,9 @@ def main():
         'flat': EulerPlacer,
         'hierarchical': HierarchicalPlacer,
         'smt': SMTPlacer,
-        'random': RandomPlacer
+        'random': RandomPlacer,
+        'hillclimb': HillClimbPlacer,
+        'ta': ThresholdAcceptancePlacer,
     }
 
     signal_routers = {
