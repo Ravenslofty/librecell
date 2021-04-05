@@ -183,7 +183,7 @@ def _evaluate(lower_row: List[Transistor], upper_row: List[Transistor]) -> float
         for (a, b) in product(net, net):
             ax, ay = a
             bx, by = b
-            distance += abs(ax - bx) + abs(ay - by)
+            distance += sqrt(abs(ax - bx)*abs(ax - bx) + abs(ay - by))
 
     return distance
 
@@ -353,7 +353,7 @@ class ThresholdAcceptancePlacer(TransistorPlacer):
         iteration = 0
         while iteration < STEPS_PER_ITER:
             if iteration % 1000 == 0 and iteration != 0:
-                logger.info("Boredom: {}/{}".format(iteration, STEPS_PER_ITER))
+                pass #logger.info("Boredom: {}/{}".format(iteration, STEPS_PER_ITER))
 
             lower_row, upper_row = _neighbour(placer.rand, best_cell.lower, best_cell.upper)
             lower_row, upper_row = _legalise(lower_row, upper_row)
