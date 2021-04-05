@@ -316,47 +316,78 @@ class HillClimbPlacer(TransistorPlacer):
 
 class ThresholdAcceptancePlacer(TransistorPlacer):
     def place(self, transistors: Iterable[Transistor]) -> Cell:
-        START_THRESHOLD = 500000
-        BOREDOM_THRESHOLD = 10
-        TIMER_THRESHOLD = 250
+        LIST_SIZE = 5000 * len(transistors) // 22
+        STEPS_PER_ITER = 20000 * len(transistors) // 22
 
-        # Generate a random starting cell.
         placer = RandomPlacer()
+        total_best_cell = placer.place(transistors)
+        total_best_score = _evaluate(total_best_cell.lower, total_best_cell.upper)
+
+        optimal = len(transistors) # If we achieve a 100% packing, call it a day.
+
+        logger.info("Starting best score: {}; cell dimensions: {}x2".format(total_best_score, len(total_best_cell.lower)))
+
+        # Explore the neighbourhood to find a roughly appropriate series of thresholds.
+        logger.info("Pre-solve")
+        threshold = []
+        iteration = 0
+        while iteration < LIST_SIZE:
+            lower_row, upper_row = _neighbour(placer.rand, total_best_cell.lower, total_best_cell.upper)
+            lower_row, upper_row = _legalise(lower_row, upper_row)
+            score = _evaluate(lower_row, upper_row)
+            if score < total_best_score:
+                total_best_score = score
+                total_best_cell = _assemble_cell(lower_row, upper_row)
+                logger.info("New best score: {}; cell dimensions: {}x2".format(total_best_score, len(lower_row)))
+                if len(lower_row) + len(upper_row) == optimal:
+                    logger.debug("100% packing achieved!")
+                    logger.debug("Finish score: {}".format(total_best_score))
+                    return total_best_cell
+            elif score > total_best_score:
+                threshold.append((score - total_best_score) / total_best_score)
+                iteration += 1
+
+        logger.info("Solve")
         best_cell = placer.place(transistors)
-        best_score = _evaluate(best_cell.lower, best_cell.upper)
-
-        threshold = START_THRESHOLD
-        boredom = BOREDOM_THRESHOLD
-        timer = TIMER_THRESHOLD
-
-        for iteration in range(100000):
-            if iteration % 100 == 0:
-                logger.debug("Iteration {}: score {} threshold {}".format(iteration, best_score, threshold))
+        best_score = _evaluate(total_best_cell.lower, total_best_cell.upper)
+        iteration = 0
+        while iteration < STEPS_PER_ITER:
+            if iteration % 1000 == 0 and iteration != 0:
+                logger.info("Boredom: {}/{}".format(iteration, STEPS_PER_ITER))
 
             lower_row, upper_row = _neighbour(placer.rand, best_cell.lower, best_cell.upper)
             lower_row, upper_row = _legalise(lower_row, upper_row)
             score = _evaluate(lower_row, upper_row)
-
-            if score < (best_score + threshold):
+            iteration += 1
+            if score <= best_score:
                 best_score = score
                 best_cell = _assemble_cell(lower_row, upper_row)
-                boredom = BOREDOM_THRESHOLD
+                if score <= total_best_score:
+                    total_best_score = score
+                    total_best_cell = best_cell
+                    logger.info("New best score: {}; cell dimensions: {}x2".format(total_best_score, len(lower_row)))
+                    if len(lower_row) + len(upper_row) == optimal:
+                        logger.debug("100% packing achieved!")
+                        logger.debug("Finish score: {}".format(total_best_score))
+                        return total_best_cell
+                iteration = 0
             else:
-                boredom -= 1
+                max_pos = 0
+                max_val = 0
+                for i, x in enumerate(threshold):
+                    if x > max_val:
+                        max_pos = i
+                        max_val = x
+                change = (score - best_score) / best_score
+                if change < max_val:
+                    threshold[max_pos] = change
+                    best_score = score
+                    best_cell = _assemble_cell(lower_row, upper_row)
+                    iteration = 0
 
-            timer -= 1
+        logger.debug("Finish score: {}".format(total_best_score))
 
-            if boredom == 0 or timer == 0:
-                if threshold > 0:
-                    threshold = (threshold * 9) // 10
-                    boredom = BOREDOM_THRESHOLD
-                    timer = TIMER_THRESHOLD
-                else:
-                    break
-
-        logger.debug("Finish score: %.02f" % (best_score))
-
-        return best_cell
+        return total_best_cell
 
 
 if __name__ == "__main__":
