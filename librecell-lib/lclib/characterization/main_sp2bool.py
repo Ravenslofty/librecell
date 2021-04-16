@@ -110,7 +110,7 @@ def main():
                                                                                                           gnd_pin: False},
                                                                                      user_input_nets=None)
     # Convert keys into strings (they are `sympy.Symbol`s now)
-    output_functions_deduced = {output.name: function for output, function in output_functions_deduced.items()}
+    output_functions_deduced = {output.name: comb.function for output, comb in output_functions_deduced.items()}
 
     # Log deduced output functions.
     for output_name, function in output_functions_deduced.items():

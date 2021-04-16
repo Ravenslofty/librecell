@@ -33,6 +33,10 @@ import logging
 # logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
+"""
+Extract logic formulas and memory loops from a transistor-level circuit graph.
+"""
+
 
 def simplify_logic(f: boolalg.Boolean, force: bool = True) -> boolalg.Boolean:
     """
@@ -42,6 +46,42 @@ def simplify_logic(f: boolalg.Boolean, force: bool = True) -> boolalg.Boolean:
     :return:
     """
     return sympy_simplify_logic(f, force=force)
+
+
+def simplify_with_assumption(assumption: boolalg.Boolean, formula: boolalg.Boolean) -> boolalg.Boolean:
+    """
+    Simplify a formula while assuming that `assumption` is satisfied.
+    The simplification might be incorrect when the assumption is not satisfied.
+    In other words all variable assignments that invalidate the assumption are treated as don't-cares.
+    :param assumption:
+    :param formula: The formula to be simplified.
+    :return: Simplified formula under the given assumption.
+    """
+
+    # Extract variables.
+    all_vars = set()
+    all_vars.update(assumption.atoms())
+    all_vars.update(formula.atoms())
+    all_vars = [v for v in all_vars if v is not boolalg.true and v is not boolalg.false]
+    all_vars = sorted(all_vars, key=lambda a: a.name)
+
+    # Create a truth table.
+    # Treat all rows that don't satisfy the assumption as "don't care".
+    truth_table_assumption = boolalg.truth_table(assumption, all_vars)
+    truth_table_formula = boolalg.truth_table(formula, all_vars, input=False)
+
+    minterms = []
+    dont_cares = []
+    for (inputs, value_assumption), value_formula in zip(truth_table_assumption, truth_table_formula):
+
+        if not value_assumption:
+            dont_cares.append(inputs)
+        elif value_formula:
+            minterms.append(inputs)
+
+    f = boolalg.SOPform(variables=all_vars, minterms=minterms, dontcares=dont_cares)
+
+    return f
 
 
 class CombinationalOutput:
@@ -544,7 +584,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                           pins_of_interest: Set,
                           constant_input_pins: Dict[Any, bool] = None,
                           user_input_nets: Set = None
-                          ) -> Tuple[Dict[boolalg.BooleanAtom, boolalg.Boolean], Dict[boolalg.BooleanAtom, Memory]]:
+                          ) -> Tuple[Dict[boolalg.BooleanAtom, CombinationalOutput], Dict[boolalg.BooleanAtom, Memory]]:
     """
     Analyze a CMOS transistor network and find boolean expressions for the output signals of the `pins_of_interest`.
 
@@ -727,57 +767,34 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         print("write_condition =", write_condition)
         oscillation_condition = dn
 
-        # Find expressions for the memory output when the write condition is met.
-        # Find all variable assignments such that the write condition is met.
-        write_condition_models = list(satisfiable(write_condition, all_models=True))
-        print("write_condition_models =", write_condition_models)
-        if write_condition_models == [False]:
-            logger.warning("Detected a memory loop that is not possible to write to.")
+        debug = True
+        if debug:
+            # Find expressions for the memory output when the write condition is met.
+            # Find all variable assignments such that the write condition is met.
+            write_condition_models = list(satisfiable(write_condition, all_models=True))
+            print("write_condition_models =", write_condition_models)
+            if write_condition_models == [False]:
+                logger.warning("Detected a memory loop that is not possible to write to.")
 
-        # Find what data the memory will store for each write condition.
-        mem_data = []
-        for model in write_condition_models:
-            # Now find the memory output once the write condition is met.
-            data = simplify_logic(memory_output_resolved.subs(model))
-            mem_data.append((model, data))
+            # Find what data the memory will store for each write condition.
+            mem_data = []
+            for model in write_condition_models:
+                # Now find the memory output once the write condition is met.
+                data = simplify_logic(memory_output_resolved.subs(model))
+                mem_data.append((model, data))
 
-        # Pretty print write conditions and corresponding write data.
-        if len(mem_data) > 0:
-            print()
-            print("Write data for all write conditions:")
-            model, _ = mem_data[0]
-            vars = list(model.keys())
-            print("\t", "\t".join((str(v) for v in vars)), "\t:", f"data ({memory_output_net})")
-            for model, data in mem_data:
-                print("\t", "\t".join((str(model[var]) for var in vars)), "\t:", data)
-            print()
+            # Pretty print write conditions and corresponding write data.
+            if len(mem_data) > 0:
+                print()
+                print("Write data for all write conditions:")
+                model, _ = mem_data[0]
+                vars = list(model.keys())
+                print("\t", "\t".join((str(v) for v in vars)), "\t:", f"data ({memory_output_net})")
+                for model, data in mem_data:
+                    print("\t", "\t".join((str(model[var]) for var in vars)), "\t:", data)
+                print()
 
-        # Find variable assignments that are constant for all models which
-        # satisfy the write condition.
-        # This variables don't need to be respected to find the write data.
-        const_model_var = dict()
-        for model, _ in mem_data:
-            for var, value in model.items():
-                if var not in const_model_var:
-                    const_model_var[var] = value
-                else:
-                    if const_model_var[var] != value:
-                        const_model_var[var] = None
-        const_model_var = {var: value for var, value in const_model_var.items() if value is not None}
-        print('const_model_var =', const_model_var)
-
-        # Find an expression for the memory data when the write condition is met.
-        # I.e. when one of the found models is applied.
-        write_data = boolalg.Or(*(
-            data & boolalg.And(*
-                               (var if value == True else boolalg.Not(var)
-                                for var, value in model.items()
-                                if var not in const_model_var
-                                )
-                               )
-            for model, data in mem_data
-        ))
-        write_data = simplify_logic(write_data)
+        write_data = simplify_with_assumption(write_condition, memory_output_resolved)
         print("write_data = ", write_data)
 
         if not sympy.satisfiable(~write_condition):
@@ -842,14 +859,6 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 assert out in nets_of_memory_cycles
                 # Output net of the memory loop.
                 memory_net = out
-                # _this_memory_cycle = [c for c in cycles if memory_net in c]
-                # # assert len(_this_memory_cycle) == 1
-                # print(out, " - memory cycle: ", _this_memory_cycle)
-                # _this_memory_cycle = set(_this_memory_cycle[0])
-                #
-                # # Find inputs into the memory cycle.
-                # _inputs = inputs | nets_of_memory_cycles - _this_memory_cycle
-                # #memory = derive_memory(memory_net, _inputs, formulas_high)
                 memory = memory_by_output_net[memory_net]
 
                 latches[memory_net] = memory
@@ -871,9 +880,14 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         m.oscillation_condition = simplify_logic(m.oscillation_condition.subs(output_formulas))
 
     print("Output functions ({}):".format(len(output_formulas)))
+    output_combinatorial = dict()
     for net, formula in output_formulas.items():
         z = high_impedance_conditions[net]
-        function = formula.subs({~z: True})
+
+        # Get the output function assuming that the output is not high-impedance.
+        function = simplify_with_assumption(~z, formula)
+
+        output_combinatorial[net] = CombinationalOutput(function=function, high_impedance=z)
         print(" ", net, "=", function, ', Z: ', z)
 
     print("Latches ({}):".format(len(latches)))
@@ -889,7 +903,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     if len(latches):
         logger.info(f"Number of latches: {len(latches)}")
 
-    return output_formulas, latches
+    return output_combinatorial, latches
 
 
 class NetlistGen:
@@ -996,7 +1010,7 @@ def test_analyze_circuit_graph():
 
     # Verify that the deduced boolean function is equal to the AND function.
     a, b = sympy.symbols('a, b')
-    assert bool_equals(result[sympy.Symbol('output')], a & b)
+    assert bool_equals(result[sympy.Symbol('output')].function, a & b)
 
 
 def test_analyze_circuit_graph_transmission_gate_xor():
@@ -1030,7 +1044,7 @@ def test_analyze_circuit_graph_transmission_gate_xor():
 
     # Verify that the deduced boolean function is equal to the XOR function.
     a, b = sympy.symbols('a, b')
-    assert bool_equals(result[sympy.Symbol('c')], a ^ b)
+    assert bool_equals(result[sympy.Symbol('c')].function, a ^ b)
     assert not latches
 
 
@@ -1056,7 +1070,7 @@ def test_analyze_circuit_graph_mux2():
     # Verify that the deduced boolean function is equal to the MUX function.
     print(result)
     a, b, s = sympy.symbols('a, b, s')
-    assert bool_equals(result[sympy.Symbol('y')], (a & ~s) | (b & s))
+    assert bool_equals(result[sympy.Symbol('y')].function, (a & ~s) | (b & s))
     assert not latches
 
 
