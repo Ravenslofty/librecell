@@ -76,9 +76,12 @@ class Memory:
         self.data = data
         self.write_condition = write_condition
         self.oscillation_condition = oscillation_condition
+        # ID of the memory loop.
+        self.loop_id = None
 
     def __str__(self):
-        return "Memory(data = {}, write = {})".format(self.data, self.write_condition)
+        return f"Memory(data = {self.data}, write = {self.write_condition}, " \
+               f"loop_id = {self.loop_id}, oscillate = {self.oscillation_condition})"
 
     def __repr__(self):
         return str(self)
@@ -541,7 +544,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                           pins_of_interest: Set,
                           constant_input_pins: Dict[Any, bool] = None,
                           user_input_nets: Set = None
-                          ) -> Dict[sympy.Symbol, boolalg.Boolean]:
+                          ) -> Tuple[Dict[boolalg.BooleanAtom, boolalg.Boolean], Dict[boolalg.BooleanAtom, Memory]]:
     """
     Analyze a CMOS transistor network and find boolean expressions for the output signals of the `pins_of_interest`.
 
@@ -558,7 +561,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         Some inputs cannot automatically be found and must be provided by the user.
         Input nets that connect not only to transistor gates but also source or drains need to be specified manually.
         This can happen for cells containing transmission gates.
-    :return: Dict['output pin', boolean formula]
+    :return: (Dict['output pin', boolean formula], Dict['output pin', Memory])
     """
     #
     # import matplotlib.pyplot as plt
@@ -721,6 +724,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         print("Memory output net {}  = {}".format(memory_output_net, memory_output_resolved))
         d, dp, dn = boolean_derivatives(memory_output_resolved, memory_output_net)
         write_condition = ~dp
+        print("write_condition =", write_condition)
         oscillation_condition = dn
 
         # Find expressions for the memory output when the write condition is met.
@@ -748,10 +752,29 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 print("\t", "\t".join((str(model[var]) for var in vars)), "\t:", data)
             print()
 
+        # Find variable assignments that are constant for all models which
+        # satisfy the write condition.
+        # This variables don't need to be respected to find the write data.
+        const_model_var = dict()
+        for model, _ in mem_data:
+            for var, value in model.items():
+                if var not in const_model_var:
+                    const_model_var[var] = value
+                else:
+                    if const_model_var[var] != value:
+                        const_model_var[var] = None
+        const_model_var = {var: value for var, value in const_model_var.items() if value is not None}
+        print('const_model_var =', const_model_var)
+
         # Find an expression for the memory data when the write condition is met.
         # I.e. when one of the found models is applied.
         write_data = boolalg.Or(*(
-            data & boolalg.And(*(var if value == True else boolalg.Not(var) for var, value in model.items()))
+            data & boolalg.And(*
+                               (var if value == True else boolalg.Not(var)
+                                for var, value in model.items()
+                                if var not in const_model_var
+                                )
+                               )
             for model, data in mem_data
         ))
         write_data = simplify_logic(write_data)
@@ -764,12 +787,14 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     # Derive memory for all cycles with each possible node as memory output.
     memory_output_nets = set()
-    for cycle in cycles:
+    memory_by_output_net = dict()  # Cache memory loops for later usage.
+    for loop_id, cycle in enumerate(cycles):
         print('cycle = {}'.format(cycle))
         nodes_in_cycle = set(cycle)
         _inputs = inputs | nets_of_memory_cycles - nodes_in_cycle
         for node in cycle:
             memory = derive_memory(node, _inputs, formulas_high)
+            memory.loop_id = loop_id
 
             print(memory)
             print()
@@ -777,12 +802,13 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             if sympy.satisfiable(~memory.write_condition):
                 # Store condition can be met -> this is a potential memory.
                 memory_output_nets.add(node)
+                memory_by_output_net[node] = memory
 
     print("Memory output nets: {}".format(memory_output_nets))
 
     # Solve equation system for output.
     # TODO: stop resolving at memory elements.
-    def solve_output_nets():
+    def solve_output_nets() -> Tuple[Dict[boolalg.BooleanAtom, boolalg.Boolean], Dict[boolalg.BooleanAtom, Memory]]:
         output_formulas = dict()
         latches = dict()
 
@@ -816,14 +842,15 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 assert out in nets_of_memory_cycles
                 # Output net of the memory loop.
                 memory_net = out
-                _this_memory_cycle = [c for c in cycles if memory_net in c]
-                # assert len(_this_memory_cycle) == 1
-                print(out, " - memory cycle: ", _this_memory_cycle)
-                _this_memory_cycle = set(_this_memory_cycle[0])
-
-                # Find inputs into the memory cycle.
-                _inputs = inputs | nets_of_memory_cycles - _this_memory_cycle
-                memory = derive_memory(memory_net, _inputs, formulas_high)
+                # _this_memory_cycle = [c for c in cycles if memory_net in c]
+                # # assert len(_this_memory_cycle) == 1
+                # print(out, " - memory cycle: ", _this_memory_cycle)
+                # _this_memory_cycle = set(_this_memory_cycle[0])
+                #
+                # # Find inputs into the memory cycle.
+                # _inputs = inputs | nets_of_memory_cycles - _this_memory_cycle
+                # #memory = derive_memory(memory_net, _inputs, formulas_high)
+                memory = memory_by_output_net[memory_net]
 
                 latches[memory_net] = memory
 
@@ -850,26 +877,120 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         print(" ", net, "=", function, ', Z: ', z)
 
     print("Latches ({}):".format(len(latches)))
+
     for output_net, latch in latches.items():
         print(" ", output_net, "=", latch)
 
-    assert len(cycles) == 0, "Abstraction of feed-back loops is not yet supported."
-    return output_formulas
+    if not latches:
+        print("  No latches found.")
+
+    if len(cycles) > 0:
+        assert len(latches) > 0, "Found feedback loops but no latches were derived."
+    if len(latches):
+        logger.info(f"Number of latches: {len(latches)}")
+
+    return output_formulas, latches
+
+
+class NetlistGen:
+    """
+    Generate test netlists.
+    """
+
+    def __init__(self):
+        self.net_counter = itertools.count()
+        self.vdd = "vdd"
+        self.gnd = "gnd"
+
+    def new_net(self, prefix=""):
+        return "{}{}".format(prefix, next(self.net_counter))
+
+    def inv(self, a, out):
+        # Create transistors of a INV.
+        return [
+            (self.vdd, out, (a, ChannelType.PMOS)),
+            (self.gnd, out, (a, ChannelType.NMOS)),
+        ]
+
+    def nor2(self, a, b, out):
+        # Create transistors of a NOR.
+        i = self.new_net("i")
+        return [
+            (self.vdd, i, (a, ChannelType.PMOS)),
+            (i, out, (b, ChannelType.PMOS)),
+            (out, self.gnd, (a, ChannelType.NMOS)),
+            (out, self.gnd, (b, ChannelType.NMOS)),
+        ]
+
+    def nand2(self, a, b, out):
+        # Create transistors of a NAND.
+        i = self.new_net("i")
+        return [
+            (self.vdd, out, (a, ChannelType.PMOS)),
+            (self.vdd, out, (b, ChannelType.PMOS)),
+            (out, i, (a, ChannelType.NMOS)),
+            (i, self.gnd, (b, ChannelType.NMOS)),
+        ]
+
+    def and2(self, a, b, out):
+        nand_out = self.new_net(prefix="nand_out")
+        return self.nand2(a, b, nand_out) + self.inv(nand_out, out)
+
+    def or2(self, a, b, out):
+        nor_out = self.new_net(prefix="nor_out")
+        return self.nor2(a, b, nor_out) + self.inv(nor_out, out)
+
+    def mux2(self, in0, in1, sel, out):
+        sel0 = self.new_net(prefix='sel0')
+        sel1 = sel
+        in0_masked = self.new_net('in0_masked')
+        in1_masked = self.new_net('in1_masked')
+
+        return self.inv(sel1, sel0) + self.nand2(in0, sel0, in0_masked) + self.nand2(in1, sel1, in1_masked) + \
+               self.nand2(in0_masked, in1_masked, out)
+
+    def latch(self, clk, d_in, d_out):
+        a_2_6 = self.new_net("a_2_6_")
+        a_18_74 = self.new_net("a_18_74_")
+        a_23_6 = self.new_net("a_23_6_")
+        a_35_84 = self.new_net("a_35_84_")
+        a_18_6 = self.new_net("a_18_6_")
+        a_35_6 = self.new_net("a_35_6_")
+
+        edges = [
+            # Command for converting a raw SPICE transistor netlist into this format:
+            # cat raw_netlist.sp | grep -v + | awk '{ print "(\"" $2 "\", \"" $4 "\", (\"" $3  "\", " $6 ")),"}' \
+            # | sed 's/pmos/ChannelType.PMOS/g' | sed 's/nmos/ChannelType.NMOS/g'
+
+            (self.vdd, a_2_6, (clk, ChannelType.PMOS)),
+            (a_18_74, self.vdd, (d_in, ChannelType.PMOS)),
+            (a_23_6, a_18_74, (a_2_6, ChannelType.PMOS)),
+            (a_35_84, a_23_6, (clk, ChannelType.PMOS)),
+            (self.vdd, a_35_84, (d_out, ChannelType.PMOS)),
+            (self.gnd, a_2_6, (clk, ChannelType.NMOS)),
+            (d_out, self.vdd, (a_23_6, ChannelType.PMOS)),
+            (a_18_6, self.gnd, (d_in, ChannelType.NMOS)),
+            (a_23_6, a_18_6, (clk, ChannelType.NMOS)),
+            (a_35_6, a_23_6, (a_2_6, ChannelType.NMOS)),
+            (self.gnd, a_35_6, (d_out, ChannelType.NMOS)),
+            (d_out, self.gnd, (a_23_6, ChannelType.NMOS)),
+        ]
+
+        return edges
 
 
 def test_analyze_circuit_graph():
     # Create CMOS network of a AND gate (NAND -> INV).
+
+    gen = NetlistGen()
+    edges = gen.and2('a', 'b', 'output')
     g = nx.MultiGraph()
-    g.add_edge('vdd', 'nand', ('a', ChannelType.PMOS))
-    g.add_edge('vdd', 'nand', ('b', ChannelType.PMOS))
-    g.add_edge('gnd', '1', ('a', ChannelType.NMOS))
-    g.add_edge('1', 'nand', ('b', ChannelType.NMOS))
-    g.add_edge('vdd', 'output', ('nand', ChannelType.PMOS))
-    g.add_edge('gnd', 'output', ('nand', ChannelType.NMOS))
+    for e in edges:
+        g.add_edge(*e)
 
     pins_of_interest = {'output'}
     known_pins = {'vdd': True, 'gnd': False}
-    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    result, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
 
     print(result)
 
@@ -901,47 +1022,60 @@ def test_analyze_circuit_graph_transmission_gate_xor():
     # and therefore cannot be deduced to be an input pin.
     pins_of_interest = {'a', 'b', 'c'}
     known_pins = {'vdd': True, 'gnd': False}
-    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest,
-                                   constant_input_pins=known_pins,
-                                   user_input_nets={'a', 'b'})
+    result, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest,
+                                            constant_input_pins=known_pins,
+                                            user_input_nets={'a', 'b'})
 
     print(result)
 
     # Verify that the deduced boolean function is equal to the XOR function.
     a, b = sympy.symbols('a, b')
     assert bool_equals(result[sympy.Symbol('c')], a ^ b)
+    assert not latches
+
+
+def test_analyze_circuit_graph_mux2():
+    gen = NetlistGen()
+
+    edges = []
+
+    d0 = 'a'
+    d1 = 'b'
+    out = 'y'
+    sel = 's'
+
+    edges += gen.mux2(d0, d1, sel, out)
+
+    g = nx.MultiGraph()
+    for e in edges:
+        g.add_edge(*e)
+
+    pins_of_interest = {d0, d1, out, sel}
+    known_pins = {'vdd': True, 'gnd': False}
+    result, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    # Verify that the deduced boolean function is equal to the MUX function.
+    print(result)
+    a, b, s = sympy.symbols('a, b, s')
+    assert bool_equals(result[sympy.Symbol('y')], (a & ~s) | (b & s))
+    assert not latches
 
 
 def test_analyze_circuit_graph_latch():
     g = nx.MultiGraph()
     # Network of a LATCH.
-    edges = [
-        # Command for converting a raw SPICE transistor netlist into this format:
-        # cat raw_netlist.sp | grep -v + | awk '{ print "(\"" $2 "\", \"" $4 "\", (\"" $3  "\", " $6 ")),"}' \
-        # | sed 's/pmos/ChannelType.PMOS/g' | sed 's/nmos/ChannelType.NMOS/g'
-        ("vdd", "a_2_6#", ("CLK", ChannelType.PMOS)),
-        ("a_18_74#", "vdd", ("D", ChannelType.PMOS)),
-        ("a_23_6#", "a_18_74#", ("a_2_6#", ChannelType.PMOS)),
-        ("a_35_84#", "a_23_6#", ("CLK", ChannelType.PMOS)),
-        ("vdd", "a_35_84#", ("Q", ChannelType.PMOS)),
-        ("gnd", "a_2_6#", ("CLK", ChannelType.NMOS)),
-        ("Q", "vdd", ("a_23_6#", ChannelType.PMOS)),
-        ("a_18_6#", "gnd", ("D", ChannelType.NMOS)),
-        ("a_23_6#", "a_18_6#", ("CLK", ChannelType.NMOS)),
-        ("a_35_6#", "a_23_6#", ("a_2_6#", ChannelType.NMOS)),
-        ("gnd", "a_35_6#", ("Q", ChannelType.NMOS)),
-        ("Q", "gnd", ("a_23_6#", ChannelType.NMOS)),
-    ]
+    gen = NetlistGen()
+    edges = gen.latch('CLK', 'D', 'Q')
     for e in edges:
         g.add_edge(*e)
 
     pins_of_interest = {'CLK', 'D', 'Q'}
     known_pins = {'vdd': True, 'gnd': False}
-    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+
+    assert len(latches) == 1
 
 
 def test_analyze_circuit_graph_set_reset_nand():
-    g = nx.MultiGraph()
     # Network of a set-reset nand feedback loop.
     r"""
      S -----|\
@@ -957,22 +1091,104 @@ def test_analyze_circuit_graph_set_reset_nand():
      R -----|/
     """
 
-    count = iter(range(100))
+    gen = NetlistGen()
 
-    def nand(a, b, out):
-        # Create transistors of a nand.
-        i = "{}#".format(next(count))
-        return [
-            ("vdd", i, (a, ChannelType.PMOS)),
-            (i, out, (b, ChannelType.PMOS)),
-            (out, "gnd", (a, ChannelType.NMOS)),
-            (out, "gnd#", (b, ChannelType.NMOS)),
-        ]
-
-    edges = nand("S", "Y2", "Y1") + nand("R", "Y1", "Y2")
+    g = nx.MultiGraph()
+    edges = gen.nand2("S", "Y2", "Y1") + gen.nand2("R", "Y1", "Y2")
     for e in edges:
         g.add_edge(*e)
 
     pins_of_interest = {'S', 'R', 'Y1', 'Y2'}
     known_pins = {'vdd': True, 'gnd': False}
-    result = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    print(combinatorial)
+    print(latches)
+
+    assert len(latches) == 1
+    # TODO
+
+
+def test_analyze_circuit_graph_dff_pos():
+    gen = NetlistGen()
+
+    edges = []
+
+    d = 'D'
+    q = 'Q'
+    clk = 'CLK'
+    clk_inv = gen.new_net(prefix='clk_inv')
+    d_i = gen.new_net(prefix='d_i')
+
+    edges += gen.inv(clk, clk_inv)
+    edges += gen.latch(clk, d, d_i)
+    edges += gen.latch(clk_inv, d_i, q)
+
+    g = nx.MultiGraph()
+    for e in edges:
+        g.add_edge(*e)
+
+    pins_of_interest = {clk, d, q}
+    known_pins = {'vdd': True, 'gnd': False}
+    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+
+    assert len(latches) == 2
+
+
+def test_analyze_circuit_graph_dff_pos_sync_reset():
+    gen = NetlistGen()
+
+    edges = []
+
+    d = 'D'
+    q = 'Q'
+    r = 'R'
+    clk = 'CLK'
+    clk_inv = gen.new_net(prefix='clk_inv')
+    d_i = gen.new_net(prefix='d_i')
+    d_rst = gen.new_net(prefix='d_rst')
+
+    edges += gen.and2(d, r, d_rst)
+    edges += gen.inv(clk, clk_inv)
+    edges += gen.latch(clk_inv, d_rst, d_i)
+    edges += gen.latch(clk, d_i, q)
+
+    g = nx.MultiGraph()
+    for e in edges:
+        g.add_edge(*e)
+
+    pins_of_interest = {clk, d, q}
+    known_pins = {'vdd': True, 'gnd': False}
+    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+
+    assert len(latches) == 2
+
+
+def test_analyze_circuit_graph_dff_pos_scan():
+    gen = NetlistGen()
+
+    edges = []
+
+    d = 'D'
+    q = 'Q'
+    clk = 'CLK'
+    scan_enable = 'ScanEnable'
+    scan_in = 'ScanIn'
+    scan_mux_out = 'ScanMux_DO'
+    clk_inv = gen.new_net(prefix='clk_inv')
+    d_i = gen.new_net(prefix='d_i')
+
+    edges += gen.inv(clk, clk_inv)
+
+    edges += gen.mux2(d, scan_in, scan_enable, scan_mux_out)
+
+    edges += gen.latch(clk, scan_mux_out, d_i)
+    edges += gen.latch(clk_inv, d_i, q)
+
+    g = nx.MultiGraph()
+    for e in edges:
+        g.add_edge(*e)
+
+    pins_of_interest = {clk, d, q}
+    known_pins = {'vdd': True, 'gnd': False}
+    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    assert len(latches) == 2

@@ -104,11 +104,11 @@ def main():
     # Derive boolean functions for the outputs from the netlist.
     logger.info("Derive boolean functions for the outputs based on the netlist.")
     transistor_graph = _transistors2multigraph(transistors_abstract)
-    output_functions_deduced = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
-                                                                            pins_of_interest=io_pins,
-                                                                            constant_input_pins={vdd_pin: True,
-                                                                                                 gnd_pin: False},
-                                                                            user_input_nets=None)
+    output_functions_deduced, latches = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
+                                                                                     pins_of_interest=io_pins,
+                                                                                     constant_input_pins={vdd_pin: True,
+                                                                                                          gnd_pin: False},
+                                                                                     user_input_nets=None)
     # Convert keys into strings (they are `sympy.Symbol`s now)
     output_functions_deduced = {output.name: function for output, function in output_functions_deduced.items()}
 
