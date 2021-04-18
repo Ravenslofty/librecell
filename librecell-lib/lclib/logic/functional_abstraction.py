@@ -38,6 +38,86 @@ Extract logic formulas and memory loops from a transistor-level circuit graph.
 """
 
 
+class CombinationalOutput:
+    """
+    Description of an output signal of a combinatorial circuit.
+    """
+
+    def __init__(self, function: boolalg.Boolean, high_impedance: boolalg.Boolean):
+        self.function = function
+        self.high_impedance = high_impedance
+
+    def is_tristate(self):
+        """
+        Check if the output have be high-impedance.
+        Check if the high-impedance condition is satisfiable.
+        :return: bool
+        """
+        return satisfiable(self.high_impedance)
+
+    def __str__(self):
+        return "CombinationalOutput(f = {}, Z = {})".format(self.function, self.high_impedance)
+
+    def __repr__(self):
+        return str(self)
+
+
+class Memory:
+    """
+    Data structure for a memory loop (latch).
+    """
+
+    def __init__(self,
+                 data: boolalg.Boolean,
+                 write_condition: boolalg.Boolean,
+                 oscillation_condition: boolalg.Boolean):
+        """
+
+        :param data: The input data signal.
+        :param write_condition: The condition that makes this loop transparent for new input data.
+        When the write condition is `False` then the loop stores the input data.
+        :param oscillation_condition: When the oscillation condition is met the loop oscillates or causes a short circuit.
+        """
+        self.data = data
+        self.write_condition = write_condition
+        self.oscillation_condition = oscillation_condition
+        # ID of the memory loop.
+        self.loop_id = None
+
+    def __str__(self):
+        return f"Memory(data = {self.data}, write = {self.write_condition}, " \
+               f"loop_id = {self.loop_id}, oscillate = {self.oscillation_condition})"
+
+    def __repr__(self):
+        return str(self)
+
+
+class AbstractCircuit:
+    """
+    Describe the circuit as a set of boolean formulas and latches.
+    """
+
+    def __init__(self,
+                 outputs: Dict[boolalg.BooleanAtom, CombinationalOutput],
+                 latches: Dict[boolalg.BooleanAtom, Memory]):
+        """
+        Describe the circuit as a set of boolean formulas and latches.
+        Holds the result of `analyze_circuit_graph`.
+
+        :param outputs: Dictionary that maps output symbols to their boolean formulas.
+        :param latches: Dictionary that holds the memory objects for each signal that is driven by a memory/latch.
+        """
+        self.outputs = outputs
+        self.latches = latches
+
+    def is_sequential(self) -> bool:
+        """
+        Test if there are latches in this circuit.
+        :return:
+        """
+        return len(self.latches) > 0
+
+
 def simplify_logic(f: boolalg.Boolean, force: bool = True) -> boolalg.Boolean:
     """
     Simplify a boolean formula.
@@ -82,49 +162,6 @@ def simplify_with_assumption(assumption: boolalg.Boolean, formula: boolalg.Boole
     f = boolalg.SOPform(variables=all_vars, minterms=minterms, dontcares=dont_cares)
 
     return f
-
-
-class CombinationalOutput:
-
-    def __init__(self, function: boolalg.Boolean, high_impedance: boolalg.Boolean):
-        self.function = function
-        self.high_impedance = high_impedance
-
-    def __str__(self):
-        return "CombinationalOutput(f = {}, Z = {})".format(self.function, self.high_impedance)
-
-    def __repr__(self):
-        return str(self)
-
-
-class Memory:
-    """
-    Data structure for a memory loop (latch).
-    """
-
-    def __init__(self,
-                 data: boolalg.Boolean,
-                 write_condition: boolalg.Boolean,
-                 oscillation_condition: boolalg.Boolean):
-        """
-
-        :param data: The input data signal.
-        :param write_condition: The condition that makes this loop transparent for new input data.
-        When the write condition is `False` then the loop stores the input data.
-        :param oscillation_condition: When the oscillation condition is met the loop oscillates or causes a short circuit.
-        """
-        self.data = data
-        self.write_condition = write_condition
-        self.oscillation_condition = oscillation_condition
-        # ID of the memory loop.
-        self.loop_id = None
-
-    def __str__(self):
-        return f"Memory(data = {self.data}, write = {self.write_condition}, " \
-               f"loop_id = {self.loop_id}, oscillate = {self.oscillation_condition})"
-
-    def __repr__(self):
-        return str(self)
 
 
 def bool_equals(f1: boolalg.Boolean, f2: boolalg.Boolean) -> bool:
@@ -451,19 +488,6 @@ def test_complex_cmos_graph_to_formula():
     print('formulas: ', formulas)
     print('inputs = ', inputs)
 
-    # # Detect loops in the circuit.
-    # # Create a graph representing the dependencies of the variables/expressions.
-    # dependency_graph = nx.DiGraph()
-    # for atom, expression in formulas.items():
-    #     dependency_graph.add_edge(atom, expression)
-    #
-    # # Check for cycles.
-    # cycles = list(nx.simple_cycles(dependency_graph))
-    #
-    # assert len(cycles) == 0, "Abstraction of feed-back loops not yet supported."
-    #
-    # print('cycles = ', cycles)
-
     def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol],
                                        output: sympy.Symbol) -> boolalg.Boolean:
         f = formulas[output].copy()
@@ -483,12 +507,6 @@ def test_complex_cmos_graph_to_formula():
     a, b = sympy.symbols('a b')
     AND = (a & b)
     assert f.equals(AND), "Transformation of CMOS graph into formula failed."
-
-
-class CellInfo:
-
-    def __init__(self):
-        self.conductivity_conditions: Dict[Any, Dict[Any, boolalg.Boolean]] = dict()
 
 
 def _resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean],
@@ -524,41 +542,6 @@ def test_resolve_intermediate_variables():
     assert bool_equals(r, b ^ ~a)
 
 
-# def _resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean],
-#                                     inputs: Set[sympy.Symbol],
-#                                     formula: boolalg.Boolean,
-#                                     break_on_loop: bool = False):
-#     """
-#     Simplify the formula `formula` by iterative substitution with the `formulas`.
-#     :param formulas: Formulas used for substitution as a dict.
-#     :param inputs: Define input atoms.
-#     :param formula: The start.
-#     :param break_on_loop: Break when detecting an infinite loop.
-#     :return: Return the formula with all substitutions applied.
-#     """
-#
-#     if formula in inputs:
-#         return formula
-#
-#     f = formula
-#     f = simplify_logic(f)
-#     # Remember previous results to be able to detect loops.
-#     previous_formulas = {f}
-#     while f.atoms() - inputs:
-#         f = f.subs(formulas)
-#         f = simplify_logic(f)
-#
-#         if f in previous_formulas:
-#             if break_on_loop:
-#                 logger.info('Loop detected.')
-#                 break
-#             else:
-#                 assert False, "Equation system contains a loop!"
-#         previous_formulas.add(f)
-#
-#     return f
-
-
 def _formula_dependency_graph(formulas: Dict[sympy.Symbol, boolalg.Boolean]) -> nx.DiGraph:
     """
     Create a graph representing the dependencies of the variables/expressions.
@@ -584,7 +567,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                           pins_of_interest: Set,
                           constant_input_pins: Dict[Any, bool] = None,
                           user_input_nets: Set = None
-                          ) -> Tuple[Dict[boolalg.BooleanAtom, CombinationalOutput], Dict[boolalg.BooleanAtom, Memory]]:
+                          ) -> AbstractCircuit:
     """
     Analyze a CMOS transistor network and find boolean expressions for the output signals of the `pins_of_interest`.
 
@@ -857,6 +840,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             else:
                 # Resolve memory.
                 assert out in nets_of_memory_cycles
+
                 # Output net of the memory loop.
                 memory_net = out
                 memory = memory_by_output_net[memory_net]
@@ -903,7 +887,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     if len(latches):
         logger.info(f"Number of latches: {len(latches)}")
 
-    return output_combinatorial, latches
+    return AbstractCircuit(output_combinatorial, latches)
 
 
 class NetlistGen:
@@ -1004,13 +988,11 @@ def test_analyze_circuit_graph():
 
     pins_of_interest = {'output'}
     known_pins = {'vdd': True, 'gnd': False}
-    result, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
-
-    print(result)
+    abstract = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
 
     # Verify that the deduced boolean function is equal to the AND function.
     a, b = sympy.symbols('a, b')
-    assert bool_equals(result[sympy.Symbol('output')].function, a & b)
+    assert bool_equals(abstract.outputs[sympy.Symbol('output')].function, a & b)
 
 
 def test_analyze_circuit_graph_transmission_gate_xor():
@@ -1036,16 +1018,14 @@ def test_analyze_circuit_graph_transmission_gate_xor():
     # and therefore cannot be deduced to be an input pin.
     pins_of_interest = {'a', 'b', 'c'}
     known_pins = {'vdd': True, 'gnd': False}
-    result, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest,
-                                            constant_input_pins=known_pins,
-                                            user_input_nets={'a', 'b'})
-
-    print(result)
+    abstract = analyze_circuit_graph(g, pins_of_interest=pins_of_interest,
+                                     constant_input_pins=known_pins,
+                                     user_input_nets={'a', 'b'})
 
     # Verify that the deduced boolean function is equal to the XOR function.
     a, b = sympy.symbols('a, b')
-    assert bool_equals(result[sympy.Symbol('c')].function, a ^ b)
-    assert not latches
+    assert bool_equals(abstract.outputs[sympy.Symbol('c')].function, a ^ b)
+    assert not abstract.latches
 
 
 def test_analyze_circuit_graph_mux2():
@@ -1066,12 +1046,12 @@ def test_analyze_circuit_graph_mux2():
 
     pins_of_interest = {d0, d1, out, sel}
     known_pins = {'vdd': True, 'gnd': False}
-    result, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    abstract = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
     # Verify that the deduced boolean function is equal to the MUX function.
-    print(result)
+
     a, b, s = sympy.symbols('a, b, s')
-    assert bool_equals(result[sympy.Symbol('y')].function, (a & ~s) | (b & s))
-    assert not latches
+    assert bool_equals(abstract.outputs[sympy.Symbol('y')].function, (a & ~s) | (b & s))
+    assert not abstract.latches
 
 
 def test_analyze_circuit_graph_latch():
@@ -1084,9 +1064,9 @@ def test_analyze_circuit_graph_latch():
 
     pins_of_interest = {'CLK', 'D', 'Q'}
     known_pins = {'vdd': True, 'gnd': False}
-    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    abstract = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
 
-    assert len(latches) == 1
+    assert len(abstract.latches) == 1
 
 
 def test_analyze_circuit_graph_set_reset_nand():
@@ -1114,11 +1094,11 @@ def test_analyze_circuit_graph_set_reset_nand():
 
     pins_of_interest = {'S', 'R', 'Y1', 'Y2'}
     known_pins = {'vdd': True, 'gnd': False}
-    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
-    print(combinatorial)
-    print(latches)
+    abstract = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    print(abstract.outputs)
+    print(abstract.latches)
 
-    assert len(latches) == 1
+    assert len(abstract.latches) == 1
     # TODO
 
 
@@ -1143,9 +1123,9 @@ def test_analyze_circuit_graph_dff_pos():
 
     pins_of_interest = {clk, d, q}
     known_pins = {'vdd': True, 'gnd': False}
-    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    abstract = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
 
-    assert len(latches) == 2
+    assert len(abstract.latches) == 2
 
 
 def test_analyze_circuit_graph_dff_pos_sync_reset():
@@ -1172,9 +1152,9 @@ def test_analyze_circuit_graph_dff_pos_sync_reset():
 
     pins_of_interest = {clk, d, q}
     known_pins = {'vdd': True, 'gnd': False}
-    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    abstract = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
 
-    assert len(latches) == 2
+    assert len(abstract.latches) == 2
 
 
 def test_analyze_circuit_graph_dff_pos_scan():
@@ -1204,5 +1184,5 @@ def test_analyze_circuit_graph_dff_pos_scan():
 
     pins_of_interest = {clk, d, q}
     known_pins = {'vdd': True, 'gnd': False}
-    combinatorial, latches = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
-    assert len(latches) == 2
+    abstract = analyze_circuit_graph(g, pins_of_interest=pins_of_interest, constant_input_pins=known_pins)
+    assert len(abstract.latches) == 2

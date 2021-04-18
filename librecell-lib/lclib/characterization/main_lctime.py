@@ -346,20 +346,20 @@ def main():
         # Derive boolean functions for the outputs from the netlist.
         logger.info("Derive boolean functions for the outputs based on the netlist.")
         transistor_graph = _transistors2multigraph(transistors_abstract)
-        output_functions_deduced, latches = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
+        abstracted_circuit = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
                                                                                          pins_of_interest=io_pins,
                                                                                          constant_input_pins={
                                                                                              vdd_pin: True,
                                                                                              gnd_pin: False},
                                                                                          user_input_nets=input_pins)
 
-        if latches:
+        if abstracted_circuit.latches:
             # There's some feedback loops in the circuit.
             logger.error("Recognition of memory loops is not supported yet.")
             exit(1)
 
         # Convert keys into strings (they are `sympy.Symbol`s now)
-        output_functions_deduced = {output.name: function for output, function in output_functions_deduced.items()}
+        output_functions_deduced = {output.name: function for output, function in abstracted_circuit.output_functions_deduced.items()}
         output_functions_symbolic = output_functions_deduced
 
         # Log deduced output functions.

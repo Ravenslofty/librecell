@@ -23,6 +23,7 @@ from liberty.types import *
 
 from ..liberty import util as liberty_util
 from ..logic import functional_abstraction
+from ..logic import seq_recognition
 
 import argparse
 from copy import deepcopy
@@ -104,14 +105,20 @@ def main():
     # Derive boolean functions for the outputs from the netlist.
     logger.info("Derive boolean functions for the outputs based on the netlist.")
     transistor_graph = _transistors2multigraph(transistors_abstract)
-    output_functions_deduced, latches = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
+    abstract = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
                                                                                      pins_of_interest=io_pins,
                                                                                      constant_input_pins={vdd_pin: True,
                                                                                                           gnd_pin: False},
                                                                                      user_input_nets=None)
+    output_functions_deduced = abstract.outputs
+
     # Convert keys into strings (they are `sympy.Symbol`s now)
     output_functions_deduced = {output.name: comb.function for output, comb in output_functions_deduced.items()}
 
     # Log deduced output functions.
     for output_name, function in output_functions_deduced.items():
         logger.info("Deduced output function: {} = {}".format(output_name, function))
+
+
+    # Try to recognize sequential cells.
+    seq_recognition.extract_sequential_circuit(abstract)
