@@ -84,7 +84,7 @@ class DFFExtractor:
             logger.debug(f"Not a flip-flop. Wrong number of latches. Need 2, found {len(c.latches)}.")
             return None
 
-        output_nets = list(c.outputs.keys())
+        output_nets = list(c.output_pins)
         if len(output_nets) != 1:
             logger.debug(f"Expect 1 output net, found {len(output_nets)}.")
             return None

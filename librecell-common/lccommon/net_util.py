@@ -79,6 +79,9 @@ def load_transistor_netlist(path: str, circuit_name: str) -> Tuple[List[Transist
     netlist, circuit = load_subcircuit(path, circuit_name)
 
     if circuit is None:
+        all_circuits = [c.name for c in netlist.each_circuit()]
+        logger.error("No such circuit: {}".format(circuit_name))
+        logger.info(f"Circuits in netlist: {all_circuits}")
         raise Exception("No such circuit: {}".format(circuit_name))
 
     pins = [p.name() for p in circuit.each_pin()]
@@ -139,14 +142,14 @@ def load_transistor_netlist(path: str, circuit_name: str) -> Tuple[List[Transist
 def is_ground_net(net: str) -> bool:
     """ Test if net is something like 'gnd' or 'vss'.
     """
-    ground_nets = {0, '0', 'gnd', 'vss'}
+    ground_nets = {0, '0', 'gnd', 'vss', 'vgnd'}
     return net.lower() in ground_nets
 
 
 def is_supply_net(net: str) -> bool:
     """ Test if net is something like 'vcc' or 'vdd'.
     """
-    supply_nets = {'vcc', 'vdd'}
+    supply_nets = {'vcc', 'vdd', 'vpwr'}
     return net.lower() in supply_nets
 
 

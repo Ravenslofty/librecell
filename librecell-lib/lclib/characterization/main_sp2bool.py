@@ -78,6 +78,9 @@ def main():
     transistors_abstract, cell_pins = load_transistor_netlist(netlist_path, cell_name)
     io_pins = net_util.get_io_pins(cell_pins)
 
+    logger.info(f"Cell pins: {cell_pins}")
+    print(transistors_abstract)
+
     # Detect power pins.
     # TODO: don't decide based only on net name.
     power_pins = [p for p in cell_pins if net_util.is_power_net(p)]
@@ -99,6 +102,10 @@ def main():
         G = nx.MultiGraph()
         for t in transistors:
             G.add_edge(t.source_net, t.drain_net, (t.gate_net, t.channel_type))
+
+        connected = list(nx.connected_components(G))
+        print(connected)
+        logger.debug(f"Number of connected graphs: {len(connected)}")
         assert nx.is_connected(G)
         return G
 
@@ -106,10 +113,10 @@ def main():
     logger.info("Derive boolean functions for the outputs based on the netlist.")
     transistor_graph = _transistors2multigraph(transistors_abstract)
     abstract = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
-                                                                                     pins_of_interest=io_pins,
-                                                                                     constant_input_pins={vdd_pin: True,
-                                                                                                          gnd_pin: False},
-                                                                                     user_input_nets=None)
+                                                            pins_of_interest=io_pins,
+                                                            constant_input_pins={vdd_pin: True,
+                                                                                 gnd_pin: False},
+                                                            user_input_nets=None)
     output_functions_deduced = abstract.outputs
 
     # Convert keys into strings (they are `sympy.Symbol`s now)
@@ -118,7 +125,6 @@ def main():
     # Log deduced output functions.
     for output_name, function in output_functions_deduced.items():
         logger.info("Deduced output function: {} = {}".format(output_name, function))
-
 
     # Try to recognize sequential cells.
     seq_recognition.extract_sequential_circuit(abstract)

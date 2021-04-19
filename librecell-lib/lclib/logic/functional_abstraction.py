@@ -98,16 +98,19 @@ class AbstractCircuit:
     """
 
     def __init__(self,
-                 outputs: Dict[boolalg.BooleanAtom, CombinationalOutput],
+                 output_pins: Set[sympy.Symbol],
+                 output_formulas: Dict[boolalg.BooleanAtom, CombinationalOutput],
                  latches: Dict[boolalg.BooleanAtom, Memory]):
         """
         Describe the circuit as a set of boolean formulas and latches.
         Holds the result of `analyze_circuit_graph`.
 
-        :param outputs: Dictionary that maps output symbols to their boolean formulas.
+        :param output_pins: Set of all output pins.
+        :param output_formulas: Dictionary that maps output symbols to their boolean formulas.
         :param latches: Dictionary that holds the memory objects for each signal that is driven by a memory/latch.
         """
-        self.outputs = outputs
+        self.output_pins = output_pins
+        self.outputs = output_formulas
         self.latches = latches
 
     def is_sequential(self) -> bool:
@@ -125,6 +128,7 @@ def simplify_logic(f: boolalg.Boolean, force: bool = True) -> boolalg.Boolean:
     :param force:
     :return:
     """
+    logger.debug(f"Simplify formula: {f}")
     return sympy_simplify_logic(f, force=force)
 
 
@@ -602,8 +606,13 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     all_nets = gate_nets | nets
 
     # Sanity check for the inputs.
+    non_present_pins = set()
     for p in pins_of_interest:
-        assert p in all_nets, "Net '{}' is not in the graph.".format(p)
+        if p not in all_nets:
+            logger.warning(f"Net '{p}' is not connected to any transistor.")
+            non_present_pins.add(p)
+
+    pins_of_interest = pins_of_interest - non_present_pins
 
     logger.info("VDD nets: {}".format(", ".join([p for p, v in constant_input_pins.items() if v])))
     logger.info("GND nets: {}".format(", ".join([p for p, v in constant_input_pins.items() if not v])))
@@ -637,18 +646,27 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             print('  |-', pin_b, 'when', condition)
     print()
 
+    # Add known values for VDD, GND
+    constants = {sympy.Symbol(k): v for k, v in constant_input_pins.items()}
+    output_symbols = {sympy.Symbol(n) for n in output_nodes}
+
     # Convert keys into symbols.
     conductivity_conditions = {sympy.Symbol(k): v for k, v in conductivity_conditions.items()}
 
     # Derive logic formulas from conductivity condition.
+    logger.debug("Derive logic formulas from conductivity condition.")
     formulas_high = dict()
     formulas_low = dict()
     for output, cc in conductivity_conditions.items():
+        logger.debug(f"Derive logic formulas from conductivity condition for '{output}'.")
         or_terms_high = []
         or_terms_low = []
         for input_pin, condition in cc.items():
             assert isinstance(input_pin, sympy.Symbol)
             assert isinstance(condition, boolalg.Boolean)
+            # Simplify by inserting constants.
+            condition = simplify_logic(condition.subs(constants))
+            input_pin = simplify_logic(input_pin.subs(constants))
             # if `condition` then output is `connected` to `input_pin`.
             connected_to_high = simplify_logic(condition & input_pin)  # Is there a path to HIGH?
             connected_to_low = simplify_logic(condition & ~input_pin)  # Is there a path to LOW?
@@ -659,10 +677,8 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         formulas_high[output] = simplify_logic(sympy.Or(*or_terms_high))
         formulas_low[output] = simplify_logic(sympy.Or(*or_terms_low))
 
-    # Add known values for VDD, GND
-    constants = {sympy.Symbol(k): v for k, v in constant_input_pins.items()}
-
     # Simplify formulas by substituting VDD and GND with known values.
+    logger.debug("Simplify all formulas.")
     formulas_high = {k: simplify_logic(f.subs(constants)) for k, f in formulas_high.items()}
     formulas_low = {k: simplify_logic(f.subs(constants)) for k, f in formulas_low.items()}
 
@@ -887,7 +903,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     if len(latches):
         logger.info(f"Number of latches: {len(latches)}")
 
-    return AbstractCircuit(output_combinatorial, latches)
+    return AbstractCircuit(output_symbols, output_combinatorial, latches)
 
 
 class NetlistGen:
