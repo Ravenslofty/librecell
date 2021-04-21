@@ -44,7 +44,9 @@ class Latch:
 
     def __init__(self):
         self.data_in = None
-        self.enable = None  # Write condition.
+        self.enable = None  # Write condition / clock.
+        self.clear = None  # Clear condition.
+        self.preset = None  # Preset condition.
 
 
 class LatchExtractor:
@@ -62,7 +64,52 @@ class LatchExtractor:
             logger.debug(f"Not a latch. Wrong number of latches. Need 1, found {len(c.latches)}.")
             return None
 
-        return None
+        output_nets = list(c.output_pins)
+        if len(output_nets) != 1:
+            logger.debug(f"Expect 1 output net, found {len(output_nets)}.")
+            return None
+
+        # Trace back the output towards the inputs.
+        output_net = output_nets[0]
+        output = c.outputs[output_net]
+
+        # Check that the output is not tri-state.
+        if output.is_tristate():
+            logger.debug("Can't recognize DFF with tri-state output.")
+            return None
+
+        # Trace back the output towards the inputs.
+        latch_path = []
+        current_nodes = set(output.function.atoms())
+        while current_nodes:
+            node = current_nodes.pop()
+            if node in c.outputs:
+                next = c.outputs[node]
+                current_nodes.update(next.function.atoms())
+            elif node in c.latches:
+                latch = c.latches[node]
+                assert isinstance(latch, Memory)
+
+                latch_path.append(latch)
+                current_nodes = set(latch.data.atoms())
+            else:
+                # Cannot further resolve the node, must be an input.
+                logger.debug(f"Input node: {node}")
+
+        if len(latch_path) != 1:
+            logger.debug(f"No latch found in the fan-in tree of the outputs {output.function.atoms()}.")
+            return None
+
+        latch = latch_path[0]
+
+        enable_signals = set(latch.write_condition.atoms())
+        logger.debug(f"Potential clock/set/preset signals {enable_signals}")
+
+        logger.warning("Latch recognition is not yet implemented.")
+
+        result = Latch()
+
+        return result
 
 
 class DFF:
@@ -88,7 +135,7 @@ class DFFExtractor:
     def __init__(self):
         pass
 
-    def extract(self, c: AbstractCircuit) -> Optional[Latch]:
+    def extract(self, c: AbstractCircuit) -> Optional[DFF]:
         """
         Try to recognize a single-edge triggered D-flip-flop based on the abstract circuit representation.
         :param c:
@@ -125,15 +172,15 @@ class DFFExtractor:
                 latch = c.latches[node]
                 assert isinstance(latch, Memory)
 
-                latch_path.append(latch)
+                latch_path.append((latch, node))
                 current_nodes = set(latch.data.atoms())
             else:
                 # Cannot further resolve the node, must be an input.
                 logger.debug(f"Input node: {node}")
 
         # Find trigger condition of the flip-flop.
-        latch1 = latch_path[1]
-        latch2 = latch_path[0]
+        latch1, latch1_output_node = latch_path[1]
+        latch2, latch2_output_node = latch_path[0]
 
         # Find condition such that the FF is in normal operation mode.
         # I.e. no set or reset is active.
@@ -218,7 +265,7 @@ class DFFExtractor:
                     logger.info(f"{signal} is a RESET/CLEAR signal, active {'high' if signal_value else 'low'}.")
                     async_reset_signals.append((signal, signal_value))
 
-            # Find out what happens when all asynchronous set/reset signals are active at the same time.
+            # TODO: Find out what happens when all asynchronous set/reset signals are active at the same time.
             all_sr_active_wc = latch2.write_condition.subs(sr_enabled_values)
             all_sr_active_data = latch2.data.subs(sr_enabled_values)
             # TODO
@@ -233,6 +280,22 @@ class DFFExtractor:
                 dff.async_set_signal, dff.async_set_active = async_set_signals[0]
             if async_reset_signals:
                 dff.async_reset_signal, dff.async_reset_active = async_reset_signals[0]
+
+        # Find data that gets written into the flip-flop in normal operation mode.
+        ff_data_next = simplify_with_assumption(ff_normal_condition, output.function)
+        latch1_data_normal = simplify_with_assumption(ff_normal_condition, latch1.data)
+        latch2_data_normal = simplify_with_assumption(ff_normal_condition, latch2.data)
+
+        ff_data_next = ff_data_next.subs({
+            latch2_output_node: latch2_data_normal,
+            clock_signal: active_edge_polarity
+        })
+        ff_data_next = ff_data_next.subs({
+            latch1_output_node: latch1_data_normal,
+            clock_signal: not active_edge_polarity
+        })
+
+        logger.info(f"Flip-flop data: {ff_data_next}")
 
         return dff
 
