@@ -120,6 +120,7 @@ class DFF:
 
         self.data_in = None
         self.data_out = None
+        self.data_out_inv = None
 
         self.scan_enable = None
         self.scan_in = None
@@ -147,22 +148,25 @@ class DFFExtractor:
             return None
 
         output_nets = list(c.output_pins)
-        if len(output_nets) != 1:
-            logger.debug(f"Expect 1 output net, found {len(output_nets)}.")
+        if len(output_nets) not in [1, 2]:
+            logger.debug(f"Expect 1 or 2 output nets, found {len(output_nets)}.")
             return None
 
         # Trace back the output towards the inputs.
-        output_net = output_nets[0]
-        output = c.outputs[output_net]
+        outputs = [c.outputs[n] for n in output_nets]
 
         # Check that the output is not tri-state.
-        if output.is_tristate():
-            logger.debug("Can't recognize DFF with tri-state output.")
-            return None
+        for output in outputs:
+            if output.is_tristate():
+                logger.warning(f"'{output}' is a tri-state output.")
+                logger.warning("Can't recognize DFF with tri-state output.")
+                return None
 
         # Trace back the output towards the inputs.
         latch_path = []
-        current_nodes = set(output.function.atoms())
+        current_nodes = set()
+        for output in outputs:
+            current_nodes.update(output.function.atoms())
         while current_nodes:
             node = current_nodes.pop()
             if node in c.outputs:
@@ -281,21 +285,70 @@ class DFFExtractor:
             if async_reset_signals:
                 dff.async_reset_signal, dff.async_reset_active = async_reset_signals[0]
 
-        # Find data that gets written into the flip-flop in normal operation mode.
-        ff_data_next = simplify_with_assumption(ff_normal_condition, output.function)
-        latch1_data_normal = simplify_with_assumption(ff_normal_condition, latch1.data)
-        latch2_data_normal = simplify_with_assumption(ff_normal_condition, latch2.data)
+        ff_output_data = []
+        for output in outputs:
+            # Find data that gets written into the flip-flop in normal operation mode.
+            ff_data_next = simplify_with_assumption(ff_normal_condition, output.function)
+            # Eliminate Set/Reset.
+            latch1_data_normal = simplify_with_assumption(ff_normal_condition, latch1.data)
+            latch2_data_normal = simplify_with_assumption(ff_normal_condition, latch2.data)
+            # Eliminate clock.
+            latch1_data_normal = latch1_data_normal.subs({clock_signal: not active_edge_polarity})
+            latch2_data_normal = latch2_data_normal.subs({clock_signal: active_edge_polarity})
 
-        ff_data_next = ff_data_next.subs({
-            latch2_output_node: latch2_data_normal,
-            clock_signal: active_edge_polarity
-        })
-        ff_data_next = ff_data_next.subs({
-            latch1_output_node: latch1_data_normal,
-            clock_signal: not active_edge_polarity
-        })
+            # Resolve through second latch.
+            ff_data_next = ff_data_next.subs({
+                latch2_output_node: latch2_data_normal,
+                clock_signal: active_edge_polarity
+            })
 
-        logger.info(f"Flip-flop data: {ff_data_next}")
+            # Resolve through first latch.
+            ff_data_next = ff_data_next.subs({
+                latch1_output_node: latch1_data_normal,
+                clock_signal: not active_edge_polarity
+            })
+
+            logger.debug(f"Flip-flop output data: {ff_data_next}")
+            ff_output_data.append(ff_data_next)
+
+        if len(ff_output_data) == 1:
+            # FF has only one output.
+            logger.info(f"{output_nets[0]} = {ff_output_data[0]}")
+            dff.data_out = ff_output_data[0]
+        elif len(ff_output_data) == 2:
+            # Check if the outputs are inverted versions.
+
+            out1, out2 = output_nets
+            out1_data, out2_data = ff_output_data
+
+            # Check if the outputs are inverses.
+            if out1_data == boolalg.Not(out2_data):
+                logger.debug("Outputs are inverses of each other.")
+            else:
+                logger.warning("If a flip-flop has two outputs, then need to be inverses of each other.")
+                return None
+
+            # Find the inverted and non-inverted output.
+            if type(out1_data) == boolalg.Not:
+                assert type(out2_data) != boolalg.Not
+                out_inv_net = out1
+                out_net = out2
+                out_inv_data = out1_data
+                out_data = out2_data
+            else:
+                assert type(out2_data) == boolalg.Not
+                out_inv_net = out2
+                out_net = out1
+                out_inv_data = out2_data
+                out_data = out1_data
+
+            logger.info(f"Non-inverted output: {out_net} = {out_data}")
+            logger.info(f"Inverted output: {out_inv_net} = {out_inv_data}")
+
+            dff.data_out = out_data
+            dff.data_out_inv = out_inv_data
+        else:
+            assert False
 
         return dff
 
