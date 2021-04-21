@@ -460,9 +460,7 @@ def complex_cmos_graph_to_formula(cmos_graph: nx.MultiGraph,
         # Find all variables that occur in the conductivity conditions to later resolve them too.
         inputs_to_f = {a.name
                        for f in conductivity_conditions.values()
-                       for a in f.atoms()
-                       # Boolean constants don not need to be resolved further.
-                       if not isinstance(a, boolalg.BooleanTrue) and not isinstance(a, boolalg.BooleanFalse)
+                       for a in f.atoms(sympy.Symbol)
                        }
 
         # Update the set of unknown variables.
@@ -496,7 +494,7 @@ def test_complex_cmos_graph_to_formula():
                                        output: sympy.Symbol) -> boolalg.Boolean:
         f = formulas[output].copy()
         # TODO: detect loops
-        while f.atoms() - inputs:
+        while f.atoms(sympy.Symbol) - inputs:
             f = f.subs(formulas)
             f = simplify_logic(f)
         return f
@@ -527,10 +525,10 @@ def _resolve_intermediate_variables(formulas: Dict[sympy.Symbol, boolalg.Boolean
     # Set of symbols that will not be substituted.
     stop_atoms = set(inputs)
 
-    while formula.atoms() - stop_atoms:
+    while formula.atoms(sympy.Symbol) - stop_atoms:
 
-        for a in formula.atoms() - stop_atoms:
-            stop_atoms.update(formula.atoms())
+        for a in formula.atoms(sympy.Symbol) - stop_atoms:
+            stop_atoms.update(formula.atoms(sympy.Symbol))
             if a in formulas:
                 formula = formula.subs({a: formulas[a]})
                 formula = simplify_logic(formula)
@@ -556,7 +554,7 @@ def _formula_dependency_graph(formulas: Dict[sympy.Symbol, boolalg.Boolean]) -> 
     dependency_graph = nx.DiGraph()
     for output, expression in formulas.items():
         if isinstance(expression, boolalg.Boolean):
-            for atom in expression.atoms():
+            for atom in expression.atoms(sympy.Symbol):
                 # Output depends on every variable (atom) in the expression.
                 dependency_graph.add_edge(output, atom)
         elif isinstance(expression, bool):
@@ -846,7 +844,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 output_formulas[out] = formula
 
                 # Find new wavefront.
-                atoms = formula.atoms()
+                atoms = formula.atoms(sympy.Symbol)
                 new_wavefront.update(atoms)
 
                 # Find inputs into formula that come from a memory.
@@ -864,7 +862,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 latches[memory_net] = memory
 
                 # Find new wavefront.
-                atoms = memory.write_condition.atoms() | memory.data.atoms()
+                atoms = memory.write_condition.atoms(sympy.Symbol) | memory.data.atoms(sympy.Symbol)
                 new_wavefront.update(atoms)
 
             wavefront.update(new_wavefront - output_formulas.keys() - latches.keys() - inputs)

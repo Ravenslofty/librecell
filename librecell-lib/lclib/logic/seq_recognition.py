@@ -40,6 +40,74 @@ Recognize sequential cells based on the output of the `functional_abstraction.an
 """
 
 
+# def find_clear_and_preset_signals(f: boolalg.Boolean) -> Dict[boolalg.BooleanAtom, Tuple[bool, bool]]:
+#     """
+#     Find the variables in a boolean formula that can either force the formula to True or False.
+#     :param f:
+#     :return: Dict[Variable symbol, (is preset, is active high)]
+#     """
+#     results = dict()
+#     atoms = f.atoms(sympy.Symbol)
+#     for a in atoms:
+#         for v in [False, True]:
+#             f.subs({a: v})
+#             if f == sympy.true and f != sympy.false:
+#                 results[a] = (True, v)
+#             elif f == sympy.false and f != sympy.true:
+#                 results[a] = (False, v)
+#     return results
+#
+# def test_find_clear_and_preset_signals():
+#     a = sympy.Symbol('a')
+#     clear = sympy.Symbol('clear')
+#     preset = sympy.Symbol('preset')
+
+def find_boolean_isomorphism(a: boolalg.Boolean, b: boolalg.Boolean) -> Optional[
+    Dict[boolalg.BooleanAtom, boolalg.BooleanAtom]]:
+    """
+    Find a one-to-one mapping of the variables in `a` to the variables in `b` such that the both formulas are
+    equivalent. Return `None` if there is no such mapping.
+    The mapping is not necessarily unique.
+    :param a:
+    :param b:
+    :return:
+    """
+
+    a_vars = list(a.atoms(sympy.Symbol))
+    b_vars = list(b.atoms(sympy.Symbol))
+
+    if len(a_vars) != len(b_vars):
+        return None
+
+    # Do a brute-force search.
+    for b_vars_perm in itertools.permutations(b_vars):
+        substitution = {old: new for old, new in zip(a_vars, b_vars_perm)}
+        a_perm = a.subs(substitution)
+        # Check for structural equality first, then for mathematical equality.
+        if a_perm == b or bool_equals(a_perm, b):
+            return substitution
+
+    return None
+
+
+def test_find_boolean_isomorphism():
+    assert find_boolean_isomorphism(sympy.true, sympy.true) is not None
+    assert find_boolean_isomorphism(sympy.true, sympy.false) is None
+
+    a, b, c, x, y, z = sympy.symbols('a b c x y z')
+    f = (a & b) | c
+    g = (x & y) | z
+    mapping = find_boolean_isomorphism(f, g)
+    assert mapping == {a: x, b: y, c: z}
+
+    # MUX
+    f = (a & c) | (b & ~c)
+    g = ~((~x & z) | (~y & ~z))
+    mapping = find_boolean_isomorphism(f, g)
+    print(mapping)
+    assert mapping == {a: x, b: y, c: z}
+
+
 class Latch:
 
     def __init__(self):
@@ -80,18 +148,18 @@ class LatchExtractor:
 
         # Trace back the output towards the inputs.
         latch_path = []
-        current_nodes = set(output.function.atoms())
+        current_nodes = set(output.function.atoms(sympy.Symbol))
         while current_nodes:
             node = current_nodes.pop()
             if node in c.outputs:
                 next = c.outputs[node]
-                current_nodes.update(next.function.atoms())
+                current_nodes.update(next.function.atoms(sympy.Symbol))
             elif node in c.latches:
                 latch = c.latches[node]
                 assert isinstance(latch, Memory)
 
                 latch_path.append(latch)
-                current_nodes = set(latch.data.atoms())
+                current_nodes = set(latch.data.atoms(sympy.Symbol))
             else:
                 # Cannot further resolve the node, must be an input.
                 logger.debug(f"Input node: {node}")
@@ -102,7 +170,7 @@ class LatchExtractor:
 
         latch = latch_path[0]
 
-        enable_signals = set(latch.write_condition.atoms())
+        enable_signals = set(latch.write_condition.atoms(sympy.Symbol))
         logger.debug(f"Potential clock/set/preset signals {enable_signals}")
 
         logger.warning("Latch recognition is not yet implemented.")
@@ -166,18 +234,18 @@ class DFFExtractor:
         latch_path = []
         current_nodes = set()
         for output in outputs:
-            current_nodes.update(output.function.atoms())
+            current_nodes.update(output.function.atoms(sympy.Symbol))
         while current_nodes:
             node = current_nodes.pop()
             if node in c.outputs:
                 next = c.outputs[node]
-                current_nodes.update(next.function.atoms())
+                current_nodes.update(next.function.atoms(sympy.Symbol))
             elif node in c.latches:
                 latch = c.latches[node]
                 assert isinstance(latch, Memory)
 
                 latch_path.append((latch, node))
-                current_nodes = set(latch.data.atoms())
+                current_nodes = set(latch.data.atoms(sympy.Symbol))
             else:
                 # Cannot further resolve the node, must be an input.
                 logger.debug(f"Input node: {node}")
@@ -197,7 +265,7 @@ class DFFExtractor:
 
         logger.debug(f"Latch clocks: {latch1_write_normal}, {latch2_write_normal}")
 
-        clock_signals = set(latch1_write_normal.atoms()) | set(latch2_write_normal.atoms())
+        clock_signals = set(latch1_write_normal.atoms(sympy.Symbol)) | set(latch2_write_normal.atoms(sympy.Symbol))
         if len(clock_signals) != 1:
             logger.warning(f"Clock must be a single signal. Found: {clock_signals}")
             return None
@@ -223,8 +291,8 @@ class DFFExtractor:
         dff.clock_edge_polarity = active_edge_polarity
 
         # == Detect asynchronous set/reset signals ==
-        potential_set_reset_signals = list((set(latch1.write_condition.atoms())
-                                            | set(latch2.write_condition.atoms())) - {clock_signal}
+        potential_set_reset_signals = list((set(latch1.write_condition.atoms(sympy.Symbol))
+                                            | set(latch2.write_condition.atoms(sympy.Symbol))) - {clock_signal}
                                            )
         logger.debug(
             f"Potential asynchronous set/reset signals: {sorted(potential_set_reset_signals, key=lambda n: n.name)}")
@@ -261,7 +329,7 @@ class DFFExtractor:
 
                 wc2 = latch2.write_condition.subs(one_active)
                 data2 = latch2.data.subs(one_active)
-                assert wc2 == True
+                assert bool_equals(wc2, True)
                 if data2:
                     logger.info(f"{signal} is an async SET/PRESET signal, active {'high' if signal_value else 'low'}.")
                     async_set_signals.append((signal, signal_value))
@@ -314,7 +382,9 @@ class DFFExtractor:
         if len(ff_output_data) == 1:
             # FF has only one output.
             logger.info(f"{output_nets[0]} = {ff_output_data[0]}")
-            dff.data_out = ff_output_data[0]
+            out_data = ff_output_data[0]
+            dff.data_in = out_data
+            dff.data_out = output_nets[0]
         elif len(ff_output_data) == 2:
             # Check if the outputs are inverted versions.
 
@@ -350,6 +420,45 @@ class DFFExtractor:
             dff.data_out_inv = out_inv_net
         else:
             assert False
+
+        # Analyze boolean formula of the next flip-flop state.
+        # In the simplest case of a D-flip-flop this is just one variable.
+        # But there might also be a scan-chain multiplexer or synchronous
+        # clear/preset logic.
+        data_variables = out_data.atoms(sympy.Symbol)
+        num_variables = len(data_variables)
+
+        if num_variables == 1:
+            # Simple. Only a data variable, no clear/preset/scan.
+            pass
+        elif num_variables == 2:
+            # There might be a synchronous clear/preset.
+            logger.debug(f"Try to detect a synchronous clear or preset from the two data signals {data_variables}.")
+            # It is not possible to distinguish data input from clear/preset based only on
+            # the boolean formula.
+            d, clear, preset = sympy.symbols('d clear preset')
+            with_clear = d & clear
+            with_preset = d | preset
+            if find_boolean_isomorphism(out_data, with_clear) is not None:
+                logger.info("Detected synchronous clear.")
+            if find_boolean_isomorphism(out_data, with_preset) is not None:
+                logger.info("Detected synchronous preset.")
+        elif num_variables == 3:
+            # Either synchronous clear/preset or scan.
+            logger.debug("Try to detect scan-mux.")
+            d, scan_enable, scan_in = sympy.symbols('d scan_enable scan_in')
+
+            scan_mux = (scan_in & scan_enable) | (d & ~scan_enable)
+
+            mapping = find_boolean_isomorphism(scan_mux, out_data)
+            if mapping is not None:
+                logger.info(f"Detected scan-chain mux: {mapping}")
+                dff.scan_in = mapping[scan_in]
+                dff.scan_enable = mapping[scan_enable]
+
+        else:
+            logger.warning(f"Flip-flop data depends on {num_variables} variables."
+                           f" Cannot distinguish scan-mux, clear, preset.")
 
         return dff
 
