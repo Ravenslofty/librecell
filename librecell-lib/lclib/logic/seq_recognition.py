@@ -116,20 +116,20 @@ class DFF:
 
     def __init__(self):
         self.clock_signal = None
-        self.clock_edge_polarity = None
+        self.clock_edge_polarity = None  # True = rising, False = falling
 
-        self.data_in = None
-        self.data_out = None
-        self.data_out_inv = None
+        self.data_in = None  # Data input net.
+        self.data_out = None  # Non-inverted data output net.
+        self.data_out_inv = None  # Inverted data output net.
 
         self.scan_enable = None
         self.scan_in = None
 
         self.async_set_signal = None
-        self.async_set_active = None
+        self.async_set_polarity = None
 
         self.async_reset_signal = None
-        self.async_reset_active = None
+        self.async_reset_polarity = None
 
 
 class DFFExtractor:
@@ -263,10 +263,10 @@ class DFFExtractor:
                 data2 = latch2.data.subs(one_active)
                 assert wc2 == True
                 if data2:
-                    logger.info(f"{signal} is a SET/PRESET signal, active {'high' if signal_value else 'low'}.")
+                    logger.info(f"{signal} is an async SET/PRESET signal, active {'high' if signal_value else 'low'}.")
                     async_set_signals.append((signal, signal_value))
                 else:
-                    logger.info(f"{signal} is a RESET/CLEAR signal, active {'high' if signal_value else 'low'}.")
+                    logger.info(f"{signal} is an async RESET/CLEAR signal, active {'high' if signal_value else 'low'}.")
                     async_reset_signals.append((signal, signal_value))
 
             # TODO: Find out what happens when all asynchronous set/reset signals are active at the same time.
@@ -281,9 +281,9 @@ class DFFExtractor:
 
             # Store the results in the flip-flop description object.
             if async_set_signals:
-                dff.async_set_signal, dff.async_set_active = async_set_signals[0]
+                dff.async_set_signal, dff.async_set_polarity = async_set_signals[0]
             if async_reset_signals:
-                dff.async_reset_signal, dff.async_reset_active = async_reset_signals[0]
+                dff.async_reset_signal, dff.async_reset_polarity = async_reset_signals[0]
 
         ff_output_data = []
         for output in outputs:
@@ -345,8 +345,9 @@ class DFFExtractor:
             logger.info(f"Non-inverted output: {out_net} = {out_data}")
             logger.info(f"Inverted output: {out_inv_net} = {out_inv_data}")
 
-            dff.data_out = out_data
-            dff.data_out_inv = out_inv_data
+            dff.data_in = out_data
+            dff.data_out = out_net
+            dff.data_out_inv = out_inv_net
         else:
             assert False
 
