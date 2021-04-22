@@ -221,11 +221,18 @@ exit
 
             # Run simulation.
             logger.debug("Run simulation.")
-            run_simulation(sim_file)
+            stdout, stderr = run_simulation(sim_file)
 
             # Fetch simulation results.
             logger.debug("Load simulation output.")
             sim_data = np.loadtxt(sim_output_file, skiprows=1)
+
+            if sim_data.ndim != 2:
+                logger.error("Simulation failed. No data was written to the output file.")
+                if debug:
+                    logger.error(f"ngspice: {stderr}")
+                assert False, "Simulation failed. No data was written to the output file."
+
             time = sim_data[:, 0]
             input_voltage = sim_data[:, 1]
 

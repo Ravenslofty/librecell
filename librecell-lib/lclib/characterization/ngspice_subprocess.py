@@ -36,6 +36,7 @@ def run_simulation(sim_file: str, ngspice_executable: str = 'ngspice'):
     """
     Invoke 'ngspice' to run the `sim_file`.
     :param sim_file: Path to ngspice simulation file.
+    :return: Returns (stdout, stderr) outputs of ngspice.
     """
     logger.debug(f"Run simulation: {sim_file}")
     try:
@@ -46,6 +47,8 @@ def run_simulation(sim_file: str, ngspice_executable: str = 'ngspice'):
             ngspice_err_message = ret.stderr.decode("utf-8")
             logger.error(f"ngspice simulation failed: {ngspice_err_message}")
             raise Exception(f"ngspice simulation failed: {ngspice_err_message}")
+
+        return ret.stdout.decode("utf-8"), ret.stderr.decode("utf-8")
     except FileNotFoundError as e:
         msg = f"SPICE simulator executable not found. Make sure it is in the current path: {ngspice_executable}"
         logger.error(msg)
@@ -245,11 +248,17 @@ exit
 
     # Start ngspice.
     logger.debug("Run simulation.")
-    run_simulation(simulation_file)
+    stdout, stderr = run_simulation(simulation_file)
 
     # Retrieve data.
     logger.debug("Load simulation output.")
     sim_data = np.loadtxt(simulation_output_file, skiprows=1)
+
+    if sim_data.ndim != 2:
+        logger.error("Simulation failed. No data was written to the output file.")
+        if debug:
+            logger.error(f"ngspice: {stderr}")
+        assert False, "Simulation failed. No data was written to the output file."
 
     # Extract data from the numpy array.
     time = sim_data[:, 0]
