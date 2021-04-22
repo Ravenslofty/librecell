@@ -123,6 +123,9 @@ def main():
                              " List must be quoted, elements must be separated by a comma."
                              " Example: '0.05, 0.1, 0.2'")
 
+    parser.add_argument('--analyze-cell-function', action='store_true',
+                        help='Derive the logical function of the cell from the SPICE netlist (experimental).')
+
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug mode (more verbose logging and plotting waveforms).')
 
@@ -343,44 +346,50 @@ def main():
         vdd_pin = vdd_pins[0]
         gnd_pin = gnd_pins[0]
 
-        # Derive boolean functions for the outputs from the netlist.
-        logger.info("Derive boolean functions for the outputs based on the netlist.")
-        transistor_graph = _transistors2multigraph(transistors_abstract)
-        abstracted_circuit = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
-                                                                                         pins_of_interest=io_pins,
-                                                                                         constant_input_pins={
-                                                                                             vdd_pin: True,
-                                                                                             gnd_pin: False},
-                                                                                         user_input_nets=input_pins)
+        if args.analyze_cell_function:
+            # Derive boolean functions for the outputs from the netlist.
+            logger.info("Derive boolean functions for the outputs based on the netlist.")
+            transistor_graph = _transistors2multigraph(transistors_abstract)
+            abstracted_circuit = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
+                                                                              pins_of_interest=io_pins,
+                                                                              constant_input_pins={
+                                                                                  vdd_pin: True,
+                                                                                  gnd_pin: False},
+                                                                              user_input_nets=input_pins)
 
-        if abstracted_circuit.latches:
-            # There's some feedback loops in the circuit.
-            logger.error("Recognition of memory loops is not supported yet.")
-            exit(1)
+            if abstracted_circuit.latches:
+                # There's some feedback loops in the circuit.
+                logger.error("Characterization of memory loops is not supported yet.")
+                exit(1)
 
-        # Convert keys into strings (they are `sympy.Symbol`s now)
-        output_functions_deduced = {output.name: function for output, function in abstracted_circuit.output_functions_deduced.items()}
-        output_functions_symbolic = output_functions_deduced
+            output_functions_deduced = abstracted_circuit.outputs
 
-        # Log deduced output functions.
-        for output_name, function in output_functions_deduced.items():
-            logger.info("Deduced output function: {} = {}".format(output_name, function))
+            # Convert keys into strings (they are `sympy.Symbol`s now)
+            output_functions_deduced = {output.name: comb.function for output, comb in output_functions_deduced.items()}
+            output_functions_symbolic = output_functions_deduced
 
-        # Merge deduced output functions with the ones read from the liberty file and perform consistency check.
-        for output_name, function in output_functions_user.items():
-            logger.info("User supplied output function: {} = {}".format(output_name, function))
-            assert output_name in output_functions_deduced, "No function has been deduced for output pin '{}'.".format(
-                output_name)
-            # Consistency check: verify that the deduced output formula is equal to the one defined in the liberty file.
-            equal = functional_abstraction.bool_equals(function, output_functions_deduced[output_name])
-            if not equal:
-                msg = "User supplied function does not match the deduced function for pin '{}'".format(output_name)
-                logger.error(msg)
+            # Log deduced output functions.
+            for output_name, function in output_functions_deduced.items():
+                logger.info("Deduced output function: {} = {}".format(output_name, function))
 
-            if equal:
-                # Take the function defined by the liberty file.
-                # This might be desired because it is in another form (CND, DNF,...).
-                output_functions_symbolic[output_name] = function
+            # Merge deduced output functions with the ones read from the liberty file and perform consistency check.
+            for output_name, function in output_functions_user.items():
+                logger.info("User supplied output function: {} = {}".format(output_name, function))
+                assert output_name in output_functions_deduced, "No function has been deduced for output pin '{}'.".format(
+                    output_name)
+                # Consistency check: verify that the deduced output formula is equal to the one defined in the liberty file.
+                equal = functional_abstraction.bool_equals(function, output_functions_deduced[output_name])
+                if not equal:
+                    msg = "User supplied function does not match the deduced function for pin '{}'".format(output_name)
+                    logger.error(msg)
+
+                if equal:
+                    # Take the function defined by the liberty file.
+                    # This might be desired because it is in another form (CND, DNF,...).
+                    output_functions_symbolic[output_name] = function
+        else:
+            # Skip functional abstraction and take the functions provided in the liberty file.
+            output_functions_symbolic = output_functions_user
 
         # Convert deduced output functions into Python lambda functions.
         output_functions = {

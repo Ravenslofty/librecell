@@ -119,7 +119,7 @@ def characterize_input_capacitances(cell_name: str,
     }[timing_corner]
     logger.info("Reduction function for summarizing multiple timing arcs: {}".format(reduction_function.__name__))
 
-    logger.debug("Measuring input capactiance.")
+    logger.debug("Measuring input capacitance.")
 
     # Generate all possible input combinations for the static input pins.
     static_input_nets = [i for i in input_pins if i != active_pin]
@@ -164,7 +164,7 @@ def characterize_input_capacitances(cell_name: str,
                 breakpoint_statement = f"stop when v({active_pin}) < {vdd * 0.1}"
 
             static_supply_voltage_statements = "\n".join(
-                (f"Vinput_{net} {ground_net} {voltage}" for net, voltage in input_voltages.items()))
+                (f"Vinput_{net} {ground_net} {net} {voltage}" for net, voltage in input_voltages.items()))
 
             # Initial node voltages.
             initial_conditions = {
@@ -186,7 +186,7 @@ Xcircuit_under_test {" ".join(ports)} {cell_name}
 {output_load_statements}
 
 Vsupply {supply_net} {ground_net} {supply_voltage}
-Iinput {ground_net} {active_pin} {_input_current}
+Iinput {ground_net} {active_pin} PULSE(0 {_input_current} 1ns 10ps 0ps 100s) * Wait 1ns to let voltages stabilize.
 
 * Static input voltages.
 {static_supply_voltage_statements}
@@ -221,11 +221,18 @@ exit
 
             # Run simulation.
             logger.debug("Run simulation.")
-            run_simulation(sim_file)
+            stdout, stderr = run_simulation(sim_file)
 
             # Fetch simulation results.
             logger.debug("Load simulation output.")
             sim_data = np.loadtxt(sim_output_file, skiprows=1)
+
+            if sim_data.ndim != 2:
+                logger.error("Simulation failed. No data was written to the output file.")
+                if debug:
+                    logger.error(f"ngspice: {stderr}")
+                assert False, "Simulation failed. No data was written to the output file."
+
             time = sim_data[:, 0]
             input_voltage = sim_data[:, 1]
 
@@ -255,8 +262,8 @@ exit
                 assert thresh1 > thresh2
 
             # Find transition times for both thresholds.
-            transition_time1 = transition_time(input_voltage, time, threshold=thresh1, assert_one_crossing=True)
-            transition_time2 = transition_time(input_voltage, time, threshold=thresh2, assert_one_crossing=True)
+            transition_time1 = transition_time(input_voltage, time, threshold=thresh1, n=-1)
+            transition_time2 = transition_time(input_voltage, time, threshold=thresh2, n=-1)
             assert transition_time2 > transition_time1
 
             # Compute deltas of time and voltage between the crossing of the two thresholds.
