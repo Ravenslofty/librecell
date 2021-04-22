@@ -482,13 +482,13 @@ def test_complex_cmos_graph_to_formula():
 
     conductivity_conditions, inputs = complex_cmos_graph_to_formula(g, output_nodes={'output'},
                                                                     input_pins={'vdd', 'gnd'})
-    print(conductivity_conditions)
+    logger.debug(f"Conductivity conditions: \n{conductivity_conditions}")
     formulas = {sympy.Symbol(output): cc[sympy.Symbol('vdd')] for output, cc in conductivity_conditions.items()}
 
     # Convert from strings into sympy symbols.
     inputs = {sympy.Symbol(i) for i in inputs}
-    print('formulas: ', formulas)
-    print('inputs = ', inputs)
+    logger.debug(f'formulas = {formulas}')
+    logger.debug(f'inputs = {inputs}')
 
     def resolve_intermediate_variables(formulas: Dict[sympy.Symbol, sympy.Symbol],
                                        output: sympy.Symbol) -> boolalg.Boolean:
@@ -503,7 +503,6 @@ def test_complex_cmos_graph_to_formula():
     f = resolve_intermediate_variables(formulas, sympy.Symbol('output'))
 
     f = simplify_logic(f)
-    print('f = ', f)
 
     # Verify that the deduced formula equals a NAND.
     a, b = sympy.symbols('a b')
@@ -681,8 +680,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     formulas_low = {k: simplify_logic(f.subs(constants)) for k, f in formulas_low.items()}
 
     logger.debug('formulas_high = {}'.format(formulas_high))
-    print('formulas_high = {}'.format(formulas_high))
-    print('formulas_low = {}'.format(formulas_low))
+    logger.debug('formulas_low = {}'.format(formulas_low))
 
     # Convert from strings into sympy symbols.
     inputs = {sympy.Symbol(i) for i in inputs} - set(constants.keys())
@@ -734,17 +732,17 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     cycles = list(nx.simple_cycles(dependency_graph))
     logger.info("Number of feed-back loops: {}".format(len(cycles)))
 
-    # Print feedback loops.
-    for cycle in cycles:
-        print()
-        print("cycle: {}".format(cycle))
-        for el in cycle:
-            print(' --> {} = {}'.format(el, formulas_high[el]))
-        print()
+    # # Print feedback loops.
+    # for cycle in cycles:
+    #     print()
+    #     print("cycle: {}".format(cycle))
+    #     for el in cycle:
+    #         print(' --> {} = {}'.format(el, formulas_high[el]))
+    #     print()
 
     # Collect all nets that belong to a memory cycle.
     nets_of_memory_cycles = {n for c in cycles for n in c}
-    print("Nets of memory cycles: ", nets_of_memory_cycles)
+    logger.debug("Nets of memory cycles: ", nets_of_memory_cycles)
 
     def derive_memory(memory_output_net: sympy.Symbol,
                       inputs: Set[sympy.Symbol],
@@ -758,10 +756,10 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         """
         logger.info("Derive memory from output net: {}".format(memory_output_net))
         memory_output_resolved = _resolve_intermediate_variables(formulas, inputs, memory_output_net)
-        print("Memory output net {}  = {}".format(memory_output_net, memory_output_resolved))
+        logger.debug("Memory output net {}  = {}".format(memory_output_net, memory_output_resolved))
         d, dp, dn = boolean_derivatives(memory_output_resolved, memory_output_net)
         write_condition = ~dp
-        print("write_condition =", write_condition)
+        logger.debug("write_condition =", write_condition)
         oscillation_condition = dn
 
         debug = True
@@ -769,7 +767,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             # Find expressions for the memory output when the write condition is met.
             # Find all variable assignments such that the write condition is met.
             write_condition_models = list(satisfiable(write_condition, all_models=True))
-            print("write_condition_models =", write_condition_models)
+            logger.debug("write_condition_models =", write_condition_models)
             if write_condition_models == [False]:
                 logger.warning("Detected a memory loop that is not possible to write to.")
 
@@ -792,7 +790,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 print()
 
         write_data = simplify_with_assumption(write_condition, memory_output_resolved)
-        print("write_data = ", write_data)
+        logger.debug(f"write_data = {write_data}")
 
         if not sympy.satisfiable(~write_condition):
             logger.warning("This is not a true memory, it will never store anything.")
@@ -803,22 +801,22 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     memory_output_nets = set()
     memory_by_output_net = dict()  # Cache memory loops for later usage.
     for loop_id, cycle in enumerate(cycles):
-        print('cycle = {}'.format(cycle))
+        # print('cycle = {}'.format(cycle))
         nodes_in_cycle = set(cycle)
         _inputs = inputs | nets_of_memory_cycles - nodes_in_cycle
         for node in cycle:
             memory = derive_memory(node, _inputs, formulas_high)
             memory.loop_id = loop_id
 
-            print(memory)
-            print()
+            # print(memory)
+            # print()
 
             if sympy.satisfiable(~memory.write_condition):
                 # Store condition can be met -> this is a potential memory.
                 memory_output_nets.add(node)
                 memory_by_output_net[node] = memory
 
-    print("Memory output nets: {}".format(memory_output_nets))
+    logger.debug("Memory output nets: {}".format(memory_output_nets))
 
     # Solve equation system for output.
     # TODO: stop resolving at memory elements.
@@ -837,7 +835,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             new_wavefront = set()
 
             if out not in nets_of_memory_cycles:
-                print("Find formula for", out)
+                logger.debug(f"Find formula for {out}.")
 
                 assert isinstance(out, boolalg.Boolean)
                 formula = _resolve_intermediate_variables(formulas_high, inputs | nets_of_memory_cycles, out)
@@ -850,7 +848,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
                 # Find inputs into formula that come from a memory.
                 new_atoms = atoms - output_formulas.keys() - latches.keys() - inputs
                 unknown_memory_nets = new_atoms & nets_of_memory_cycles
-                print("Unknown inputs into", out, "from memory:", unknown_memory_nets)
+                logger.debug(f"Unknown inputs into {out} from memory: {unknown_memory_nets}")
             else:
                 # Resolve memory.
                 assert out in nets_of_memory_cycles
@@ -877,7 +875,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         m.write_condition = simplify_logic(m.write_condition.subs(output_formulas))
         m.oscillation_condition = simplify_logic(m.oscillation_condition.subs(output_formulas))
 
-    print("Output functions ({}):".format(len(output_formulas)))
+    logger.debug("Output functions ({}):".format(len(output_formulas)))
     output_combinatorial = dict()
     for net, formula in output_formulas.items():
         z = high_impedance_conditions[net]
@@ -886,15 +884,15 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         function = simplify_with_assumption(~z, formula)
 
         output_combinatorial[net] = CombinationalOutput(function=function, high_impedance=z)
-        print(" ", net, "=", function, ', Z: ', z)
+        logger.debug(f"{net} = {function}, Z: {z}")
 
-    print("Latches ({}):".format(len(latches)))
+    logger.debug("Latches ({}):".format(len(latches)))
 
     for output_net, latch in latches.items():
-        print(" ", output_net, "=", latch)
+        logger.info(f"{output_net} = {latch}")
 
     if not latches:
-        print("  No latches found.")
+        logger.info("No latches found.")
 
     if len(cycles) > 0:
         assert len(latches) > 0, "Found feedback loops but no latches were derived."
