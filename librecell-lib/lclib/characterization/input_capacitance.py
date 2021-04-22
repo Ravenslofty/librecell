@@ -119,7 +119,7 @@ def characterize_input_capacitances(cell_name: str,
     }[timing_corner]
     logger.info("Reduction function for summarizing multiple timing arcs: {}".format(reduction_function.__name__))
 
-    logger.debug("Measuring input capactiance.")
+    logger.debug("Measuring input capacitance.")
 
     # Generate all possible input combinations for the static input pins.
     static_input_nets = [i for i in input_pins if i != active_pin]
