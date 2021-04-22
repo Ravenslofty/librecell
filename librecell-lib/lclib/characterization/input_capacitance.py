@@ -164,7 +164,7 @@ def characterize_input_capacitances(cell_name: str,
                 breakpoint_statement = f"stop when v({active_pin}) < {vdd * 0.1}"
 
             static_supply_voltage_statements = "\n".join(
-                (f"Vinput_{net} {ground_net} {voltage}" for net, voltage in input_voltages.items()))
+                (f"Vinput_{net} {ground_net} {net} {voltage}" for net, voltage in input_voltages.items()))
 
             # Initial node voltages.
             initial_conditions = {
