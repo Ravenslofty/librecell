@@ -355,7 +355,7 @@ def main():
                                                                               constant_input_pins={
                                                                                   vdd_pin: True,
                                                                                   gnd_pin: False},
-                                                                              user_input_nets=input_pins)
+                                                                              user_input_nets=None)
 
             if abstracted_circuit.latches:
                 # There's some feedback loops in the circuit.
