@@ -186,7 +186,7 @@ Xcircuit_under_test {" ".join(ports)} {cell_name}
 {output_load_statements}
 
 Vsupply {supply_net} {ground_net} {supply_voltage}
-Iinput {ground_net} {active_pin} {_input_current}
+Iinput {ground_net} {active_pin} PULSE(0 {_input_current} 1ns 10ps 0ps 100s) * Wait 1ns to let voltages stabilize.
 
 * Static input voltages.
 {static_supply_voltage_statements}
@@ -262,8 +262,8 @@ exit
                 assert thresh1 > thresh2
 
             # Find transition times for both thresholds.
-            transition_time1 = transition_time(input_voltage, time, threshold=thresh1, assert_one_crossing=True)
-            transition_time2 = transition_time(input_voltage, time, threshold=thresh2, assert_one_crossing=True)
+            transition_time1 = transition_time(input_voltage, time, threshold=thresh1, n=-1)
+            transition_time2 = transition_time(input_voltage, time, threshold=thresh2, n=-1)
             assert transition_time2 > transition_time1
 
             # Compute deltas of time and voltage between the crossing of the two thresholds.
