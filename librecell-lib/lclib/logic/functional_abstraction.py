@@ -742,7 +742,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     # Collect all nets that belong to a memory cycle.
     nets_of_memory_cycles = {n for c in cycles for n in c}
-    logger.debug("Nets of memory cycles: ", nets_of_memory_cycles)
+    logger.debug(f"Nets of memory cycles: {nets_of_memory_cycles}")
 
     def derive_memory(memory_output_net: sympy.Symbol,
                       inputs: Set[sympy.Symbol],
