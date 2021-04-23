@@ -368,7 +368,7 @@ def _get_conductivity_conditions(cmos_graph: nx.MultiGraph,
             ) for path in transistor_paths]
         )
         # Try to simplify the boolean expression.
-        f = simplify_logic(f)
+        # f = simplify_logic(f)
         logger.debug("Conductivity condition from '{}' to '{}': {}".format(source, target, f))
         return f
 
@@ -567,6 +567,7 @@ def _formula_dependency_graph(formulas: Dict[sympy.Symbol, boolalg.Boolean]) -> 
 def analyze_circuit_graph(graph: nx.MultiGraph,
                           pins_of_interest: Set,
                           constant_input_pins: Dict[Any, bool] = None,
+                          differential_inputs: Dict[str, str] = None,
                           user_input_nets: Set = None
                           ) -> AbstractCircuit:
     """
@@ -581,6 +582,8 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     :param pins_of_interest:
     :param constant_input_pins: Define input pins that have a constant and known value such as `{'vdd': True, 'gnd': False}`.
     :type constant_input_pins: Dict[Any, bool]
+    :param differential_inputs: Mapping from non-inverting inputs to their inverting inputs.
+    :type differential_inputs: Dict[str, str]
     :param user_input_nets: A set of input pin names.
         Some inputs cannot automatically be found and must be provided by the user.
         Input nets that connect not only to transistor gates but also source or drains need to be specified manually.
@@ -597,6 +600,8 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
 
     if constant_input_pins is None:
         constant_input_pins = dict()
+    if differential_inputs is None:
+        differential_inputs = dict()
 
     gate_nets = _get_gate_nets(graph)
     nets = set(graph.nodes())
@@ -643,8 +648,17 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             print('  |-', pin_b, 'when', condition)
     print()
 
+    # Substitute inverting inputs by the inverse of the non-inverting input.
+    differential_substitution = {
+        sympy.Symbol(inv): ~sympy.Symbol(noninv)
+        for noninv, inv in differential_inputs.items()
+    }
+
     # Add known values for VDD, GND
     constants = {sympy.Symbol(k): v for k, v in constant_input_pins.items()}
+    substitutions = dict()
+    substitutions.update(differential_substitution)
+    substitutions.update(constants)
     output_symbols = {sympy.Symbol(n) for n in output_nodes}
 
     # Convert keys into symbols.
@@ -662,8 +676,8 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             assert isinstance(input_pin, sympy.Symbol)
             assert isinstance(condition, boolalg.Boolean)
             # Simplify by inserting constants.
-            condition = simplify_logic(condition.subs(constants))
-            input_pin = simplify_logic(input_pin.subs(constants))
+            condition = simplify_logic(condition.subs(substitutions))
+            input_pin = simplify_logic(input_pin.subs(substitutions))
             # if `condition` then output is `connected` to `input_pin`.
             connected_to_high = simplify_logic(condition & input_pin)  # Is there a path to HIGH?
             connected_to_low = simplify_logic(condition & ~input_pin)  # Is there a path to LOW?
@@ -673,11 +687,6 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         # Logic OR of all elements.
         formulas_high[output] = simplify_logic(sympy.Or(*or_terms_high))
         formulas_low[output] = simplify_logic(sympy.Or(*or_terms_low))
-
-    # Simplify formulas by substituting VDD and GND with known values.
-    logger.debug("Simplify all formulas.")
-    formulas_high = {k: simplify_logic(f.subs(constants)) for k, f in formulas_high.items()}
-    formulas_low = {k: simplify_logic(f.subs(constants)) for k, f in formulas_low.items()}
 
     logger.debug('formulas_high = {}'.format(formulas_high))
     logger.debug('formulas_low = {}'.format(formulas_low))

@@ -32,6 +32,7 @@ from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
 import networkx as nx
 import sympy
+import re
 
 
 def main():
@@ -52,6 +53,13 @@ def main():
 
     parser.add_argument('--spice', required=True, metavar='SPICE', type=str,
                         help='SPICE netlist containing a subcircuit with the same name as the cell.')
+
+    parser.add_argument('--diff', required=False,
+                        nargs="+",
+                        metavar='DIFFERENTIAL_PATTERN',
+                        type=str,
+                        help='Specify differential inputs as "NonInverting,Inverting" tuples.'
+                             'The placeholder "%" can be used like "%_P,%_N" or "%,%_Diff", ...')
 
     parser.add_argument('--debug', action='store_true', help='Enable debug mode.')
     parser.add_argument('--plot-network', action='store_true',
@@ -98,6 +106,41 @@ def main():
     logger.info(f"Supply net: {vdd_pin}")
     logger.info(f"Ground net: {gnd_pin}")
 
+    # Store mapping of non-inverting input to inverting input.
+    differential_inputs = dict()  # Dict[non-inverting, inverting]
+    # Match differential inputs.
+    if args.diff is not None:
+        logger.info(f"Specified differential inputs: {args.diff}")
+        patterns = [tuple(d.split(',', 1)) for d in args.diff]
+        # Convert to regex.
+        patterns = [(noninv.replace('%', "(.*)"), inv) for noninv, inv in patterns]
+        patterns = [(re.compile(noninv), inv) for noninv, inv in patterns]
+
+        input_pins = io_pins  # TODO: Take input pins only.
+        for pin in input_pins:
+            # Try to match a pattern.
+            for p, inverted_name_template in patterns:
+                result = p.search(pin)
+                if result:
+                    if len(result.groups()) == 0:
+                        basename = result.group(0)
+                    else:
+                        basename = result.group(1)
+                    inv_name = inverted_name_template.replace("%", basename)
+                    if pin in differential_inputs:
+                        # Sanity check.
+                        logger.error(f"Multiple matches for non-inverting input '{pin}'.")
+                        exit(1)
+                    # Store the mapping.
+                    differential_inputs[pin] = inv_name
+
+        logger.info(f"Mapping of differential inputs: {differential_inputs}")
+
+        # Sanity check.
+        if len(set(differential_inputs.keys())) != len(set(differential_inputs.values())):
+            logger.error(f"Mismatch in the mapping of differential inputs.")
+            exit(1)
+
     def _transistors2multigraph(transistors) -> nx.MultiGraph:
         """ Create a graph representing the transistor network.
             Each edge corresponds to a transistor, each node to a net.
@@ -127,6 +170,7 @@ def main():
                                                             pins_of_interest=io_pins,
                                                             constant_input_pins={vdd_pin: True,
                                                                                  gnd_pin: False},
+                                                            differential_inputs=differential_inputs,
                                                             user_input_nets=None)
     output_functions_deduced = abstract.outputs
 
