@@ -159,4 +159,8 @@ def main():
         logger.info("Deduced output function: {} = {}".format(output_name, function))
 
     # Try to recognize sequential cells.
-    seq_recognition.extract_sequential_circuit(abstract)
+    seq = seq_recognition.extract_sequential_circuit(abstract)
+
+    if seq is not None:
+        print()
+        print(seq)
