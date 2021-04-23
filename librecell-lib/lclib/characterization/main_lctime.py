@@ -356,10 +356,10 @@ def main():
         for pin in cell_group.get_groups("pin"):
             assert isinstance(pin, liberty_parser.Group)
             pin_name = pin.args[0]
-            all_liberty_pins.add(pin_name)
+            all_liberty_pins.add(pin_name.lower())
             complementary_pin = pin.get("complementary_pin")
             if complementary_pin is not None:
-                all_liberty_pins.add(pin_name)
+                all_liberty_pins.add(complementary_pin.lower())
         all_spice_pins = set(cell_pins)
         pins_not_in_spice = sorted(all_liberty_pins - all_spice_pins)
         if pins_not_in_spice:
