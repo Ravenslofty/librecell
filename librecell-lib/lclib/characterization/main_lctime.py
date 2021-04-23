@@ -484,6 +484,11 @@ def main():
             logger.info("Measuring input capacitance: {} {}".format(cell_name, input_pin))
             input_pin_group = new_cell_group.get_group('pin', input_pin)
 
+            # Create link to inverted pin for differential inputs.
+            input_pin_inverted = differential_inputs.get(input_pin)
+            if input_pin_inverted:
+                input_pin_group['complementary_pin'] = [EscapedString(input_pin_inverted)]
+
             result = characterize_input_capacitances(
                 cell_name=cell_name,
                 input_pins=input_pins,
@@ -585,10 +590,6 @@ def main():
                     'related_pin': [EscapedString(related_pin)],
                     'timing_sense': [timing_sense]
                 }
-
-                # Create link to inverted pin for differential inputs.
-                if related_pin_inverted:
-                    timing_attributes['complementary_pin'] = [EscapedString(related_pin_inverted)]
 
                 timing_group = Group(
                     'timing',
