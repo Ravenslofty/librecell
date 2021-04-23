@@ -144,7 +144,7 @@ class PieceWiseLinear:
         return self + (-other)
 
     def __rsub__(self, other):
-        return self - other
+        return -self + other
 
     def __call__(self, x):
         return self.interpolated()(x)

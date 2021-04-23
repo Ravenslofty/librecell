@@ -131,7 +131,7 @@ def characterize_input_capacitances(cell_name: str,
     logger.debug("Measuring input capacitance.")
 
     # Generate all possible input combinations for the static input pins.
-    static_input_nets = [i for i in input_pins_non_inverted if i != active_pin and i != active_pin_inverted]
+    static_input_nets = [i for i in input_pins_non_inverted if i != active_pin]
     num_inputs = len(static_input_nets)
 
     static_inputs = list(product(*([[0, 1]] * num_inputs)))

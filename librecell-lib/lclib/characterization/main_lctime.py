@@ -517,8 +517,14 @@ def main():
             # Insert boolean function of output.
             output_pin_group.set_boolean_function('function', output_functions_symbolic[output_pin])
 
-            for related_pin in input_pins:
-                logger.info("Timing arc: {} -> {}".format(related_pin, output_pin))
+            for related_pin in input_pins_non_inverted:
+
+                related_pin_inverted = differential_inputs.get(related_pin)
+                if related_pin_inverted:
+                    logger.info("Timing arc (differential input): ({}, {}) -> {}"
+                                .format(related_pin, related_pin_inverted, output_pin))
+                else:
+                    logger.info("Timing arc: {} -> {}".format(related_pin, output_pin))
 
                 # Get timing sense of this arc.
                 timing_sense = is_unate_in_xi(output_functions[output_pin], related_pin).name.lower()
@@ -548,6 +554,8 @@ def main():
                     ground_net=gnd_pin,
                     supply_net=vdd_pin,
 
+                    complementary_pins=differential_inputs,
+
                     debug=args.debug
                 )
 
@@ -572,18 +580,24 @@ def main():
 
                     timing_tables.append(table)
 
-                    # Create the liberty timing group.
-                    timing_group = Group(
-                        'timing',
-                        attributes={
-                            'related_pin': [EscapedString(related_pin)],
-                            'timing_sense': [timing_sense]
-                        },
-                        groups=timing_tables
-                    )
+                # Create the liberty timing group.
+                timing_attributes = {
+                    'related_pin': [EscapedString(related_pin)],
+                    'timing_sense': [timing_sense]
+                }
 
-                    # Attach timing group to output pin group.
-                    output_pin_group.groups.append(timing_group)
+                # Create link to inverted pin for differential inputs.
+                if related_pin_inverted:
+                    timing_attributes['complementary_pin'] = [EscapedString(related_pin_inverted)]
+
+                timing_group = Group(
+                    'timing',
+                    attributes=timing_attributes,
+                    groups=timing_tables
+                )
+
+                # Attach timing group to output pin group.
+                output_pin_group.groups.append(timing_group)
 
         assert isinstance(new_cell_group, Group)
         return new_cell_group

@@ -55,6 +55,7 @@ def characterize_comb_cell(cell_name: str,
                            temperature=27,
                            ground_net: str = 'GND',
                            supply_net: str = 'VDD',
+                           complementary_pins: Optional[Dict[str, str]] = None,
                            workingdir: Optional[str] = None,
                            debug: bool = False,
                            ) -> Dict[str, np.ndarray]:
@@ -81,6 +82,7 @@ def characterize_comb_cell(cell_name: str,
     :param temperature: Simulation temperature in celsius.
     :param ground_net: The name of the ground net.
     :param supply_net: The name of the supply net.
+    :param complementary_pins: Name mapping of differential input pairs. Dict[non inverting pin, inverting pin].
     :param debug: Enable more verbose debugging output such as plots of the simulations.
     :return: Returns the NDLM timing tables wrapped in a dict:
     {'cell_rise': 2d-np.ndarray, 'cell_fall': 2d-np.ndarray, ... }
@@ -88,6 +90,12 @@ def characterize_comb_cell(cell_name: str,
 
     if workingdir is None:
         workingdir = tempfile.mkdtemp("lctime-")
+    if complementary_pins is None:
+        complementary_pins = dict()
+    inputs_inverted = complementary_pins.values()
+    assert related_pin not in inputs_inverted, f"Active pin '{related_pin}' must not be an inverted pin of a differential pair."
+    input_pins_non_inverted = [p for p in input_pins if p not in inputs_inverted]
+    related_pin_inverted = complementary_pins.get(related_pin)
 
     # Find ports of the SPICE netlist.
     ports = get_subcircuit_ports(spice_netlist_file, cell_name)
@@ -114,7 +122,7 @@ def characterize_comb_cell(cell_name: str,
 
     # Get all input nets that are not toggled during a simulation run.
     logger.debug("Get all input nets that are not toggled during a simulation run.")
-    static_input_nets = [i for i in input_pins if i != related_pin]
+    static_input_nets = [i for i in input_pins_non_inverted if i != related_pin]
     # Get a list of all input combinations that will be used for measuring conditional timing arcs.
     num_inputs = len(static_input_nets)
     static_inputs = list(product(*([[0, 1]] * num_inputs)))
@@ -159,6 +167,16 @@ def characterize_comb_cell(cell_name: str,
 
             # Get voltages at static inputs.
             input_voltages = {net: supply_voltage * value for net, value in zip(static_input_nets, static_input)}
+            # Add supply voltage.
+            input_voltages[supply_net] = supply_voltage
+            # Add input voltages for inverted inputs of differential pairs.
+            for p in static_input_nets:
+                inv = complementary_pins.get(p)
+                if inv is not None:
+                    assert inv not in input_voltages
+                    # Add the inverted input voltage.
+                    input_voltages[inv] = supply_voltage - input_voltages[p]
+
             logger.debug("Static input voltages: {}".format(input_voltages))
 
             for input_rising in [True, False]:
@@ -180,11 +198,20 @@ def characterize_comb_cell(cell_name: str,
                 expected_output = output_function(**bool_inputs)
                 initial_output_voltage = 0 if expected_output else vdd
 
-                # Get voltages at static inputs.
-                input_voltages = {net: vdd * value for net, value in zip(static_input_nets, static_input)}
-                # Add supply voltage.
-                input_voltages[supply_net] = supply_voltage
-                logger.debug("Voltages at static inputs: {}".format(input_voltages))
+                # # Get voltages at static inputs.
+                # input_voltages = {net: vdd * value for net, value in zip(static_input_nets, static_input)}
+                # # Add supply voltage.
+                # input_voltages[supply_net] = supply_voltage
+                #
+                # # Add input voltages for inverted inputs of differential pairs.
+                # for p in static_input_nets:
+                #     inv = complementary_pins.get(p)
+                #     if inv is not None:
+                #         assert inv not in input_voltages
+                #         # Add the inverted input voltage.
+                #         input_voltages[inv] = supply_voltage - input_voltages[p]
+                #
+                # logger.debug("Voltages at static inputs: {}".format(input_voltages))
 
                 # Get stimulus signal for related pin.
                 input_wave = StepWave(start_time=0, polarity=input_rising,
@@ -192,10 +219,13 @@ def characterize_comb_cell(cell_name: str,
                                       fall_threshold=1,
                                       transition_time=input_transition_time)
                 input_wave.y = input_wave.y * vdd
-
                 input_voltages[related_pin] = input_wave
+                # Get stimulus signal for the inverted pin (if any).
+                if related_pin_inverted:
+                    input_wave_inverted = vdd - input_wave
+                    input_voltages[related_pin_inverted] = input_wave_inverted
 
-                # Get the breakpoint condition.
+                    # Get the breakpoint condition.
                 if expected_output:
                     breakpoint_statement = f"stop when v({output_pin}) > {vdd * 0.99}"
                 else:
