@@ -24,6 +24,7 @@ from liberty.types import *
 from ..liberty import util as liberty_util
 from ..logic import functional_abstraction
 from ..logic import seq_recognition
+from . import util
 
 import argparse
 from copy import deepcopy
@@ -32,6 +33,7 @@ from lccommon import net_util
 from lccommon.net_util import load_transistor_netlist, is_ground_net, is_supply_net
 import networkx as nx
 import sympy
+import re
 
 
 def main():
@@ -53,7 +55,17 @@ def main():
     parser.add_argument('--spice', required=True, metavar='SPICE', type=str,
                         help='SPICE netlist containing a subcircuit with the same name as the cell.')
 
+    parser.add_argument('--diff', required=False,
+                        nargs="+",
+                        metavar='DIFFERENTIAL_PATTERN',
+                        type=str,
+                        help='Specify differential inputs as "NonInverting,Inverting" tuples.'
+                             'The placeholder "%" can be used like "%_P,%_N" or "%,%_Diff", ...')
+
     parser.add_argument('--debug', action='store_true', help='Enable debug mode.')
+    parser.add_argument('--plot-network', action='store_true',
+                        help='Show a plot of the transistor graph for debugging. '
+                             'Transistors are edges in the graph. The edges are labelled with the gate net.')
 
     # Parse arguments
     args = parser.parse_args()
@@ -95,6 +107,17 @@ def main():
     logger.info(f"Supply net: {vdd_pin}")
     logger.info(f"Ground net: {gnd_pin}")
 
+    # Match differential inputs.
+    if args.diff is not None:
+        differential_inputs = util.find_differential_inputs_by_pattern(args.diff, io_pins)
+    else:
+        differential_inputs = dict()
+
+    # Sanity check.
+    if len(set(differential_inputs.keys())) != len(set(differential_inputs.values())):
+        logger.error(f"Mismatch in the mapping of differential inputs.")
+        exit(1)
+
     def _transistors2multigraph(transistors) -> nx.MultiGraph:
         """ Create a graph representing the transistor network.
             Each edge corresponds to a transistor, each node to a net.
@@ -112,10 +135,19 @@ def main():
     # Derive boolean functions for the outputs from the netlist.
     logger.info("Derive boolean functions for the outputs based on the netlist.")
     transistor_graph = _transistors2multigraph(transistors_abstract)
+    if args.plot_network:
+        import matplotlib.pyplot as plt
+        pos = nx.spring_layout(transistor_graph)
+        nx.draw(transistor_graph, pos, with_labels=True)
+        print(list(transistor_graph.edges(keys=True)))
+        edge_labels = {(a, b): gate_net for a, b, (gate_net, channel_type) in transistor_graph.edges(keys=True)}
+        nx.draw_networkx_edge_labels(transistor_graph, pos, edge_labels=edge_labels)
+        plt.show()
     abstract = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
                                                             pins_of_interest=io_pins,
                                                             constant_input_pins={vdd_pin: True,
                                                                                  gnd_pin: False},
+                                                            differential_inputs=differential_inputs,
                                                             user_input_nets=None)
     output_functions_deduced = abstract.outputs
 
