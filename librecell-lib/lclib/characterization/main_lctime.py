@@ -126,6 +126,13 @@ def main():
     parser.add_argument('--analyze-cell-function', action='store_true',
                         help='Derive the logical function of the cell from the SPICE netlist (experimental).')
 
+    parser.add_argument('--diff', required=False,
+                        nargs="+",
+                        metavar='DIFFERENTIAL_PATTERN',
+                        type=str,
+                        help='Specify differential inputs as "NonInverting,Inverting" tuples.'
+                             'The placeholder "%" can be used like "%_P,%_N" or "%,%_Diff", ...')
+
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug mode (more verbose logging and plotting waveforms).')
 
@@ -303,8 +310,6 @@ def main():
     # TODO: No hardcoded data here!
     output_capacitances = np.array([float(s.strip()) for s in args.output_loads.split(",")]) * 1e-12  # pF
     input_transition_times = np.array([float(s.strip()) for s in args.output_loads.split(",")]) * 1e-9  # ns
-    # output_capacitances = np.array([0.05, 0.1, 0.2, 0.4, 0.8, 1.6]) * 1e-12  # pf
-    # input_transition_times = np.array([0.1, 0.2, 0.4, 0.8, 1.6, 3.2]) * 1e-9  # ns
 
     logger.info(f"Output capacitances [pF]: {output_capacitances * 1e12}")
     logger.info(f"Input slew times [ns]: {input_transition_times * 1e9}")
@@ -321,7 +326,7 @@ def main():
         netlist_file = netlist_file_table[cell_name]
         cell_group = select_cell(library, cell_name)
         # Check that the name matches.
-        assert cell_group.args[0] == cell_name
+        assert cell_group.args[0] == cell_name, "Cell name does not match."
 
         logger.info("Cell: {}".format(cell_name))
         logger.info("Netlist: {}".format(netlist_file))
@@ -332,7 +337,7 @@ def main():
         # Load netlist of cell
         # TODO: Load all netlists at the beginning.
         logger.info('Load netlist: %s', netlist_file)
-        transistors_abstract, cell_pins = load_transistor_netlist(netlist_file, cell_name)
+        transistors_abstract, cell_pins = load_transistor_netlist(netlist_file, cell_name, force_lowercase=True)
         io_pins = net_util.get_io_pins(cell_pins)
 
         # Detect power pins.
@@ -346,16 +351,65 @@ def main():
         vdd_pin = vdd_pins[0]
         gnd_pin = gnd_pins[0]
 
+        # Sanity check: All pins defined in liberty must appear in the SPICE netlist.
+        all_liberty_pins = set()
+        for pin in cell_group.get_groups("pin"):
+            assert isinstance(pin, liberty_parser.Group)
+            pin_name = pin.args[0]
+            all_liberty_pins.add(pin_name)
+            complementary_pin = pin.get("complementary_pin")
+            if complementary_pin is not None:
+                all_liberty_pins.add(pin_name)
+        all_spice_pins = set(cell_pins)
+        pins_not_in_spice = sorted(all_liberty_pins - all_spice_pins)
+        if pins_not_in_spice:
+            logger.error(f"Pins defined in liberty but not in SPICE netlist: {', '.join(pins_not_in_spice)}")
+            exit(1)
+
+        # Extract differential pairs from liberty.
+        logger.debug("Load complementary pins from liberty.")
+        differential_inputs_liberty = dict()
+        for pin in cell_group.get_groups("pin"):
+            assert isinstance(pin, liberty_parser.Group)
+            pin_name = pin.args[0]
+            complementary_pin = pin.get("complementary_pin")
+            if complementary_pin is not None:
+                differential_inputs_liberty[pin_name] = complementary_pin
+
+        # Match differential inputs.
+        if args.diff is not None:
+            logger.debug("Match complementary pins from user-defined pattern.")
+            differential_inputs_from_pattern = find_differential_inputs_by_pattern(args.diff, input_pins)
+        else:
+            differential_inputs_from_pattern = dict()
+
+        differential_inputs_liberty.update(differential_inputs_from_pattern)
+
+        # TODO: Sanity checks on complementary pins.
+        # Complementary pin should not be defined as pin group in liberty file.
+
+        differential_inputs = differential_inputs_liberty
+
+        for noninv, inv in differential_inputs.items():
+            logger.info(f"Differential input (+,-): {noninv}, {inv}")
+
+        # Find all input pins that are not inverted inputs of a differential pair.
+        inverted_pins = differential_inputs.values()
+        input_pins_non_inverted = [p for p in input_pins if p not in inverted_pins]
+
         if args.analyze_cell_function:
             # Derive boolean functions for the outputs from the netlist.
             logger.info("Derive boolean functions for the outputs based on the netlist.")
             transistor_graph = _transistors2multigraph(transistors_abstract)
-            abstracted_circuit = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
-                                                                              pins_of_interest=io_pins,
-                                                                              constant_input_pins={
-                                                                                  vdd_pin: True,
-                                                                                  gnd_pin: False},
-                                                                              user_input_nets=None)
+            abstracted_circuit = functional_abstraction.analyze_circuit_graph(
+                graph=transistor_graph,
+                pins_of_interest=io_pins,
+                constant_input_pins={
+                    vdd_pin: True,
+                    gnd_pin: False},
+                differential_inputs=differential_inputs,
+                user_input_nets=None
+            )
 
             if abstracted_circuit.latches:
                 # There's some feedback loops in the circuit.
@@ -378,6 +432,7 @@ def main():
                 assert output_name in output_functions_deduced, "No function has been deduced for output pin '{}'.".format(
                     output_name)
                 # Consistency check: verify that the deduced output formula is equal to the one defined in the liberty file.
+                logger.info("Check equality of boolean function in liberty file and derived function.")
                 equal = functional_abstraction.bool_equals(function, output_functions_deduced[output_name])
                 if not equal:
                     msg = "User supplied function does not match the deduced function for pin '{}'".format(output_name)
@@ -424,7 +479,8 @@ def main():
 
         # Measure input pin capacitances.
         logger.debug(f"Measuring input pin capacitances of cell {cell_name}.")
-        for input_pin in input_pins:
+        for input_pin in input_pins_non_inverted:
+            # Input capacitances are not measured for the inverting inputs of differential pairs.
             logger.info("Measuring input capacitance: {} {}".format(cell_name, input_pin))
             input_pin_group = new_cell_group.get_group('pin', input_pin)
 
@@ -445,6 +501,7 @@ def main():
                 workingdir=cell_workingdir,
                 ground_net=gnd_pin,
                 supply_net=vdd_pin,
+                complementary_pins=differential_inputs,
                 debug=args.debug
             )
 

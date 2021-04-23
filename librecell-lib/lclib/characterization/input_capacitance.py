@@ -53,6 +53,7 @@ def characterize_input_capacitances(cell_name: str,
                                     workingdir: Optional[str] = None,
                                     ground_net: str = 'GND',
                                     supply_net: str = 'VDD',
+                                    complementary_pins: Optional[Dict[str, str]] = None,
                                     debug: bool = False
                                     ):
     """
@@ -77,12 +78,20 @@ def characterize_input_capacitances(cell_name: str,
     :param workingdir: Directory where the simulation files will be put. If not specified a temporary directory will be created.
     :param ground_net: The name of the ground net.
     :param supply_net: The name of the supply net.
+    :param complementary_pins: Name mapping of differential input pairs. Dict[non inverting pin, inverting pin].
     :param debug: Enable more verbose debugging output such as plots of the simulations.
     """
 
     # Create temporary working directory.
     if workingdir is None:
         workingdir = tempfile.mkdtemp("lctime-")
+
+    if complementary_pins is None:
+        complementary_pins = dict()
+    inputs_inverted = complementary_pins.values()
+    assert active_pin not in inputs_inverted, f"Active pin '{active_pin}' must not be an inverted pin of a differential pair."
+    input_pins_non_inverted = [p for p in input_pins if p not in inputs_inverted]
+    active_pin_inverted = complementary_pins.get(active_pin)
 
     logger.debug("characterize_input_capacitances()")
     # Find ports of the SPICE netlist.
@@ -122,9 +131,11 @@ def characterize_input_capacitances(cell_name: str,
     logger.debug("Measuring input capacitance.")
 
     # Generate all possible input combinations for the static input pins.
-    static_input_nets = [i for i in input_pins if i != active_pin]
+    static_input_nets = [i for i in input_pins_non_inverted if i != active_pin and i != active_pin_inverted]
     num_inputs = len(static_input_nets)
+
     static_inputs = list(product(*([[0, 1]] * num_inputs)))
+    logger.info(f"Number of static input combinations: {len(static_inputs)}")
 
     # TODO: How to choose input current?
     input_current = 10000e-9  # A
@@ -138,6 +149,15 @@ def characterize_input_capacitances(cell_name: str,
 
             # Get voltages at static inputs.
             input_voltages = {net: supply_voltage * value for net, value in zip(static_input_nets, static_input)}
+
+            # Add input voltages for inverted inputs of differential pairs.
+            for p in static_input_nets:
+                inv = complementary_pins.get(p)
+                if inv is not None:
+                    assert inv not in input_voltages
+                    # Add the inverted input voltage.
+                    input_voltages[inv] = supply_voltage - input_voltages[p]
+
             logger.debug("Static input voltages: {}".format(input_voltages))
 
             # Simulation script file path.
@@ -156,6 +176,7 @@ def characterize_input_capacitances(cell_name: str,
 
             # Get initial voltage of active pin.
             initial_voltage = 0 if input_rising else vdd
+            initial_voltage_inv = vdd - initial_voltage
 
             # Get the breakpoint condition.
             if input_rising:
@@ -171,7 +192,21 @@ def characterize_input_capacitances(cell_name: str,
                 active_pin: initial_voltage,
                 supply_net: supply_voltage
             }
+            # Add static input voltages
             initial_conditions.update(input_voltages)
+            # Add initial voltage of inverted input pin (if any).
+            if active_pin_inverted:
+                initial_conditions[active_pin_inverted] = initial_voltage_inv
+
+            # Create SPICE statements for the input current sources that drive the active pin.
+            input_current_source_statements = [
+                f"Iinput {ground_net} {active_pin} PULSE(0 {_input_current} 1ns 10ps 0ps 100s)"
+            ]
+            if active_pin_inverted is not None:
+                input_current_source_statements.append(
+                    f"Iinput_inv {ground_net} {active_pin_inverted} PULSE(0 {-_input_current} 1ns 10ps 0ps 100s)"
+                )
+            input_current_source_statements = "\n".join(input_current_source_statements)
 
             # Create ngspice simulation script.
             sim_netlist = f"""* librecell {__name__}
@@ -186,7 +221,9 @@ Xcircuit_under_test {" ".join(ports)} {cell_name}
 {output_load_statements}
 
 Vsupply {supply_net} {ground_net} {supply_voltage}
-Iinput {ground_net} {active_pin} PULSE(0 {_input_current} 1ns 10ps 0ps 100s) * Wait 1ns to let voltages stabilize.
+
+* Input current sources.
+{input_current_source_statements}
 
 * Static input voltages.
 {static_supply_voltage_statements}

@@ -64,16 +64,21 @@ def load_subcircuit(path: str, circuit_name: str) -> Tuple[db.Netlist, db.Circui
     return netlist, circuit
 
 
-def load_transistor_netlist(path: str, circuit_name: str) -> Tuple[List[Transistor], Set[str]]:
+def load_transistor_netlist(path: str, circuit_name: str, force_lowercase: bool = False) -> Tuple[List[Transistor], Set[str]]:
     """ Load a transistor level circuit from a spice netlist.
 
     :param path: The path to the netlist.
+    :param force_lowercase: Convert all net names to lower case letters.
 
     Returns
     -------
     Returns a list of `Transistor`s and a list of the pin names including power pins.
     (List[Transistors], pin_names)
     """
+
+    f = lambda s: s
+    if force_lowercase:
+        f = lambda s: s.lower()
 
     # Read netlist. TODO: take netlist object as argument.
     netlist, circuit = load_subcircuit(path, circuit_name)
@@ -84,7 +89,7 @@ def load_transistor_netlist(path: str, circuit_name: str) -> Tuple[List[Transist
         logger.info(f"Circuits in netlist: {all_circuits}")
         raise Exception("No such circuit: {}".format(circuit_name))
 
-    pins = [p.name() for p in circuit.each_pin()]
+    pins = [f(p.name()) for p in circuit.each_pin()]
 
     def get_channel_type(s: str):
         """Determine the channel type of transistor from the model name.
@@ -100,9 +105,9 @@ def load_transistor_netlist(path: str, circuit_name: str) -> Tuple[List[Transist
 
     transistors_klayout = [
         Transistor(get_channel_type(d.device_class().name),
-                   d.net_for_terminal(id_source_4).name,
-                   d.net_for_terminal(id_gate_4).name,
-                   d.net_for_terminal(id_drain_4).name,
+                   f(d.net_for_terminal(id_source_4).name),
+                   f(d.net_for_terminal(id_gate_4).name),
+                   f(d.net_for_terminal(id_drain_4).name),
                    channel_width=d.parameter('W') * 1e-6,  # Convert into micrometers.
                    name=d.name
                    )
