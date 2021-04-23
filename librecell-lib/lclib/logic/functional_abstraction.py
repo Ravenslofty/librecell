@@ -776,7 +776,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
         logger.debug("Memory output net {}  = {}".format(memory_output_net, memory_output_resolved))
         d, dp, dn = boolean_derivatives(memory_output_resolved, memory_output_net)
         write_condition = ~dp
-        logger.debug("write_condition =", write_condition)
+        logger.debug(f"write_condition = {write_condition}")
         oscillation_condition = dn
 
         debug = True
@@ -784,7 +784,7 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
             # Find expressions for the memory output when the write condition is met.
             # Find all variable assignments such that the write condition is met.
             write_condition_models = list(satisfiable(write_condition, all_models=True))
-            logger.debug("write_condition_models =", write_condition_models)
+            logger.debug(f"write_condition_models = {write_condition_models}")
             if write_condition_models == [False]:
                 logger.warning("Detected a memory loop that is not possible to write to.")
 

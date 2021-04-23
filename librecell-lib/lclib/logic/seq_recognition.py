@@ -188,9 +188,9 @@ class LatchExtractor:
         enable_signals = set(latch.write_condition.atoms(sympy.Symbol))
         logger.debug(f"Potential clock/set/preset signals {enable_signals}")
 
-        logger.warning("Latch recognition is not yet implemented.")
-
         result = Latch()
+        result.enable = latch.write_condition
+        result.data_in = latch.data
 
         return result
 
