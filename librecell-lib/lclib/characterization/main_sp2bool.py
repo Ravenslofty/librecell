@@ -54,6 +54,9 @@ def main():
                         help='SPICE netlist containing a subcircuit with the same name as the cell.')
 
     parser.add_argument('--debug', action='store_true', help='Enable debug mode.')
+    parser.add_argument('--plot-network', action='store_true',
+                        help='Show a plot of the transistor graph for debugging. '
+                             'Transistors are edges in the graph. The edges are labelled with the gate net.')
 
     # Parse arguments
     args = parser.parse_args()
@@ -112,6 +115,14 @@ def main():
     # Derive boolean functions for the outputs from the netlist.
     logger.info("Derive boolean functions for the outputs based on the netlist.")
     transistor_graph = _transistors2multigraph(transistors_abstract)
+    if args.plot_network:
+        import matplotlib.pyplot as plt
+        pos = nx.spring_layout(transistor_graph)
+        nx.draw(transistor_graph, pos, with_labels=True)
+        print(list(transistor_graph.edges(keys=True)))
+        edge_labels = {(a, b): gate_net for a, b, (gate_net, channel_type) in transistor_graph.edges(keys=True)}
+        nx.draw_networkx_edge_labels(transistor_graph, pos, edge_labels=edge_labels)
+        plt.show()
     abstract = functional_abstraction.analyze_circuit_graph(graph=transistor_graph,
                                                             pins_of_interest=io_pins,
                                                             constant_input_pins={vdd_pin: True,
