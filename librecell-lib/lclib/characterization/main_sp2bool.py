@@ -24,6 +24,7 @@ from liberty.types import *
 from ..liberty import util as liberty_util
 from ..logic import functional_abstraction
 from ..logic import seq_recognition
+from . import util
 
 import argparse
 from copy import deepcopy
@@ -106,40 +107,13 @@ def main():
     logger.info(f"Supply net: {vdd_pin}")
     logger.info(f"Ground net: {gnd_pin}")
 
-    # Store mapping of non-inverting input to inverting input.
-    differential_inputs = dict()  # Dict[non-inverting, inverting]
     # Match differential inputs.
-    if args.diff is not None:
-        logger.info(f"Specified differential inputs: {args.diff}")
-        patterns = [tuple(d.split(',', 1)) for d in args.diff]
-        # Convert to regex.
-        patterns = [(noninv.replace('%', "(.*)"), inv) for noninv, inv in patterns]
-        patterns = [(re.compile(noninv), inv) for noninv, inv in patterns]
+    differential_inputs = util.find_differential_inputs_by_pattern(args.diff, io_pins)
 
-        input_pins = io_pins  # TODO: Take input pins only.
-        for pin in input_pins:
-            # Try to match a pattern.
-            for p, inverted_name_template in patterns:
-                result = p.search(pin)
-                if result:
-                    if len(result.groups()) == 0:
-                        basename = result.group(0)
-                    else:
-                        basename = result.group(1)
-                    inv_name = inverted_name_template.replace("%", basename)
-                    if pin in differential_inputs:
-                        # Sanity check.
-                        logger.error(f"Multiple matches for non-inverting input '{pin}'.")
-                        exit(1)
-                    # Store the mapping.
-                    differential_inputs[pin] = inv_name
-
-        logger.info(f"Mapping of differential inputs: {differential_inputs}")
-
-        # Sanity check.
-        if len(set(differential_inputs.keys())) != len(set(differential_inputs.values())):
-            logger.error(f"Mismatch in the mapping of differential inputs.")
-            exit(1)
+    # Sanity check.
+    if len(set(differential_inputs.keys())) != len(set(differential_inputs.values())):
+        logger.error(f"Mismatch in the mapping of differential inputs.")
+        exit(1)
 
     def _transistors2multigraph(transistors) -> nx.MultiGraph:
         """ Create a graph representing the transistor network.

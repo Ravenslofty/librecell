@@ -28,7 +28,8 @@ from enum import Enum
 from collections import namedtuple
 from liberty.types import Group
 import logging
-from typing import Optional
+from typing import Dict, Iterable, Optional
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -222,3 +223,50 @@ def read_trip_points_from_liberty(library_group: Group) -> TripPoints:
     )
 
     return trip_points
+
+
+def find_differential_inputs_by_pattern(patterns: Iterable[str], input_pins: Iterable[str]) -> Dict[str, str]:
+    """
+    Find pairs of differential inputs based on user-specified patterns.
+    The patterns should have the form `['PinA,PinANeg', '%_P,%_N']`.
+    A comma is used to separate the non-inverting pin name from the inverting pin name.
+    A '%' can be used as a placeholder.
+    :param patterns: Patterns that associate non-inverting and inverting pins.
+    :param input_pins: All input pin names.
+    :return: Returns a dict with the mapping Dict[non-inverting pin, inverting pin]
+    """
+    # Store mapping of non-inverting input to inverting input.
+    differential_inputs = dict()  # Dict[non-inverting, inverting]
+    # Match differential inputs.
+
+    logger.info(f"Specified differential inputs: {patterns}")
+    # Split at ','
+    patterns = [tuple(d.split(',', 1)) for d in patterns]
+    # Convert to regex.
+    patterns = [(noninv.replace('%', "(.*)"), inv) for noninv, inv in patterns]
+    patterns = [(re.compile(noninv), inv) for noninv, inv in patterns]
+
+    for pin in input_pins:
+        # Try to match a pattern.
+        for p, inverted_name_template in patterns:
+            result = p.search(pin)
+            if result:
+                if len(result.groups()) == 0:
+                    basename = result.group(0)
+                else:
+                    basename = result.group(1)
+                inv_name = inverted_name_template.replace("%", basename)
+                if pin in differential_inputs:
+                    # Sanity check.
+                    logger.error(f"Multiple matches for non-inverting input '{pin}'.")
+                    exit(1)
+                # Store the mapping.
+                differential_inputs[pin] = inv_name
+
+    logger.info(f"Mapping of differential inputs: {differential_inputs}")
+
+    # Sanity check.
+    if len(set(differential_inputs.keys())) != len(set(differential_inputs.values())):
+        logger.error(f"Mismatch in the mapping of differential inputs.")
+
+    return differential_inputs
