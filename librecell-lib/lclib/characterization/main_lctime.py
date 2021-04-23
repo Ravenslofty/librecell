@@ -384,11 +384,16 @@ def main():
             differential_inputs_from_pattern = dict()
 
         differential_inputs_liberty.update(differential_inputs_from_pattern)
-
-        # TODO: Sanity checks on complementary pins.
-        # Complementary pin should not be defined as pin group in liberty file.
-
         differential_inputs = differential_inputs_liberty
+
+        # Sanity checks on complementary pins.
+        # Complementary pin should not be defined as pin group in liberty file.
+        for pin in cell_group.get_groups("pin"):
+            assert isinstance(pin, liberty_parser.Group)
+            pin_name = pin.args[0]
+            if pin_name in differential_inputs.values():
+                logger.warning(
+                    f"Complementary pin is modelled in the liberty file but will not be characterized: {pin_name}")
 
         for noninv, inv in differential_inputs.items():
             logger.info(f"Differential input (+,-): {noninv}, {inv}")
