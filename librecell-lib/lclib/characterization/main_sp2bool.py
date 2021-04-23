@@ -108,7 +108,10 @@ def main():
     logger.info(f"Ground net: {gnd_pin}")
 
     # Match differential inputs.
-    differential_inputs = util.find_differential_inputs_by_pattern(args.diff, io_pins)
+    if args.diff is not None:
+        differential_inputs = util.find_differential_inputs_by_pattern(args.diff, io_pins)
+    else:
+        differential_inputs = dict()
 
     # Sanity check.
     if len(set(differential_inputs.keys())) != len(set(differential_inputs.values())):
