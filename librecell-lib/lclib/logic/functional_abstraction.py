@@ -695,16 +695,6 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     inputs = {sympy.Symbol(i) for i in inputs} - set(constants.keys())
     logger.debug('inputs = {}'.format(inputs))
 
-    # # Simplify formulas by substitution.
-    # formulas_high_simplified = {k: _resolve_intermediate_variables(formulas_high, inputs, f)
-    #                             for k, f in formulas_high.items()}
-    #
-    # formulas_low_simplified = {k: _resolve_intermediate_variables(formulas_low, inputs, f)
-    #                            for k, f in formulas_low.items()}
-    #
-    # print('simplified formulas_high = {}'.format(formulas_high_simplified))
-    # print('simplified formulas_low = {}'.format(formulas_low_simplified))
-
     # Find formulas for nets that are complementary and can never be in a high-impedance nor short-circuit state.
     complementary_formulas = {k: formulas_high[k]
                               for k in formulas_high.keys()
