@@ -718,12 +718,20 @@ def analyze_circuit_graph(graph: nx.MultiGraph,
     high_impedance_conditions = {k: simplify_logic(~formulas_high[k] & ~formulas_low[k])
                                  for k in formulas_high.keys()}
 
+    # Find short-circuit conditions.
+    short_circuit_conditions = {k: simplify_logic(formulas_high[k] & formulas_low[k])
+                                for k in formulas_high.keys()}
+
     print("Complementary nets:")
     for net, f in complementary_formulas.items():
         print(' ', net, ':', f)
 
     print("High impedance conditions:")
     for net, condition in high_impedance_conditions.items():
+        print(' ', net, ':', condition)
+
+    print("Short circuit conditions:")
+    for net, condition in short_circuit_conditions.items():
         print(' ', net, ':', condition)
 
     # Create dependency graph to detect feedback loops.
