@@ -309,7 +309,7 @@ def main():
 
     # TODO: No hardcoded data here!
     output_capacitances = np.array([float(s.strip()) for s in args.output_loads.split(",")]) * 1e-12  # pF
-    input_transition_times = np.array([float(s.strip()) for s in args.output_loads.split(",")]) * 1e-9  # ns
+    input_transition_times = np.array([float(s.strip()) for s in args.slew_times.split(",")]) * 1e-9  # ns
 
     logger.info(f"Output capacitances [pF]: {output_capacitances * 1e12}")
     logger.info(f"Input slew times [ns]: {input_transition_times * 1e9}")
